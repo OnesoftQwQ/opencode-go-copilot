@@ -1,0 +1,129 @@
+{
+	"name": "opencode-go-copilot",
+	"publisher": "my-company",
+	"displayName": "OpenCode Go for Copilot",
+	"description": "Integrate OpenCode Go models into GitHub Copilot Chat",
+	"icon": "assets/logo.png",
+	"keywords": [
+		"ai",
+		"chat",
+		"copilot",
+		"github-copilot",
+		"language-model",
+		"llm",
+		"opencode",
+		"openai-compatible",
+		"thinking",
+		"git-commit"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/my-company/opencode-go-copilot"
+	},
+	"version": "0.1.0",
+	"engines": {
+		"vscode": "^1.104.0"
+	},
+	"categories": [
+		"AI",
+		"Chat"
+	],
+	"license": "MIT",
+	"enabledApiProposals": [
+		"chatProvider"
+	],
+	"contributes": {
+		"languageModelChatProviders": [
+			{
+				"vendor": "opencodego",
+				"displayName": "%providerDisplayName%",
+				"managementCommand": "opencodego.setApiKey"
+			}
+		],
+		"commands": [
+			{
+				"command": "opencodego.setApiKey",
+				"category": "%commandCategory%",
+				"title": "%command.setApiKey%"
+			},
+			{
+				"command": "opencodego.generateGitCommitMessage",
+				"title": "%command.generateCommit%",
+				"category": "%commandCategory%",
+				"icon": "$(wand)"
+			},
+			{
+				"command": "opencodego.abortGitCommitMessage",
+				"title": "%command.abortCommit%",
+				"category": "%commandCategory%",
+				"icon": "$(debug-stop)"
+			}
+		],
+		"menus": {
+			"scm/title": [
+				{
+					"command": "opencodego.generateGitCommitMessage",
+					"group": "navigation",
+					"when": "config.git.enabled && scmProvider == git && !opencodego.isGeneratingCommit"
+				},
+				{
+					"command": "opencodego.abortGitCommitMessage",
+					"group": "navigation",
+					"when": "config.git.enabled && scmProvider == git && opencodego.isGeneratingCommit"
+				}
+			],
+			"commandPalette": [
+				{
+					"command": "opencodego.generateGitCommitMessage",
+					"when": "config.git.enabled && !opencodego.isGeneratingCommit"
+				},
+				{
+					"command": "opencodego.abortGitCommitMessage",
+					"when": "config.git.enabled && opencodego.isGeneratingCommit"
+				}
+			]
+		},
+		"configuration": {
+			"title": "%config.title%",
+			"properties": {
+				"opencodego.commitLanguage": {
+					"type": "string",
+					"default": "English",
+					"enum": [
+						"English", "French", "Italian", "German", "Spanish", "Russian",
+						"Chinese (Simplified)", "Chinese (Traditional)", "Japanese", "Korean",
+						"Czech", "Portuguese (Brazil)", "Turkish", "Polish"
+					],
+					"description": "%config.commitLanguage.desc%"
+				},
+				"opencodego.commitModel": {
+					"type": "string",
+					"default": "deepseek-v4-flash",
+					"description": "%config.commitModel.desc%"
+				},
+				"opencodego.commitMessagePrompt": {
+					"type": "string",
+					"default": "",
+					"description": "%config.commitMessagePrompt.desc%"
+				}
+			}
+		}
+	},
+	"main": "./out/extension.js",
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"lint": "eslint",
+		"watch": "tsc -watch -p ./",
+		"build": "npx @vscode/vsce package -o extension.vsix",
+		"postinstall": "node scripts/copy-tokenizer.js"
+	},
+	"dependencies": {
+		"@microsoft/tiktokenizer": "^1.0.10"
+	},
+	"devDependencies": {
+		"@types/node": "^22",
+		"@types/vscode": "^1.104.0",
+		"typescript": "^5.9.2"
+	}
+}

@@ -1,0 +1,14 @@
+{
+	"providerDisplayName": "OpenCode Go",
+	"commandCategory": "OpenCodeGo",
+
+	"command.setApiKey": "设置 OpenCode Go API 密钥",
+	"command.generateCommit": "使用 OpenCodeGo 生成提交消息",
+	"command.abortCommit": "使用 OpenCodeGo 生成提交消息 - 停止",
+
+	"config.title": "OpenCode Go Copilot",
+
+	"config.commitLanguage.desc": "生成的 Git 提交消息使用的语言。",
+	"config.commitModel.desc": "用于生成提交消息的模型 ID。",
+	"config.commitMessagePrompt.desc": "生成提交消息的自定义系统提示词。"
+}

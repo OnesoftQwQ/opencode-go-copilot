@@ -1,0 +1,14 @@
+{
+	"providerDisplayName": "OpenCode Go",
+	"commandCategory": "OpenCodeGo",
+
+	"command.setApiKey": "Set OpenCode Go API Key",
+	"command.generateCommit": "Generate Commit Message with OpenCodeGo",
+	"command.abortCommit": "Generate Commit Message with OpenCodeGo - Stop",
+
+	"config.title": "OpenCode Go Copilot",
+
+	"config.commitLanguage.desc": "Language for generated Git commit messages.",
+	"config.commitModel.desc": "Model ID used for commit message generation.",
+	"config.commitMessagePrompt.desc": "Custom system prompt for commit message generation."
+}
