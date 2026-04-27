@@ -19,6 +19,7 @@ const zhCN: Record<string, string> = {
 	"Invalid base URL configuration.": "无效的 Base URL 配置。",
 
 	// commit info messages
+	"Cache": "缓存",
 	"No changes found in any workspace repositories.": "在任何工作区仓库中均未发现更改。",
 	"Git extension not found": "未找到 Git 扩展",
 	"No Git repositories available": "没有可用的 Git 仓库",

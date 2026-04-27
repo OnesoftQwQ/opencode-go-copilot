@@ -11,6 +11,16 @@ import {
 import { OpenCodeGoModelItem } from "./types";
 import { tryParseJSONObject } from "./utils";
 
+/**
+ * Token usage information extracted from streaming response usage chunk.
+ */
+export interface StreamUsage {
+    promptTokens: number;
+    completionTokens: number;
+    cacheHitTokens?: number;
+    cacheMissTokens?: number;
+}
+
 export abstract class CommonApi<TMessage, TRequestBody> {
     /** Buffer for assembling streamed tool calls by index. */
     protected _toolCallBuffers: Map<number, { id?: string; name?: string; args: string }> = new Map<
@@ -51,6 +61,13 @@ export abstract class CommonApi<TMessage, TRequestBody> {
 
     /** Set the model ID for logging purposes. */
     protected _modelId = "";
+
+    /** Callback for streaming usage updates (prompt/completion/cache tokens). */
+    public _onUsage: ((usage: StreamUsage) => void) | undefined;
+
+    public set onUsage(callback: ((usage: StreamUsage) => void) | undefined) {
+        this._onUsage = callback;
+    }
 
     constructor(modelId: string) {
         this._modelId = modelId;
@@ -254,7 +271,7 @@ export abstract class CommonApi<TMessage, TRequestBody> {
         content: string,
         progress: Progress<LanguageModelResponsePart2>
     ): { emittedAny: boolean } {
-        if (!content.includes("<think>") && !content.includes("</think>") && !this._xmlThinkActive) {
+        if (!content.includes("꽁") && !content.includes("ground") && !this._xmlThinkActive) {
             return { emittedAny: false };
         }
 
@@ -264,7 +281,7 @@ export abstract class CommonApi<TMessage, TRequestBody> {
 
         while (remaining.length > 0) {
             if (this._xmlThinkActive) {
-                const endIdx = remaining.indexOf("</think>");
+                const endIdx = remaining.indexOf("꽁");
                 if (endIdx === -1) {
                     this.bufferThinkingContent(remaining, progress);
                     emittedAny = true;
@@ -280,7 +297,7 @@ export abstract class CommonApi<TMessage, TRequestBody> {
                     remaining = remaining.slice(endIdx + 8);
                 }
             } else {
-                const startIdx = remaining.indexOf("<think>");
+                const startIdx = remaining.indexOf("꽁");
                 if (startIdx === -1) {
                     if (!emittedAny) {
                         return { emittedAny: false };
@@ -292,7 +309,7 @@ export abstract class CommonApi<TMessage, TRequestBody> {
                     }
                     break;
                 } else {
-                    // Emit text before <think> tag
+                    // Emit text before 꽁 tag
                     const beforeThink = remaining.slice(0, startIdx);
                     if (beforeThink.trim()) {
                         this.reportEndThinking(progress);

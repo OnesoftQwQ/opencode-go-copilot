@@ -27,7 +27,7 @@ import {
     mapRole,
 } from "../utils";
 
-import { CommonApi } from "../commonApi";
+import { CommonApi, StreamUsage } from "../commonApi";
 import { logger } from "../logger";
 
 export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unknown>> {
@@ -276,6 +276,19 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
 
                     try {
                         const parsed = JSON.parse(data);
+
+                        // Capture usage from stream_options: include_usage chunks (final chunk with no choices)
+                        const usageData = parsed.usage as Record<string, unknown> | undefined;
+                        if (usageData) {
+                            const usage: StreamUsage = {
+                                promptTokens: (usageData.prompt_tokens as number) ?? 0,
+                                completionTokens: (usageData.completion_tokens as number) ?? 0,
+                                cacheHitTokens: usageData.prompt_cache_hit_tokens as number | undefined,
+                                cacheMissTokens: usageData.prompt_cache_miss_tokens as number | undefined,
+                            };
+                            this._onUsage?.(usage);
+                        }
+
                         await this.processDelta(parsed, progress);
                     } catch (e) {
                         console.error("[OpenCodeGo] Failed to parse SSE chunk:", e, "data:", data);

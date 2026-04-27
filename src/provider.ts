@@ -16,7 +16,7 @@ import { createRetryConfig, executeWithRetry } from "./utils";
 import { prepareLanguageModelChatInformation } from "./provideModel";
 import { getBuiltInModelConfig } from "./models";
 import { countMessageTokens } from "./provideToken";
-import { updateContextStatusBar } from "./statusBar";
+import { updateContextStatusBar, recordUsage, updateCumulativeTooltip } from "./statusBar";
 import { OpenaiApi } from "./openai/openaiApi";
 import { CommonApi } from "./commonApi";
 import { logger } from "./logger";
@@ -149,6 +149,10 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
             // OpenAI Chat Completions API mode
             const openaiApi = new OpenaiApi(model.id);
+            openaiApi.onUsage = (usage) => {
+                recordUsage(usage);
+                updateCumulativeTooltip(this.statusBarItem);
+            };
             const openaiMessages = openaiApi.convertMessages(messages, modelConfig);
 
             // requestBody
