@@ -24,7 +24,7 @@
 	"bugs": {
 		"url": "https://github.com/OnesoftQwQ/opencode-go-copilot/issues"
 	},
-	"version": "0.2.1",
+	"version": "0.2.3",
 	"engines": {
 		"vscode": "^1.104.0"
 	},
@@ -94,9 +94,20 @@
 					"type": "string",
 					"default": "English",
 					"enum": [
-						"English", "French", "Italian", "German", "Spanish", "Russian",
-						"Chinese (Simplified)", "Chinese (Traditional)", "Japanese", "Korean",
-						"Czech", "Portuguese (Brazil)", "Turkish", "Polish"
+						"English",
+						"French",
+						"Italian",
+						"German",
+						"Spanish",
+						"Russian",
+						"Chinese (Simplified)",
+						"Chinese (Traditional)",
+						"Japanese",
+						"Korean",
+						"Czech",
+						"Portuguese (Brazil)",
+						"Turkish",
+						"Polish"
 					],
 					"description": "%config.commitLanguage.desc%"
 				},
