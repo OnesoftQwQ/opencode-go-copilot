@@ -112,6 +112,8 @@ export function convertToolsToOpenAI(
         // Use the tool's inputSchema as parameters if available
         if (tool.inputSchema) {
             def.function.parameters = tool.inputSchema;
+        } else {
+            def.function.parameters = { type: "object", properties: {} };
         }
         return def;
     });
