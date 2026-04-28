@@ -18,7 +18,11 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/my-company/opencode-go-copilot"
+		"url": "https://github.com/OnesoftQwQ/opencode-go-copilot"
+	},
+	"homepage": "https://github.com/OnesoftQwQ/opencode-go-copilot",
+	"bugs": {
+		"url": "https://github.com/OnesoftQwQ/opencode-go-copilot/issues"
 	},
 	"version": "0.2.1",
 	"engines": {
