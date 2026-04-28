@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -28,6 +30,29 @@ jobs:
 
       - name: Run postinstall script (copy tokenizer)
         run: node scripts/copy-tokenizer.js
+
+      # 从 tag 同步版本到 package.json，确保 .vsix 版本号与 tag 一致
+      - name: Sync version from tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VER="${TAG#v}"
+          echo "Syncing package.json version to ${VER} (tag: ${TAG})"
+          npm version "$VER" --no-git-tag-version --allow-same-version
+
+      # 将版本号变更提交并推送回仓库
+      - name: Commit and push version change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git diff --cached --quiet || git commit -m "chore: bump version to $(node -p "require('./package.json').version") [skip ci]"
+          # 找到 tag 所在的分支并推送
+          BRANCH=$(git branch -r --contains "$GITHUB_SHA" | head -1 | sed 's|origin/||')
+          if [ -n "$BRANCH" ]; then
+            git push origin HEAD:"$BRANCH"
+          else
+            echo "No remote branch found containing this commit, skipping push."
+          fi
 
       - name: Compile TypeScript
         run: npm run compile
@@ -48,24 +73,28 @@ jobs:
             echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
-      # 创建/更新 Release 并上传 .vsix 到 GitHub Releases
-      - name: Create Release and upload asset
+      # tag push 时创建草稿 Release（含默认介绍）
+      - name: Create draft Release (tag push)
+        if: github.event_name != 'release'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: Release ${{ steps.tag.outputs.tag }}
           body: |
-            # OpenCode Go Copilot ${{ steps.tag.outputs.tag }}
-
-            请查看 [CHANGELOG](https://github.com/OnesoftQwQ/opencode-go-copilot/commits/${{ steps.tag.outputs.tag }}) 了解详细变更。
-
-            ## 安装方式
-
-            1. 下载 `.vsix` 文件
-            2. 在 VS Code 中按 `Ctrl+Shift+P` → `Extensions: Install from VSIX...`
-            3. 选择下载的文件即可安装
-          draft: ${{ github.event_name != 'release' }}
+            # ${{ steps.tag.outputs.tag }}
+            [CHANGELOG](https://github.com/OnesoftQwQ/opencode-go-copilot/commits/${{ steps.tag.outputs.tag }}) 了解详细变更。
+          draft: true
           prerelease: false
+          files: extension.vsix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 已发布的 Release 仅上传 .vsix，不修改用户写的介绍
+      - name: Upload .vsix to published Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
           files: extension.vsix
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
