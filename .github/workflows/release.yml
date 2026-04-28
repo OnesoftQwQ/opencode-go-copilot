@@ -2,6 +2,11 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'New version (e.g. 0.2.3). If omitted, only builds without version sync.'
+        required: false
+        type: string
   release:
     types: [published]
 
@@ -29,27 +34,35 @@ jobs:
       - name: Run postinstall script (copy tokenizer)
         run: node scripts/copy-tokenizer.js
 
-      # 从 tag 同步版本到 package.json，确保 .vsix 版本号与 tag 一致
-      - name: Sync version from tag
+      # 确定版本号来源：手动输入 > tag > 无
+      - name: Resolve version
+        id: ver
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          VER="${TAG#v}"
-          echo "Syncing package.json version to ${VER} (tag: ${TAG})"
-          npm version "$VER" --no-git-tag-version --allow-same-version
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "ver=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF#refs/tags/v}"
+            echo "ver=${VER}" >> $GITHUB_OUTPUT
+          else
+            echo "ver=" >> $GITHUB_OUTPUT
+          fi
 
-      # 将版本号变更提交并推送回仓库
-      - name: Commit and push version change
+      # 仅当解析到版本号时才执行同步、推送
+      - name: Sync and commit version
+        if: steps.ver.outputs.ver != ''
         run: |
+          VER="${{ steps.ver.outputs.ver }}"
+          echo "Syncing package.json version to ${VER}"
+          npm version "$VER" --no-git-tag-version --allow-same-version
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json
-          git diff --cached --quiet || git commit -m "chore: bump version to $(node -p "require('./package.json').version") [skip ci]"
-          # 找到 tag 所在的分支并推送（trim 掉空格）
+          git diff --cached --quiet || git commit -m "chore: bump version to ${VER} [skip ci]"
           BRANCH=$(git branch -r --contains "$GITHUB_SHA" | head -1 | sed 's|.*origin/||' | xargs)
           if [ -n "$BRANCH" ]; then
             git push origin "HEAD:refs/heads/$BRANCH"
           else
-            echo "No remote branch found containing this commit, skipping push."
+            echo "No remote branch found, skipping push."
           fi
 
       - name: Compile TypeScript
