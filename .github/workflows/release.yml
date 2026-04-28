@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run postinstall script (copy tokenizer)
+        run: node scripts/copy-tokenizer.js
+
+      - name: Compile TypeScript
+        run: npm run compile
+
+      - name: Package extension (.vsix)
+        run: npx @vscode/vsce package -o extension.vsix
+
+      - name: Get version from package.json
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Get tag name
+        id: tag
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      # 创建/更新 Release 并上传 .vsix 到 GitHub Releases
+      - name: Create Release and upload asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Release ${{ steps.tag.outputs.tag }}
+          body: |
+            # OpenCode Go Copilot ${{ steps.tag.outputs.tag }}
+
+            请查看 [CHANGELOG](https://github.com/OnesoftQwQ/opencode-go-copilot/commits/${{ steps.tag.outputs.tag }}) 了解详细变更。
+
+            ## 安装方式
+
+            1. 下载 `.vsix` 文件
+            2. 在 VS Code 中按 `Ctrl+Shift+P` → `Extensions: Install from VSIX...`
+            3. 选择下载的文件即可安装
+          draft: ${{ github.event_name != 'release' }}
+          prerelease: false
+          files: extension.vsix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 上传 .vsix 作为 Actions 构建产物（备用）
+      - name: Upload .vsix as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-go-copilot-${{ steps.version.outputs.version }}.vsix
+          path: extension.vsix
+          if-no-files-found: error
+
+      # 发布到 VS Code Marketplace
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx @vscode/vsce publish -p "$VSCE_PAT" --packagePath extension.vsix
