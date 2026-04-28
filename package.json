@@ -1,5 +1,5 @@
 {
-	"name": "opencode-go-copilot",
+	"name": "opencode-go-copilot-provider",
 	"publisher": "OnesoftQwQ",
 	"displayName": "OpenCode Go for Copilot",
 	"description": "Integrate OpenCode Go models into GitHub Copilot Chat",
