@@ -122,4 +122,4 @@ jobs:
       - name: Publish to VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx @vscode/vsce publish -p "$VSCE_PAT" --packagePath extension.vsix
+        run: npx @vscode/vsce publish -p "$VSCE_PAT" --packagePath extension.vsix --allow-all-proposed-apis
