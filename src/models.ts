@@ -21,6 +21,8 @@ interface BuiltInModelDef {
     contextLength?: number;
     /** Default max output tokens */
     maxTokens?: number;
+    /** Extra body parameters to include in API requests */
+    extra?: Record<string, unknown>;
 }
 
 const EXTENSION_LABEL = "OpenCodeGo";
@@ -40,8 +42,8 @@ const BUILT_IN_MODELS: BuiltInModelDef[] = [
     { baseId: "kimi-k2.6", displayName: "Kimi K2.6", vision: true, thinkingMode: "switchable", contextLength: 262144, maxTokens: 16384 },
 
     // ── DeepSeek series ── 官方文档: 1M context, 384K max output ──
-    { baseId: "deepseek-v4-pro", displayName: "DeepSeek V4 Pro", vision: false, thinkingMode: "switchable", contextLength: 1000000, maxTokens: 393216 },
-    { baseId: "deepseek-v4-flash", displayName: "DeepSeek V4 Flash", vision: false, thinkingMode: "switchable", contextLength: 1000000, maxTokens: 393216 },
+    { baseId: "deepseek-v4-pro", displayName: "DeepSeek V4 Pro", vision: false, thinkingMode: "switchable", defaultReasoningEffort: "max", contextLength: 1000000, maxTokens: 393216 },
+    { baseId: "deepseek-v4-flash", displayName: "DeepSeek V4 Flash", vision: false, thinkingMode: "switchable", defaultReasoningEffort: "max", contextLength: 1000000, maxTokens: 393216 },
 
     // ── MiMo series ── 小米 MiMo 官方模型卡: 256K context (262144) ──
     { baseId: "mimo-v2-pro", displayName: "MiMo-V2-Pro", vision: false, thinkingMode: "always", contextLength: 262144, maxTokens: 32768 },
@@ -50,7 +52,7 @@ const BUILT_IN_MODELS: BuiltInModelDef[] = [
     { baseId: "mimo-v2.5", displayName: "MiMo-V2.5", vision: false, thinkingMode: "always", contextLength: 262144, maxTokens: 32768 },
 
     // ── MiniMax series ── 官方文档: 204800 context (204.8K) ──
-    { baseId: "minimax-m2.7", displayName: "MiniMax M2.7", vision: false, thinkingMode: "always", contextLength: 204800, maxTokens: 32768 },
+    { baseId: "minimax-m2.7", displayName: "MiniMax M2.7", vision: false, thinkingMode: "always", extra: { reasoning_split: true }, contextLength: 204800, maxTokens: 32768 },
     { baseId: "minimax-m2.5", displayName: "MiniMax M2.5", vision: false, thinkingMode: "always", contextLength: 204800, maxTokens: 32768 },
 
     // ── Qwen series ── 阿里云百炼: Qwen3.6-Plus 1M context, Qwen3.5-Plus 同代同规格 ──
@@ -163,6 +165,11 @@ export function getBuiltInModelConfig(modelId: string): OpenCodeGoModelItem | un
         context_length: def.contextLength ?? DEFAULT_CONTEXT_LENGTH,
         max_completion_tokens: def.maxTokens ?? DEFAULT_MAX_TOKENS,
     };
+
+    // Pass through extra body parameters
+    if (def.extra) {
+        model.extra = { ...def.extra };
+    }
 
     // Apply thinking-related settings based on variant
     if (def.thinkingMode === "switchable") {

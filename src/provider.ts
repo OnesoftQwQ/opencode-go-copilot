@@ -163,11 +163,6 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 stream_options: { include_usage: true },
             };
 
-            // DeepSeek Thinking variants default to max reasoning effort
-            if (model.id.includes("::Thinking") && model.id.startsWith("deepseek-")) {
-                requestBody.reasoning_effort = "max";
-            }
-
             requestBody = openaiApi.prepareRequestBody(requestBody, um, options);
 
             // Send chat request with retry
