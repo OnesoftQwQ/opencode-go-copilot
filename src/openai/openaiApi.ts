@@ -280,11 +280,29 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
                         // Capture usage from stream_options: include_usage chunks (final chunk with no choices)
                         const usageData = parsed.usage as Record<string, unknown> | undefined;
                         if (usageData) {
+                            let cacheHitTokens: number | undefined;
+                            let cacheMissTokens: number | undefined;
+
+                            // OpenAI format: prompt_tokens_details.cached_tokens
+                            const details = usageData.prompt_tokens_details as Record<string, unknown> | undefined;
+                            if (details && typeof details.cached_tokens === "number") {
+                                cacheHitTokens = details.cached_tokens;
+                                cacheMissTokens = ((usageData.prompt_tokens as number) ?? 0) - cacheHitTokens;
+                            }
+
+                            // DeepSeek format: prompt_cache_hit_tokens / prompt_cache_miss_tokens (overrides OpenAI)
+                            if (typeof usageData.prompt_cache_hit_tokens === "number") {
+                                cacheHitTokens = usageData.prompt_cache_hit_tokens as number;
+                            }
+                            if (typeof usageData.prompt_cache_miss_tokens === "number") {
+                                cacheMissTokens = usageData.prompt_cache_miss_tokens as number;
+                            }
+
                             const usage: StreamUsage = {
                                 promptTokens: (usageData.prompt_tokens as number) ?? 0,
                                 completionTokens: (usageData.completion_tokens as number) ?? 0,
-                                cacheHitTokens: usageData.prompt_cache_hit_tokens as number | undefined,
-                                cacheMissTokens: usageData.prompt_cache_miss_tokens as number | undefined,
+                                cacheHitTokens,
+                                cacheMissTokens,
                             };
                             this._onUsage?.(usage);
                         }
