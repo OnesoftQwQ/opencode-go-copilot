@@ -20,7 +20,7 @@ const zhCN: Record<string, string> = {
 
 	// statusBar cache tooltip
 	"Cache": "缓存",
-	"({0} cached, {1}%)": "（已缓存 {0}，缓存率 {1}%）",
+	"({0} cached, {1}%)": "(已缓存 {0}, 命中率 {1}%)",
 	"No changes found in any workspace repositories.": "在任何工作区仓库中均未发现更改。",
 	"Git extension not found": "未找到 Git 扩展",
 	"No Git repositories available": "没有可用的 Git 仓库",
