@@ -17,6 +17,12 @@ Integrate [OpenCode Go](https://opencode.ai/go) models into GitHub Copilot Chat 
 3. **Select Model**: In the Copilot Chat bottom model picker, choose an "OpenCode Go" model
 4. **Start chatting**
 
+### Token Usage Indicator
+
+Once installed, when using a model provided by OpenCode Go, the status bar will display the current context usage and cumulative input/output token counts. For DeepSeek and models that support returning cache usage via the OpenAI-compatible format, the tooltip will also show the **cumulative input cache hit count** and **cache hit rate**.
+
+![token_counter](/assets/screenshots/token_counter.png)
+
 ### Git Commit Messages
 
 Click the **magic wand** button in the Source Control (SCM) panel to auto-generate a commit message.
@@ -68,6 +74,12 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 2. **显示模型**：在模型选择器中点击设置图标 ⚙️ → **语言模型** 面板 → 将需要的模型显示
 3. **选择模型**：在 Copilot Chat 底部模型选择器中选 "OpenCode Go" 下的模型
 4. **开始对话**
+
+### Token 用量指示器
+
+安装后，使用 OpenCode Go 所提供的模型时，底部将会显示当前上下文用量与会话累计输入/输出 Token 量，同时 DeepSeek 与支持通过 OpenAI 格式返回缓存用量的模型还将显示**累计输入缓存命中量**与**缓存命中率**。
+
+![token_counter](/assets/screenshots/token_counter.png)
 
 ### Git 提交消息
 
