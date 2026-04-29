@@ -131,7 +131,7 @@ export function updateCumulativeTooltip(statusBarItem: vscode.StatusBarItem): vo
             ? Math.round((cumulativeCacheHitTokens / totalCache) * 100)
             : 0;
         const cacheFormatted = formatTokenCount(cumulativeCacheHitTokens);
-        inputLine += ` (${l10n("Cache")} ${cacheFormatted} ${cachePercent}%)`;
+        inputLine += ` (${cacheFormatted} cached, ${cachePercent}%)`;
     }
     lines.push(inputLine);
 
