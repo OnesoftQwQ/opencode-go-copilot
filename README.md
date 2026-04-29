@@ -46,7 +46,7 @@ Available in `settings.json`:
 | `opencodego.commitMessagePrompt` | `""` | Custom system prompt for commit message generation |
 
 > All requests use `temperature: 0` for deterministic output.  
-> DeepSeek Thinking variants default to `reasoning_effort: "max"`.
+> DeepSeek Thinking variants expose a **Thinking Effort** picker in the model selector with levels `low`, `medium`, `high`, and `max` (default: `max`). MiMo models also expose a **Thinking Effort** picker with `low`, `medium`, and `high` (default: `high`).
 
 ### Build
 
@@ -104,7 +104,7 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 | `opencodego.commitMessagePrompt` | `""` | 生成提交消息的自定义系统提示词 |
 
 > 所有请求使用 `temperature: 0` 以确保输出确定性。  
-> DeepSeek Thinking 变体默认使用 `reasoning_effort: "max"`。
+> DeepSeek Thinking 变体在模型选择器中提供 **思考深度 (Thinking Effort)** 选项，可选 `low`、`medium`、`high`、`max`（默认 `max`）。MiMo 系列同样提供 **思考深度** 选项，可选 `low`、`medium`、`high`（默认 `high`）。
 
 ### 编译
 
