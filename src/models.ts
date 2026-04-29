@@ -42,8 +42,10 @@ const BUILT_IN_MODELS: BuiltInModelDef[] = [
     { baseId: "glm-5", displayName: "GLM-5", vision: false, thinkingMode: "switchable", contextLength: 200000, maxTokens: 131072 },
 
     // ── Kimi series ── Moonshot AI, 官方文档: 256K context (262144 tokens) ──
-    { baseId: "kimi-k2.5", displayName: "Kimi K2.5", vision: true, thinkingMode: "switchable", contextLength: 262144, maxTokens: 16384 },
-    { baseId: "kimi-k2.6", displayName: "Kimi K2.6", vision: true, thinkingMode: "switchable", contextLength: 262144, maxTokens: 16384 },
+    // { baseId: "kimi-k2.5", displayName: "Kimi K2.5", vision: true, thinkingMode: "switchable", contextLength: 262144, maxTokens: 16384 },
+    // { baseId: "kimi-k2.6", displayName: "Kimi K2.6", vision: true, thinkingMode: "switchable", contextLength: 262144, maxTokens: 16384 },
+    { baseId: "kimi-k2.5", displayName: "Kimi K2.5", vision: true, thinkingMode: "always", contextLength: 262144, maxTokens: 16384 },
+    { baseId: "kimi-k2.6", displayName: "Kimi K2.6", vision: true, thinkingMode: "always", contextLength: 262144, maxTokens: 16384 },
 
     // ── DeepSeek series ── 官方文档: 1M context, 384K max output ──
     { baseId: "deepseek-v4-pro", displayName: "DeepSeek V4 Pro", vision: false, thinkingMode: "switchable", defaultReasoningEffort: "max", supportedReasoningEfforts: ["high", "max"], contextLength: 1000000, maxTokens: 393216 },
