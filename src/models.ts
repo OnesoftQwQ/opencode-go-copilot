@@ -15,6 +15,8 @@ interface BuiltInModelDef {
     thinkingMode: "switchable" | "always";
     /** Default reasoning effort when thinking is enabled */
     defaultReasoningEffort?: string;
+    /** Supported reasoning effort levels for the model picker UI */
+    supportedReasoningEfforts?: string[];
     /** Whether to include reasoning_content in assistant messages */
     includeReasoningInRequest?: boolean;
     /** Default context length */
@@ -44,8 +46,8 @@ const BUILT_IN_MODELS: BuiltInModelDef[] = [
     { baseId: "kimi-k2.6", displayName: "Kimi K2.6", vision: true, thinkingMode: "switchable", contextLength: 262144, maxTokens: 16384 },
 
     // ── DeepSeek series ── 官方文档: 1M context, 384K max output ──
-    { baseId: "deepseek-v4-pro", displayName: "DeepSeek V4 Pro", vision: false, thinkingMode: "switchable", defaultReasoningEffort: "max", contextLength: 1000000, maxTokens: 393216 },
-    { baseId: "deepseek-v4-flash", displayName: "DeepSeek V4 Flash", vision: false, thinkingMode: "switchable", defaultReasoningEffort: "max", contextLength: 1000000, maxTokens: 393216 },
+    { baseId: "deepseek-v4-pro", displayName: "DeepSeek V4 Pro", vision: false, thinkingMode: "switchable", defaultReasoningEffort: "max", supportedReasoningEfforts: ["high", "max"], contextLength: 1000000, maxTokens: 393216 },
+    { baseId: "deepseek-v4-flash", displayName: "DeepSeek V4 Flash", vision: false, thinkingMode: "switchable", defaultReasoningEffort: "max", supportedReasoningEfforts: ["high", "max"], contextLength: 1000000, maxTokens: 393216 },
 
     // ── MiMo series ── 小米 MiMo 官方模型卡: 256K context (262144) ──
     { baseId: "mimo-v2-pro", displayName: "MiMo-V2-Pro", vision: false, thinkingMode: "always", contextLength: 262144, maxTokens: 32768 },
@@ -98,7 +100,7 @@ export function getBuiltInModelInfos(): LanguageModelChatInformation[] {
             } satisfies LanguageModelChatInformation);
 
             // Thinking variant
-            infos.push({
+            const thinkingInfo: LanguageModelChatInformation = {
                 id: `${def.baseId}::Thinking`,
                 name: `${def.displayName} Thinking`,
                 detail: `OpenCode Go`,
@@ -111,10 +113,40 @@ export function getBuiltInModelInfos(): LanguageModelChatInformation[] {
                     toolCalling: true,
                     imageInput: def.vision,
                 },
-            } satisfies LanguageModelChatInformation);
+            };
+
+            // Attach configurationSchema for models with supported reasoning efforts
+            if (def.supportedReasoningEfforts && def.supportedReasoningEfforts.length > 0) {
+                infos.push({
+                    ...thinkingInfo,
+                    configurationSchema: {
+                        properties: {
+                            reasoningEffort: {
+                                type: 'string',
+                                title: 'Thinking Effort',
+                                enum: def.supportedReasoningEfforts,
+                                enumItemLabels: def.supportedReasoningEfforts.map((e: string) => e.charAt(0).toUpperCase() + e.slice(1)),
+                                enumDescriptions: def.supportedReasoningEfforts.map((e: string) => {
+                                    switch (e) {
+                                        case 'low': return 'Faster responses with less reasoning';
+                                        case 'medium': return 'Balanced reasoning and speed';
+                                        case 'high': return 'Greater reasoning depth but slower';
+                                        case 'max': return 'Maximum reasoning depth but slowest';
+                                        default: return e;
+                                    }
+                                }),
+                                default: def.defaultReasoningEffort ?? def.supportedReasoningEfforts[def.supportedReasoningEfforts.length - 1],
+                                group: 'navigation',
+                            },
+                        },
+                    },
+                } satisfies LanguageModelChatInformation);
+            } else {
+                infos.push(thinkingInfo);
+            }
         } else {
             // "always" thinking: single entry
-            infos.push({
+            const alwaysInfo: LanguageModelChatInformation = {
                 id: def.baseId,
                 name: def.displayName,
                 detail: `OpenCode Go`,
@@ -127,7 +159,37 @@ export function getBuiltInModelInfos(): LanguageModelChatInformation[] {
                     toolCalling: true,
                     imageInput: def.vision,
                 },
-            } satisfies LanguageModelChatInformation);
+            };
+
+            // Attach configurationSchema for models with supported reasoning efforts
+            if (def.supportedReasoningEfforts && def.supportedReasoningEfforts.length > 0) {
+                infos.push({
+                    ...alwaysInfo,
+                    configurationSchema: {
+                        properties: {
+                            reasoningEffort: {
+                                type: 'string',
+                                title: 'Thinking Effort',
+                                enum: def.supportedReasoningEfforts,
+                                enumItemLabels: def.supportedReasoningEfforts.map((e: string) => e.charAt(0).toUpperCase() + e.slice(1)),
+                                enumDescriptions: def.supportedReasoningEfforts.map((e: string) => {
+                                    switch (e) {
+                                        case 'low': return 'Faster responses with less reasoning';
+                                        case 'medium': return 'Balanced reasoning and speed';
+                                        case 'high': return 'Greater reasoning depth but slower';
+                                        case 'max': return 'Maximum reasoning depth but slowest';
+                                        default: return e;
+                                    }
+                                }),
+                                default: def.defaultReasoningEffort ?? def.supportedReasoningEfforts[def.supportedReasoningEfforts.length - 1],
+                                group: 'navigation',
+                            },
+                        },
+                    },
+                } satisfies LanguageModelChatInformation);
+            } else {
+                infos.push(alwaysInfo);
+            }
         }
     }
 
@@ -192,6 +254,9 @@ export function getBuiltInModelConfig(modelId: string): OpenCodeGoModelItem | un
     } else {
         // "always" thinking: thinking forced on
         model.enable_thinking = true;
+        if (def.defaultReasoningEffort) {
+            model.reasoning_effort = def.defaultReasoningEffort;
+        }
         model.include_reasoning_in_request = true;
     }
 

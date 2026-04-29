@@ -88,6 +88,14 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             const config = vscode.workspace.getConfiguration();
             const um: OpenCodeGoModelItem | undefined = getBuiltInModelConfig(model.id);
 
+            // Apply user-configured reasoning effort from model picker UI
+            if (um?.enable_thinking && options.modelConfiguration?.reasoningEffort) {
+                const effort = options.modelConfiguration.reasoningEffort;
+                if (typeof effort === 'string') {
+                    um.reasoning_effort = effort;
+                }
+            }
+
             // Determine API mode from model config (default: openai)
             const apiMode = um?.apiMode || "openai";
             const baseUrl = um?.baseUrl || "https://opencode.ai/zen/go/v1/";
