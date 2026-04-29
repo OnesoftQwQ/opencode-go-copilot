@@ -360,8 +360,14 @@ export abstract class CommonApi<TMessage, TRequestBody> {
             "Accept-Encoding": "gzip, deflate, br, zstd",
         };
 
-        // OpenCode Go uses OpenAI-compatible API, so use Bearer auth
-        headers["Authorization"] = `Bearer ${apiKey}`;
+        // Provider-specific header formats
+        if (apiMode === "anthropic") {
+            headers["x-api-key"] = apiKey;
+            headers["anthropic-version"] = "2023-06-01";
+        } else {
+            // OpenAI-compatible API uses Bearer auth
+            headers["Authorization"] = `Bearer ${apiKey}`;
+        }
 
         // Merge custom headers if provided
         if (customHeaders) {

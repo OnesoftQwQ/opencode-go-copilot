@@ -2,6 +2,8 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { getGitDiff } from "./gitUtils";
 import { OpenaiApi } from "../openai/openaiApi";
+import { AnthropicApi } from "../anthropic/anthropicApi";
+import { getBuiltInModelConfig } from "../models";
 import { logger } from "../logger";
 import { l10n } from "../localize";
 import type { OpenCodeGoModelItem } from "../types";
@@ -200,7 +202,13 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
 
         const messages = [{ role: "user", content: prompt }];
 
-        const apiInstance = new OpenaiApi(modelId);
+        // Use the appropriate API based on model config
+        const commitModelConfig = getBuiltInModelConfig(commitModelId);
+        const apiMode = commitModelConfig?.apiMode || "openai";
+
+        const apiInstance = apiMode === "anthropic"
+            ? new AnthropicApi(modelId)
+            : new OpenaiApi(modelId);
 
         commitGenerationAbortController = new AbortController();
         const stream = apiInstance.createMessage(selectedModel, systemPrompt, messages, baseUrl, apiKey);

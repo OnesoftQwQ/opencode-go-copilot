@@ -18,6 +18,8 @@ import { getBuiltInModelConfig } from "./models";
 import { countMessageTokens } from "./provideToken";
 import { updateContextStatusBar, recordUsage, updateCumulativeTooltip } from "./statusBar";
 import { OpenaiApi } from "./openai/openaiApi";
+import { AnthropicApi } from "./anthropic/anthropicApi";
+import type { AnthropicRequestBody } from "./anthropic/anthropicTypes";
 import { CommonApi } from "./commonApi";
 import { logger } from "./logger";
 import { l10n } from "./localize";
@@ -86,8 +88,8 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             const config = vscode.workspace.getConfiguration();
             const um: OpenCodeGoModelItem | undefined = getBuiltInModelConfig(model.id);
 
-            // Only OpenAI Chat Completions API mode is supported
-            const apiMode = "openai";
+            // Determine API mode from model config (default: openai)
+            const apiMode = um?.apiMode || "openai";
             const baseUrl = um?.baseUrl || "https://opencode.ai/zen/go/v1/";
 
             logger.info("request.start", {
@@ -147,50 +149,93 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             });
             logger.debug("request.messages.origin", { messages });
 
-            // OpenAI Chat Completions API mode
-            const openaiApi = new OpenaiApi(model.id);
-            openaiApi.onUsage = (usage) => {
-                recordUsage(usage);
-                updateCumulativeTooltip(this.statusBarItem);
-            };
-            const openaiMessages = openaiApi.convertMessages(messages, modelConfig);
+            if (apiMode === "anthropic") {
+                // Anthropic API mode
+                const anthropicApi = new AnthropicApi(model.id);
+                const anthropicMessages = anthropicApi.convertMessages(messages, modelConfig);
 
-            // requestBody
-            let requestBody: Record<string, unknown> = {
-                model: um?.id ?? model.id,
-                messages: openaiMessages,
-                stream: true,
-                stream_options: { include_usage: true },
-            };
+                // requestBody
+                let requestBody: AnthropicRequestBody = {
+                    model: um?.id ?? model.id,
+                    messages: anthropicMessages,
+                    stream: true,
+                };
+                requestBody = anthropicApi.prepareRequestBody(requestBody, um, options);
 
-            requestBody = openaiApi.prepareRequestBody(requestBody, um, options);
+                // Build Anthropic messages endpoint URL
+                const normalizedBaseUrl = BASE_URL.replace(/\/+$/, "");
+                const url = normalizedBaseUrl.endsWith("/v1")
+                    ? `${normalizedBaseUrl}/messages`
+                    : `${normalizedBaseUrl}/v1/messages`;
+                logger.debug("request.body", { url, requestBody });
+                const response = await executeWithRetry(async () => {
+                    const res = await fetch(url, {
+                        method: "POST",
+                        headers: requestHeaders,
+                        body: JSON.stringify(requestBody),
+                    });
 
-            // Send chat request with retry
-            const url = `${BASE_URL.replace(/\/+$/, "")}/chat/completions`;
-            logger.debug("request.body", { url, requestBody });
-            const response = await executeWithRetry(async () => {
-                const res = await fetch(url, {
-                    method: "POST",
-                    headers: requestHeaders,
-                    body: JSON.stringify(requestBody),
-                });
+                    if (!res.ok) {
+                        const errorText = await res.text();
+                        console.error("[Anthropic Provider] Anthropic API error response", errorText);
+                        throw new Error(
+                            `Anthropic API error: [${res.status}] ${res.statusText}${errorText ? `\n${errorText}` : ""}\nURL: ${url}`
+                        );
+                    }
 
-                if (!res.ok) {
-                    const errorText = await res.text();
-                    console.error("[OpenCodeGo] API error response", errorText);
-                    throw new Error(
-                        `API error: [${res.status}] ${res.statusText}${errorText ? `\n${errorText}` : ""}\nURL: ${url}`
-                    );
+                    return res;
+                }, retryConfig);
+
+                if (!response.body) {
+                    throw new Error("No response body from Anthropic API");
+                }
+                await anthropicApi.processStreamingResponse(response.body, trackingProgress, token);
+            } else {
+                // OpenAI Chat Completions API mode
+                const openaiApi = new OpenaiApi(model.id);
+                openaiApi.onUsage = (usage) => {
+                    recordUsage(usage);
+                    updateCumulativeTooltip(this.statusBarItem);
+                };
+                const openaiMessages = openaiApi.convertMessages(messages, modelConfig);
+
+                // requestBody
+                let requestBody: Record<string, unknown> = {
+                    model: um?.id ?? model.id,
+                    messages: openaiMessages,
+                    stream: true,
+                    stream_options: { include_usage: true },
+                };
+
+                requestBody = openaiApi.prepareRequestBody(requestBody, um, options);
+
+                // Send chat request with retry
+                const url = `${BASE_URL.replace(/\/+$/, "")}/chat/completions`;
+                logger.debug("request.body", { url, requestBody });
+                const response = await executeWithRetry(async () => {
+                    const res = await fetch(url, {
+                        method: "POST",
+                        headers: requestHeaders,
+                        body: JSON.stringify(requestBody),
+                    });
+
+                    if (!res.ok) {
+                        const errorText = await res.text();
+                        console.error("[OpenCodeGo] API error response", errorText);
+                        throw new Error(
+                            `API error: [${res.status}] ${res.statusText}${errorText ? `\n${errorText}` : ""}\nURL: ${url}`
+                        );
+                    }
+
+                    return res;
+                }, retryConfig);
+
+                if (!response.body) {
+                    throw new Error("No response body from API");
                 }
 
-                return res;
-            }, retryConfig);
-
-            if (!response.body) {
-                throw new Error("No response body from API");
+                await openaiApi.processStreamingResponse(response.body, trackingProgress, token);
             }
-
-            await openaiApi.processStreamingResponse(response.body, trackingProgress, token);
         } catch (err) {
             console.error("[OpenCodeGo] Chat request failed", {
                 modelId: model.id,

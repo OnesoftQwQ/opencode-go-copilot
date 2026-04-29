@@ -23,6 +23,8 @@ interface BuiltInModelDef {
     maxTokens?: number;
     /** Extra body parameters to include in API requests */
     extra?: Record<string, unknown>;
+    /** API mode: "openai" (default) or "anthropic" */
+    apiMode?: "openai" | "anthropic";
 }
 
 const EXTENSION_LABEL = "OpenCodeGo";
@@ -52,7 +54,8 @@ const BUILT_IN_MODELS: BuiltInModelDef[] = [
     { baseId: "mimo-v2.5", displayName: "MiMo-V2.5", vision: false, thinkingMode: "always", contextLength: 262144, maxTokens: 32768 },
 
     // ── MiniMax series ── 官方文档: 204800 context (204.8K) ──
-    { baseId: "minimax-m2.7", displayName: "MiniMax M2.7", vision: false, thinkingMode: "always", extra: { reasoning_split: true }, contextLength: 204800, maxTokens: 32768 },
+    // Note: minimax-m2.7 uses Anthropic API format (messages endpoint)
+    { baseId: "minimax-m2.7", displayName: "MiniMax M2.7", vision: false, thinkingMode: "always", apiMode: "anthropic", extra: { reasoning_split: true }, contextLength: 204800, maxTokens: 32768 },
     { baseId: "minimax-m2.5", displayName: "MiniMax M2.5", vision: false, thinkingMode: "always", contextLength: 204800, maxTokens: 32768 },
 
     // ── Qwen series ── 阿里云百炼: Qwen3.6-Plus 1M context, Qwen3.5-Plus 同代同规格 ──
@@ -164,6 +167,7 @@ export function getBuiltInModelConfig(modelId: string): OpenCodeGoModelItem | un
         vision: def.vision,
         context_length: def.contextLength ?? DEFAULT_CONTEXT_LENGTH,
         max_completion_tokens: def.maxTokens ?? DEFAULT_MAX_TOKENS,
+        apiMode: def.apiMode ?? "openai",
     };
 
     // Pass through extra body parameters
