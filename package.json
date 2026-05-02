@@ -120,6 +120,12 @@
 					"type": "string",
 					"default": "",
 					"description": "%config.commitMessagePrompt.desc%"
+				},
+				"opencodego.requestTimeout": {
+					"type": "number",
+					"default": 600000,
+					"minimum": 10000,
+					"description": "%config.requestTimeout.desc%"
 				}
 			}
 		}

@@ -30,6 +30,12 @@ const zhCN: Record<string, string> = {
 	"Failed to generate commit message:": "生成提交消息失败：",
 	"[Commit Generation Failed]": "[提交生成失败]",
 	"empty API response": "API 返回为空",
+
+	// Timeout error
+	"Request timed out. The generation took too long. You can increase the timeout in settings (opencodego.requestTimeout).":
+		"请求超时，生成内容过长。您可以在设置中增加超时时间（opencodego.requestTimeout）。",
+	"The connection was closed by the server. The generation took too long. Please try again or request shorter content.":
+		"服务端连接被关闭，生成内容过长时间过长。请重试或请求较短的内容。",
 };
 
 /**

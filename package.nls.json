@@ -10,5 +10,6 @@
 
 	"config.commitLanguage.desc": "Language for generated Git commit messages.",
 	"config.commitModel.desc": "Model ID used for commit message generation.",
-	"config.commitMessagePrompt.desc": "Custom system prompt for commit message generation."
+	"config.commitMessagePrompt.desc": "Custom system prompt for commit message generation.",
+	"config.requestTimeout.desc": "Maximum time (in milliseconds) for a single request. Default: 600000 (10 minutes). Increase if you encounter timeout errors with long responses."
 }

@@ -9,6 +9,8 @@ import {
     Progress,
 } from "vscode";
 
+import * as path from "path";
+
 import type { OpenCodeGoModelItem } from "./types";
 
 import { createRetryConfig, executeWithRetry } from "./utils";
@@ -38,6 +40,24 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
         private readonly secrets: vscode.SecretStorage,
         private readonly statusBarItem: vscode.StatusBarItem
     ) { }
+
+    /**
+     * Create an undici fetch function with custom bodyTimeout to prevent premature
+     * connection termination during long streaming responses.
+     * Falls back to global fetch if undici is unavailable.
+     */
+    private _createFetchWithTimeout(requestTimeoutMs: number): typeof fetch {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const undici = require(path.join(vscode.env.appRoot, 'node_modules', 'undici'));
+            const agent = new undici.Agent({ bodyTimeout: requestTimeoutMs });
+            return (url: RequestInfo | URL, init?: RequestInit) => {
+                return undici.fetch(url, { ...init, dispatcher: agent });
+            };
+        } catch {
+            return fetch;
+        }
+    }
 
     /**
      * Get the list of available language models contributed by this provider.
@@ -83,6 +103,13 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             },
         };
         const requestStartTime = Date.now();
+
+        // Timeout controller (declared outside try so accessible in catch/finally)
+        let abortController = new AbortController();
+        let requestTimeoutMs = 600000;
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        let dispatchFetch: typeof fetch;
+
         try {
             // Get built-in model config
             const config = vscode.workspace.getConfiguration();
@@ -150,6 +177,13 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             // Get retry config
             const retryConfig = createRetryConfig();
 
+            // Create request timeout abort controller (default: 10 minutes)
+            requestTimeoutMs = config.get<number>("opencodego.requestTimeout", 600000);
+            abortController = new AbortController();
+            timeoutId = setTimeout(() => abortController.abort(), requestTimeoutMs);
+            // Create undici fetch with custom bodyTimeout (extends TCP idle timeout during streaming)
+            dispatchFetch = this._createFetchWithTimeout(requestTimeoutMs);
+
             // Prepare headers with custom headers if specified
             const requestHeaders = CommonApi.prepareHeaders(modelApiKey, apiMode, um?.headers);
             logger.debug("request.headers", {
@@ -177,10 +211,11 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     : `${normalizedBaseUrl}/v1/messages`;
                 logger.debug("request.body", { url, requestBody });
                 const response = await executeWithRetry(async () => {
-                    const res = await fetch(url, {
+                    const res = await dispatchFetch(url, {
                         method: "POST",
                         headers: requestHeaders,
                         body: JSON.stringify(requestBody),
+                        signal: abortController.signal,
                     });
 
                     if (!res.ok) {
@@ -221,10 +256,11 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 const url = `${BASE_URL.replace(/\/+$/, "")}/chat/completions`;
                 logger.debug("request.body", { url, requestBody });
                 const response = await executeWithRetry(async () => {
-                    const res = await fetch(url, {
+                    const res = await dispatchFetch(url, {
                         method: "POST",
                         headers: requestHeaders,
                         body: JSON.stringify(requestBody),
+                        signal: abortController.signal,
                     });
 
                     if (!res.ok) {
@@ -245,6 +281,28 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 await openaiApi.processStreamingResponse(response.body, trackingProgress, token);
             }
         } catch (err) {
+            // Determine if the request was aborted/terminated (friendly message instead of raw error)
+            const errMessage = err instanceof Error ? err.message : String(err);
+            const isTimeout = abortController.signal.aborted;
+            const isForceTerminated =
+                !isTimeout &&
+                (errMessage.includes("terminated") ||
+                 errMessage.includes("aborted") ||
+                 (err instanceof Error && err.name === "AbortError"));
+
+            if (isTimeout || isForceTerminated) {
+                logger.error("request.timeout", {
+                    modelId: model.id,
+                    timeoutMs: requestTimeoutMs,
+                    durationMs: Date.now() - requestStartTime,
+                    reason: isForceTerminated ? "connection_terminated" : "timeout",
+                });
+                if (isForceTerminated) {
+                    throw new Error(l10n("The connection was closed by the server. The generation took too long. Please try again or request shorter content."));
+                }
+                throw new Error(l10n("Request timed out. The generation took too long. You can increase the timeout in settings (opencodego.requestTimeout)."));
+            }
+
             console.error("[OpenCodeGo] Chat request failed", {
                 modelId: model.id,
                 messageCount: messages.length,
@@ -258,6 +316,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             });
             throw err;
         } finally {
+            clearTimeout(timeoutId);
             const durationMs = Date.now() - requestStartTime;
             logger.info("request.end", { modelId: model.id, durationMs });
             this._lastRequestTime = Date.now();

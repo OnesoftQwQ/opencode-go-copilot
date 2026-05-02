@@ -10,5 +10,6 @@
 
 	"config.commitLanguage.desc": "生成的 Git 提交消息使用的语言。",
 	"config.commitModel.desc": "用于生成提交消息的模型 ID。",
-	"config.commitMessagePrompt.desc": "生成提交消息的自定义系统提示词。"
+	"config.commitMessagePrompt.desc": "生成提交消息的自定义系统提示词。",
+	"config.requestTimeout.desc": "单个请求的最大等待时间（毫秒）。默认值: 600000（10分钟）。如果生成长内容时遇到超时错误，请增大此值。"
 }
