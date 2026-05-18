@@ -1,13 +1,13 @@
-import * as vscode from "vscode";
+import * as vscode from "vscode"
 import {
     CancellationToken,
     LanguageModelChatRequestMessage,
     ProvideLanguageModelChatResponseOptions,
     LanguageModelResponsePart2,
     Progress,
-} from "vscode";
+} from "vscode"
 
-import type { OpenCodeGoModelItem } from "../types";
+import type { OpenCodeGoModelItem } from "../types"
 
 import type {
     OpenAIChatMessage,
@@ -16,31 +16,25 @@ import type {
     ReasoningDetail,
     ReasoningSummaryDetail,
     ReasoningTextDetail,
-} from "./openaiTypes";
+} from "./openaiTypes"
 
-import {
-    isImageMimeType,
-    createDataUrl,
-    isToolResultPart,
-    collectToolResultText,
-    convertToolsToOpenAI,
-    mapRole,
-} from "../utils";
+import { isImageMimeType, createDataUrl, isToolResultPart, collectToolResultText, convertToolsToOpenAI, mapRole } from "../utils"
 
-import { CommonApi, StreamUsage } from "../commonApi";
-import { logger } from "../logger";
-import type { StoredImage } from "../vision/types";
-import { DESCRIBE_IMAGE_TOOL_NAME, DESCRIBE_IMAGE_TOOL_DEF } from "../vision/types";
+import { CommonApi, StreamUsage } from "../commonApi"
+import { logger } from "../logger"
+import type { StoredImage } from "../vision/types"
+import { DESCRIBE_IMAGE_TOOL_NAME, DESCRIBE_IMAGE_TOOL_DEF } from "../vision/types"
+import { reportCopilotContextUsage } from "../cockpit"
 
 export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unknown>> {
     constructor(modelId: string) {
-        super(modelId);
+        super(modelId)
     }
 
     /**
      * Whether images were stored during convertMessages for describe_image tool.
      */
-    private _hasStoredImages = false;
+    private _hasStoredImages = false
 
     /**
      * Convert VS Code chat request messages into OpenAI-compatible message objects.
@@ -51,140 +45,142 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
         messages: readonly LanguageModelChatRequestMessage[],
         modelConfig: { includeReasoningInRequest: boolean; vision?: boolean }
     ): OpenAIChatMessage[] {
-        const modelSupportsVision = modelConfig.vision !== false;
-        const out: OpenAIChatMessage[] = [];
-        let imageIndex = 0;
+        const modelSupportsVision = modelConfig.vision !== false
+        const out: OpenAIChatMessage[] = []
+        let imageIndex = 0
 
         // Collect images to store if model doesn't support vision
-        let imagesToStore: StoredImage[] | undefined;
+        let imagesToStore: StoredImage[] | undefined
         if (!modelSupportsVision) {
             for (const m of messages) {
                 for (const part of m.content ?? []) {
                     if (part instanceof vscode.LanguageModelDataPart && isImageMimeType(part.mimeType)) {
-                        if (!imagesToStore) imagesToStore = [];
+                        if (!imagesToStore) imagesToStore = []
                         imagesToStore.push({
                             data: part.data,
                             mimeType: part.mimeType,
-                        });
+                        })
                     }
                 }
             }
             if (imagesToStore && imagesToStore.length > 0) {
-                const key = CommonApi.generateImageStoreKey();
-                CommonApi.storedImages.set(key, imagesToStore);
-                this._imageStoreKey = key;
-                this._hasStoredImages = true;
+                const key = CommonApi.generateImageStoreKey()
+                CommonApi.storedImages.set(key, imagesToStore)
+                this._imageStoreKey = key
+                this._hasStoredImages = true
             }
         }
 
         for (const m of messages) {
-            const role = mapRole(m);
-            const textParts: string[] = [];
-            const imageParts: vscode.LanguageModelDataPart[] = [];
-            const toolCalls: OpenAIToolCall[] = [];
-            const toolResults: { callId: string; content: string }[] = [];
-            const reasoningParts: string[] = [];
+            const role = mapRole(m)
+            const textParts: string[] = []
+            const imageParts: vscode.LanguageModelDataPart[] = []
+            const toolCalls: OpenAIToolCall[] = []
+            const toolResults: { callId: string; content: string }[] = []
+            const reasoningParts: string[] = []
 
             for (const part of m.content ?? []) {
                 if (part instanceof vscode.LanguageModelTextPart) {
-                    textParts.push(part.value);
+                    textParts.push(part.value)
                 } else if (part instanceof vscode.LanguageModelDataPart && isImageMimeType(part.mimeType)) {
                     if (modelSupportsVision) {
-                        imageParts.push(part);
+                        imageParts.push(part)
                     } else {
                         // For non-vision models, replace image with text reference
                         // Use strong directive language so the model knows it MUST use describe_image
-                        textParts.push(`\n[The user sent an image (imageIndex=${imageIndex}). I cannot see images - I MUST call the describe_image tool with imageIndex=${imageIndex} to get a description of this image.]`);
-                        imageIndex++;
+                        textParts.push(
+                            `\n[The user sent an image (imageIndex=${imageIndex}). I cannot see images - I MUST call the describe_image tool with imageIndex=${imageIndex} to get a description of this image.]`
+                        )
+                        imageIndex++
                     }
                 } else if (part instanceof vscode.LanguageModelToolCallPart) {
-                    const id = part.callId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-                    let args = "{}";
+                    const id = part.callId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+                    let args = "{}"
                     try {
-                        args = JSON.stringify(part.input ?? {});
+                        args = JSON.stringify(part.input ?? {})
                     } catch {
-                        args = "{}";
+                        args = "{}"
                     }
-                    toolCalls.push({ id, type: "function", function: { name: part.name, arguments: args } });
+                    toolCalls.push({ id, type: "function", function: { name: part.name, arguments: args } })
                 } else if (isToolResultPart(part)) {
-                    const callId = (part as { callId?: string }).callId ?? "";
-                    const content = collectToolResultText(part as { content?: ReadonlyArray<unknown> });
-                    toolResults.push({ callId, content });
+                    const callId = (part as { callId?: string }).callId ?? ""
+                    const content = collectToolResultText(part as { content?: ReadonlyArray<unknown> })
+                    toolResults.push({ callId, content })
                 } else if (part instanceof vscode.LanguageModelThinkingPart) {
-                    const content = Array.isArray(part.value) ? part.value.join("") : part.value;
-                    reasoningParts.push(content);
+                    const content = Array.isArray(part.value) ? part.value.join("") : part.value
+                    reasoningParts.push(content)
                 }
             }
 
-            const joinedText = textParts.join("").trim();
-            const joinedThinking = reasoningParts.join("").trim();
+            const joinedText = textParts.join("").trim()
+            const joinedThinking = reasoningParts.join("").trim()
 
             // process assistant message
             if (role === "assistant") {
                 const assistantMessage: OpenAIChatMessage = {
                     role: "assistant",
-                };
+                }
 
                 if (joinedText) {
-                    assistantMessage.content = joinedText;
+                    assistantMessage.content = joinedText
                 }
 
                 if (modelConfig.includeReasoningInRequest) {
-                    assistantMessage.reasoning_content = joinedThinking || "Next step.";
+                    assistantMessage.reasoning_content = joinedThinking || "Next step."
                 }
 
                 if (toolCalls.length > 0) {
-                    assistantMessage.tool_calls = toolCalls;
+                    assistantMessage.tool_calls = toolCalls
                 }
 
                 if (assistantMessage.content || assistantMessage.reasoning_content || assistantMessage.tool_calls) {
-                    out.push(assistantMessage);
+                    out.push(assistantMessage)
                 }
             }
 
             // process tool result messages
             for (const tr of toolResults) {
-                out.push({ role: "tool", tool_call_id: tr.callId, content: tr.content || "" });
+                out.push({ role: "tool", tool_call_id: tr.callId, content: tr.content || "" })
             }
 
             // process user messages
             if (role === "user") {
                 if (imageParts.length > 0) {
                     // multi-modal message
-                    const contentArray: ChatMessageContent[] = [];
+                    const contentArray: ChatMessageContent[] = []
 
                     if (joinedText) {
                         contentArray.push({
                             type: "text",
                             text: joinedText,
-                        });
+                        })
                     }
 
                     for (const imagePart of imageParts) {
-                        const dataUrl = createDataUrl(imagePart);
+                        const dataUrl = createDataUrl(imagePart)
                         contentArray.push({
                             type: "image_url",
                             image_url: {
                                 url: dataUrl,
                             },
-                        });
+                        })
                     }
-                    out.push({ role, content: contentArray });
+                    out.push({ role, content: contentArray })
                 } else {
                     // text-only message
                     if (joinedText) {
-                        out.push({ role, content: joinedText });
+                        out.push({ role, content: joinedText })
                     }
                 }
             }
 
             // process system messages
             if (role === "system" && joinedText) {
-                out.push({ role, content: joinedText });
+                out.push({ role, content: joinedText })
             }
         }
-        this._originalApiMessages = out as any[];
-        return out;
+        this._originalApiMessages = out as any[]
+        return out
     }
 
     prepareRequestBody(
@@ -194,99 +190,109 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
     ): Record<string, unknown> {
         // temperature
         if (um?.temperature !== undefined && um.temperature !== null) {
-            rb.temperature = um.temperature;
+            rb.temperature = um.temperature
         }
 
         // top_p
         if (um?.top_p !== undefined && um.top_p !== null) {
-            rb.top_p = um.top_p;
+            rb.top_p = um.top_p
         }
 
         // max_tokens / max_completion_tokens (mutually exclusive)
         if (um?.max_completion_tokens !== undefined) {
-            rb.max_completion_tokens = um.max_completion_tokens;
+            rb.max_completion_tokens = um.max_completion_tokens
         } else if (um?.max_tokens !== undefined) {
-            rb.max_tokens = um.max_tokens;
+            rb.max_tokens = um.max_tokens
         }
 
         // OpenAI reasoning configuration (only set when thinking is enabled)
         if (um?.enable_thinking !== false && um?.reasoning_effort !== undefined) {
-            rb.reasoning_effort = um.reasoning_effort;
+            rb.reasoning_effort = um.reasoning_effort
         }
 
         // Thinking mode (OpenAI-compatible format: {"thinking": {"type": "enabled"}})
         if (um?.enable_thinking === true) {
-            rb.thinking = { type: "enabled" };
+            rb.thinking = { type: "enabled" }
             if (um?.thinking_budget !== undefined) {
-                (rb.thinking as Record<string, unknown>).budget_tokens = um.thinking_budget;
+                ;(rb.thinking as Record<string, unknown>).budget_tokens = um.thinking_budget
             }
         } else {
-            rb.thinking = { type: "disabled" };
+            rb.thinking = { type: "disabled" }
         }
 
         // OpenRouter/OpenCode Go reasoning configuration
         if (um?.reasoning !== undefined && um.reasoning.enabled !== false) {
-            const reasoningObj: Record<string, unknown> = {};
-            const effort = um.reasoning.effort;
+            const reasoningObj: Record<string, unknown> = {}
+            const effort = um.reasoning.effort
             if (effort && effort !== "auto") {
-                reasoningObj.effort = effort;
+                reasoningObj.effort = effort
             } else {
-                reasoningObj.max_tokens = um.reasoning.max_tokens || 2000;
+                reasoningObj.max_tokens = um.reasoning.max_tokens || 2000
             }
             if (um.reasoning.exclude !== undefined) {
-                reasoningObj.exclude = um.reasoning.exclude;
+                reasoningObj.exclude = um.reasoning.exclude
             }
-            rb.reasoning = reasoningObj;
+            rb.reasoning = reasoningObj
         }
 
         // stop
         if (options?.modelOptions) {
-            const mo = options.modelOptions as Record<string, unknown>;
+            const mo = options.modelOptions as Record<string, unknown>
             if (typeof mo.stop === "string" || Array.isArray(mo.stop)) {
-                rb.stop = mo.stop;
+                rb.stop = mo.stop
             }
         }
 
         // tools
-        const toolConfig = convertToolsToOpenAI(options);
-        const toolsList: any[] = [];
+        const toolConfig = convertToolsToOpenAI(options)
+        const toolsList: any[] = []
         if (toolConfig.tools) {
-            toolsList.push(...toolConfig.tools);
+            toolsList.push(...toolConfig.tools)
         }
         // Inject describe_image tool for non-vision models with stored images
         if (this._hasStoredImages) {
-            toolsList.push(DESCRIBE_IMAGE_TOOL_DEF);
+            toolsList.push(DESCRIBE_IMAGE_TOOL_DEF)
         }
         if (toolsList.length > 0) {
-            rb.tools = toolsList;
+            rb.tools = toolsList
         }
         if (this._hasStoredImages) {
             // Set to "auto" so the model can freely choose to call describe_image.
             // Some providers (DeepSeek) reject forced function tool_choice.
             // The converted messages already contain strong directives telling the
             // model it MUST use describe_image, and the tool definition is available.
-            rb.tool_choice = "auto";
+            rb.tool_choice = "auto"
         } else if (toolConfig.tool_choice) {
-            rb.tool_choice = toolConfig.tool_choice;
+            rb.tool_choice = toolConfig.tool_choice
         }
 
         // Extra model parameters
-        if (um?.top_k !== undefined) { rb.top_k = um.top_k; }
-        if (um?.min_p !== undefined) { rb.min_p = um.min_p; }
-        if (um?.frequency_penalty !== undefined) { rb.frequency_penalty = um.frequency_penalty; }
-        if (um?.presence_penalty !== undefined) { rb.presence_penalty = um.presence_penalty; }
-        if (um?.repetition_penalty !== undefined) { rb.repetition_penalty = um.repetition_penalty; }
+        if (um?.top_k !== undefined) {
+            rb.top_k = um.top_k
+        }
+        if (um?.min_p !== undefined) {
+            rb.min_p = um.min_p
+        }
+        if (um?.frequency_penalty !== undefined) {
+            rb.frequency_penalty = um.frequency_penalty
+        }
+        if (um?.presence_penalty !== undefined) {
+            rb.presence_penalty = um.presence_penalty
+        }
+        if (um?.repetition_penalty !== undefined) {
+            rb.repetition_penalty = um.repetition_penalty
+        }
 
         // Extra body parameters
         if (um?.extra && typeof um.extra === "object") {
             for (const [key, value] of Object.entries(um.extra)) {
                 if (value !== undefined) {
-                    rb[key] = value;
+                    rb[key] = value
                 }
             }
         }
 
-        return rb;
+        return rb
     }
 
     /**
@@ -297,68 +303,68 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
         progress: Progress<LanguageModelResponsePart2>,
         token: CancellationToken
     ): Promise<void> {
-        const modelId = this._modelId;
-        logger.debug("openai.stream.start", { modelId });
+        const modelId = this._modelId
+        logger.debug("openai.stream.start", { modelId })
 
-        const reader = responseBody.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
+        const reader = responseBody.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ""
 
         // Immediately cancel the stream when user cancels, so reader.read() won't stay pending
         if (token.onCancellationRequested) {
             token.onCancellationRequested(() => {
-                reader.cancel().catch(() => {});
-            });
+                reader.cancel().catch(() => {})
+            })
         }
 
         try {
             while (true) {
                 if (token.isCancellationRequested) {
-                    break;
+                    break
                 }
 
-                const { done, value } = await reader.read();
+                const { done, value } = await reader.read()
                 if (done) {
-                    break;
+                    break
                 }
 
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split("\n");
-                buffer = lines.pop() || "";
+                buffer += decoder.decode(value, { stream: true })
+                const lines = buffer.split("\n")
+                buffer = lines.pop() || ""
 
                 for (const line of lines) {
                     if (!line.startsWith("data:")) {
-                        continue;
+                        continue
                     }
-                    const data = line.slice(5).trim();
-                    logger.debug("openai.stream.chunk", { modelId, data });
+                    const data = line.slice(5).trim()
+                    logger.debug("openai.stream.chunk", { modelId, data })
                     if (data === "[DONE]") {
-                        await this.flushToolCallBuffers(progress, false);
-                        continue;
+                        await this.flushToolCallBuffers(progress, false)
+                        continue
                     }
 
                     try {
-                        const parsed = JSON.parse(data);
+                        const parsed = JSON.parse(data)
 
                         // Capture usage from stream_options: include_usage chunks (final chunk with no choices)
-                        const usageData = parsed.usage as Record<string, unknown> | undefined;
+                        const usageData = parsed.usage as Record<string, unknown> | undefined
                         if (usageData) {
-                            let cacheHitTokens: number | undefined;
-                            let cacheMissTokens: number | undefined;
+                            let cacheHitTokens: number | undefined
+                            let cacheMissTokens: number | undefined
 
                             // OpenAI format: prompt_tokens_details.cached_tokens
-                            const details = usageData.prompt_tokens_details as Record<string, unknown> | undefined;
+                            const details = usageData.prompt_tokens_details as Record<string, unknown> | undefined
                             if (details && typeof details.cached_tokens === "number") {
-                                cacheHitTokens = details.cached_tokens;
-                                cacheMissTokens = ((usageData.prompt_tokens as number) ?? 0) - cacheHitTokens;
+                                cacheHitTokens = details.cached_tokens
+                                cacheMissTokens = ((usageData.prompt_tokens as number) ?? 0) - cacheHitTokens
                             }
 
                             // DeepSeek format: prompt_cache_hit_tokens / prompt_cache_miss_tokens (overrides OpenAI)
                             if (typeof usageData.prompt_cache_hit_tokens === "number") {
-                                cacheHitTokens = usageData.prompt_cache_hit_tokens as number;
+                                cacheHitTokens = usageData.prompt_cache_hit_tokens as number
                             }
                             if (typeof usageData.prompt_cache_miss_tokens === "number") {
-                                cacheMissTokens = usageData.prompt_cache_miss_tokens as number;
+                                cacheMissTokens = usageData.prompt_cache_miss_tokens as number
                             }
 
                             const usage: StreamUsage = {
@@ -366,46 +372,45 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
                                 completionTokens: (usageData.completion_tokens as number) ?? 0,
                                 cacheHitTokens,
                                 cacheMissTokens,
-                            };
-                            this._onUsage?.(usage);
+                            }
+                            this._onUsage?.(usage)
+                            // Report token usage to Copilot Chat's cockpit (context window display)
+                            reportCopilotContextUsage(progress, usage)
                         }
 
-                        await this.processDelta(parsed, progress);
+                        await this.processDelta(parsed, progress)
                     } catch (e) {
-                        console.error("[OpenCodeGo] Failed to parse SSE chunk:", e, "data:", data);
+                        console.error("[OpenCodeGo] Failed to parse SSE chunk:", e, "data:", data)
                         logger.error("openai.stream.chunk.error", {
                             modelId,
                             error: e instanceof Error ? e.message : String(e),
                             data,
-                        });
+                        })
                     }
                 }
             }
-            logger.debug("openai.stream.done", { modelId });
+            logger.debug("openai.stream.done", { modelId })
         } catch (e) {
-            console.error("[OpenCodeGo] Streaming response error:", e);
-            logger.error("openai.stream.error", { modelId, error: e instanceof Error ? e.message : String(e) });
-            throw e;
+            console.error("[OpenCodeGo] Streaming response error:", e)
+            logger.error("openai.stream.error", { modelId, error: e instanceof Error ? e.message : String(e) })
+            throw e
         } finally {
-            reader.releaseLock();
-            this.reportEndThinking(progress);
+            reader.releaseLock()
+            this.reportEndThinking(progress)
         }
     }
 
     /**
      * Handle a single streamed delta chunk, emitting text and tool call parts.
      */
-    private async processDelta(
-        delta: Record<string, unknown>,
-        progress: Progress<LanguageModelResponsePart2>
-    ): Promise<boolean> {
-        let emitted = false;
-        const choice = (delta.choices as Record<string, unknown>[] | undefined)?.[0];
+    private async processDelta(delta: Record<string, unknown>, progress: Progress<LanguageModelResponsePart2>): Promise<boolean> {
+        let emitted = false
+        const choice = (delta.choices as Record<string, unknown>[] | undefined)?.[0]
         if (!choice) {
-            return false;
+            return false
         }
 
-        const deltaObj = choice.delta as Record<string, unknown> | undefined;
+        const deltaObj = choice.delta as Record<string, unknown> | undefined
 
         // Process thinking content first (before regular text content)
         try {
@@ -413,106 +418,105 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
                 (choice as Record<string, unknown> | undefined)?.thinking ??
                 (deltaObj as Record<string, unknown> | undefined)?.thinking ??
                 (deltaObj as Record<string, unknown> | undefined)?.reasoning ??
-                (deltaObj as Record<string, unknown> | undefined)?.reasoning_content;
+                (deltaObj as Record<string, unknown> | undefined)?.reasoning_content
 
             // OpenRouter reasoning_details array handling
             const maybeReasoningDetails =
-                (deltaObj as Record<string, unknown>)?.reasoning_details ??
-                (choice as Record<string, unknown>)?.reasoning_details;
+                (deltaObj as Record<string, unknown>)?.reasoning_details ?? (choice as Record<string, unknown>)?.reasoning_details
             if (maybeReasoningDetails && Array.isArray(maybeReasoningDetails) && maybeReasoningDetails.length > 0) {
-                const details: Array<ReasoningDetail> = maybeReasoningDetails as Array<ReasoningDetail>;
-                const sortedDetails = details.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+                const details: Array<ReasoningDetail> = maybeReasoningDetails as Array<ReasoningDetail>
+                const sortedDetails = details.sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
 
                 for (const detail of sortedDetails) {
-                    let extractedText = "";
+                    let extractedText = ""
                     if (detail.type === "reasoning.summary") {
-                        extractedText = (detail as ReasoningSummaryDetail).summary;
+                        extractedText = (detail as ReasoningSummaryDetail).summary
                     } else if (detail.type === "reasoning.text") {
-                        extractedText = (detail as ReasoningTextDetail).text;
+                        extractedText = (detail as ReasoningTextDetail).text
                     } else if (detail.type === "reasoning.encrypted") {
-                        extractedText = "[REDACTED]";
+                        extractedText = "[REDACTED]"
                     } else {
-                        extractedText = JSON.stringify(detail);
+                        extractedText = JSON.stringify(detail)
                     }
 
                     if (extractedText) {
-                        this.bufferThinkingContent(extractedText, progress);
-                        emitted = true;
+                        this.bufferThinkingContent(extractedText, progress)
+                        emitted = true
                     }
                 }
-                maybeThinking = null;
+                maybeThinking = null
             }
 
             if (maybeThinking !== undefined && maybeThinking !== null) {
-                let text = "";
+                let text = ""
                 if (maybeThinking && typeof maybeThinking === "object") {
-                    const mt = maybeThinking as Record<string, unknown>;
-                    text = typeof mt["text"] === "string" ? (mt["text"] as string) : JSON.stringify(mt);
+                    const mt = maybeThinking as Record<string, unknown>
+                    text = typeof mt["text"] === "string" ? (mt["text"] as string) : JSON.stringify(mt)
                 } else if (typeof maybeThinking === "string") {
-                    text = maybeThinking;
+                    text = maybeThinking
                 }
                 if (text) {
-                    this.bufferThinkingContent(text, progress);
-                    emitted = true;
+                    this.bufferThinkingContent(text, progress)
+                    emitted = true
                 }
             }
         } catch (e) {
-            console.error("[OpenCodeGo] Failed to process thinking/reasoning_details:", e);
+            console.error("[OpenCodeGo] Failed to process thinking/reasoning_details:", e)
         }
 
         if (deltaObj?.content) {
-            const content = String(deltaObj.content);
+            const content = String(deltaObj.content)
 
-            const xmlRes = this.processXmlThinkBlocks(content, progress);
+            const xmlRes = this.processXmlThinkBlocks(content, progress)
             if (xmlRes.emittedAny) {
-                emitted = true;
+                emitted = true
             } else {
-                this.reportEndThinking(progress);
-                const res = this.processTextContent(content, progress);
+                this.reportEndThinking(progress)
+                const res = this.processTextContent(content, progress)
                 if (res.emittedAny) {
-                    this._hasEmittedAssistantText = true;
-                    emitted = true;
+                    this._hasEmittedAssistantText = true
+                    emitted = true
                 }
             }
         }
 
         if (deltaObj?.tool_calls) {
-            this.reportEndThinking(progress);
+            this.reportEndThinking(progress)
 
-            const toolCalls = deltaObj.tool_calls as Array<Record<string, unknown>>;
+            const toolCalls = deltaObj.tool_calls as Array<Record<string, unknown>>
 
             if (!this._emittedBeginToolCallsHint && this._hasEmittedAssistantText && toolCalls.length > 0) {
-                progress.report(new vscode.LanguageModelTextPart(" "));
-                this._emittedBeginToolCallsHint = true;
+                progress.report(new vscode.LanguageModelTextPart(" "))
+                this._emittedBeginToolCallsHint = true
             }
 
             for (const tc of toolCalls) {
-                const idx = (tc.index as number) ?? 0;
+                const idx = (tc.index as number) ?? 0
                 if (this._completedToolCallIndices.has(idx)) {
-                    continue;
+                    continue
                 }
-                const buf = this._toolCallBuffers.get(idx) ?? { args: "" };
+                const buf = this._toolCallBuffers.get(idx) ?? { args: "" }
                 if (tc.id && typeof tc.id === "string") {
-                    buf.id = tc.id as string;
+                    buf.id = tc.id as string
                 }
-                const func = tc.function as Record<string, unknown> | undefined;
+                const func = tc.function as Record<string, unknown> | undefined
                 if (func?.name && typeof func.name === "string") {
-                    buf.name = func.name as string;
+                    buf.name = func.name as string
                 }
                 if (typeof func?.arguments === "string") {
-                    buf.args += func.arguments as string;
+                    buf.args += func.arguments as string
                 }
-                this._toolCallBuffers.set(idx, buf);
+                this._toolCallBuffers.set(idx, buf)
 
-                await this.tryEmitBufferedToolCall(idx, progress);
+                await this.tryEmitBufferedToolCall(idx, progress)
             }
         }
 
-        const finish = (choice.finish_reason as string | undefined) ?? undefined;
+        const finish = (choice.finish_reason as string | undefined) ?? undefined
         if (finish === "tool_calls" || finish === "stop") {
-            await this.flushToolCallBuffers(progress, true);
+            await this.flushToolCallBuffers(progress, true)
         }
-        return emitted;
+        return emitted
     }
 
     /**
@@ -526,79 +530,79 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
         apiKey: string,
         signal?: AbortSignal
     ): AsyncGenerator<{ type: "text"; text: string }> {
-        const openaiMessages = [...messages];
+        const openaiMessages = [...messages]
         if (systemPrompt) {
-            openaiMessages.unshift({ role: "system", content: systemPrompt });
+            openaiMessages.unshift({ role: "system", content: systemPrompt })
         }
 
         let requestBody: Record<string, unknown> = {
             model: model.id,
             messages: openaiMessages,
             stream: true,
-        };
-        requestBody = this.prepareRequestBody(requestBody, model, undefined);
+        }
+        requestBody = this.prepareRequestBody(requestBody, model, undefined)
 
-        const headers = CommonApi.prepareHeaders(apiKey, model.apiMode ?? "openai", model.headers);
+        const headers = CommonApi.prepareHeaders(apiKey, model.apiMode ?? "openai", model.headers)
 
-        const url = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
+        const url = `${baseUrl.replace(/\/+$/, "")}/chat/completions`
 
         const response = await fetch(url, {
             method: "POST",
             headers,
             body: JSON.stringify(requestBody),
             signal,
-        });
+        })
 
         if (!response.ok) {
-            const errorText = await response.text();
+            const errorText = await response.text()
             throw new Error(
                 `API error: [${response.status}] ${response.statusText}${errorText ? `\n${errorText}` : ""}\nURL: ${url}`
-            );
+            )
         }
 
         if (!response.body) {
-            throw new Error("No response body from API");
+            throw new Error("No response body from API")
         }
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ""
 
         // Cancel the reader immediately when abort signal fires
         if (signal) {
             signal.addEventListener("abort", () => {
-                reader.cancel().catch(() => {});
-            });
+                reader.cancel().catch(() => {})
+            })
         }
 
         try {
             while (true) {
-                const { done, value } = await reader.read();
+                const { done, value } = await reader.read()
                 if (done) {
-                    break;
+                    break
                 }
 
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split("\n");
-                buffer = lines.pop() || "";
+                buffer += decoder.decode(value, { stream: true })
+                const lines = buffer.split("\n")
+                buffer = lines.pop() || ""
 
                 for (const line of lines) {
                     if (!line.startsWith("data:")) {
-                        continue;
+                        continue
                     }
-                    const data = line.slice(5).trim();
+                    const data = line.slice(5).trim()
                     if (data === "[DONE]") {
-                        continue;
+                        continue
                     }
 
                     try {
-                        const parsed = JSON.parse(data);
-                        const choice = (parsed.choices as Record<string, unknown>[] | undefined)?.[0];
+                        const parsed = JSON.parse(data)
+                        const choice = (parsed.choices as Record<string, unknown>[] | undefined)?.[0]
                         if (choice?.delta) {
-                            const deltaObj = choice.delta as Record<string, unknown>;
-                            const content = deltaObj.content as string | undefined;
+                            const deltaObj = choice.delta as Record<string, unknown>
+                            const content = deltaObj.content as string | undefined
                             if (content) {
-                                yield { type: "text", text: content };
+                                yield { type: "text", text: content }
                             }
                         }
                     } catch {
@@ -607,7 +611,7 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
                 }
             }
         } finally {
-            reader.releaseLock();
+            reader.releaseLock()
         }
     }
 }
