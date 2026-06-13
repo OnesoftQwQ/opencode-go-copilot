@@ -248,6 +248,11 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
             rb.temperature = um.temperature;
         }
 
+        // Moonshot AI Kimi K2.7 only accepts temperature=1
+        if (um?.id === "kimi-k2.7-code") {
+            rb.temperature = 1;
+        }
+
         // top_p
         if (um?.top_p !== undefined && um.top_p !== null) {
             rb.top_p = um.top_p;
