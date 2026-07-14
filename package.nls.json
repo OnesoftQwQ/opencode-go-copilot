@@ -57,6 +57,7 @@
 	"config.retry.maxAttempts.desc": "Maximum number of retry attempts for failed API requests. Default: 3.",
 	"config.retry.intervalMs.desc": "Initial delay in milliseconds before the first retry attempt. Increases exponentially with each retry. Default: 1000.",
 	"config.retry.statusCodes.desc": "Additional HTTP status codes that trigger automatic retry beyond the default set (429, 500, 502, 503, 504). Default: [].",
+	"config.enableCommitGeneration.desc": "Show the generate commit message button in the SCM panel. When disabled, the magic wand button and the command palette entry are hidden.",
 	"command.setModelPreset": "Set Model Temperature Preset",
 	"walkthrough.title": "OpenCode Go for Copilot Chat",
 	"walkthrough.description": "Set up OpenCode Go models in Copilot Chat.",
