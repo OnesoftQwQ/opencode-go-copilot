@@ -41,7 +41,7 @@
 | **高级 Token 指示器** | 可通过 `opencodego.enableThirdPartyTokenIndicator` 配置（默认开启）控制 VS Code 状态栏中的高级Token计数器。关闭后仅显示原生指示器 |
 | **Git 提交消息生成** | 一键生成 Conventional Commit 格式的 Git 提交消息，支持 `auto` 语言模式自动从历史提交检测语言 |
 | **多仓库支持** | 支持多根工作区 (multi-root) 中多个 Git 仓库的提交消息生成 |
-| **模型预设** | 支持通过命令面板快速切换 temperature/top_p 预设（🎯 Precise/⚖️ Balanced/🔥 Creative），也支持手动自定义输入 |
+| **模型预设** | 默认使用 custom 且不发送 temperature/top_p；支持通过命令面板切换内置预设（🎯 Precise/⚖️ Balanced/🔥 Creative）或手动自定义输入 |
 | **国际化** | 内置简体中文 (zh-cn) 中英文双语界面 |
 | **重试机制** | 可配置的指数退避重试策略，应对网络抖动和限流 (429) |
 | **请求延迟** | 可配置的请求间隔延迟，避免触发 API 限流 |
@@ -171,8 +171,9 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   │       ├── "high"/"max" → 开启思考，指定推理力度
   │
   ├── 2b. 注入 temperature/top_p（模型预设或自定义设置）
+  │       ├── 默认 custom 且未设置手动值 → 不发送 temperature/top_p，由模型使用自身默认值
   │       ├── preset 模式 → 注入预设的 temperature（不传入 top_p，由模型使用默认值）
-  │       └── custom 模式 → 注入用户自定义的 temperature 和 top_p（如有设置）
+  │       └── custom 模式 → 仅在用户设置了数值时注入 temperature/top_p
   │
   ├── 2c. 注入 vision 配置
   │       └── modelConfig.vision = um?.vision ?? false
@@ -480,7 +481,7 @@ src/
 计算文本或消息的 Token 数量。委托给 `countMessageTokens()`。
 
 #### `provideLanguageModelChatResponse(model, messages, options, progress, token): Promise<void>`
-核心方法：处理聊天请求，流式返回响应。包括模型配置获取（内置模型 → Zen 模型回退 → 自动发现回退）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理、API 路由、流式解析、图片代理拦截处理和错误处理。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。
+核心方法：处理聊天请求，流式返回响应。包括模型配置获取（内置模型 → Zen 模型回退 → 自动发现回退）、API Key 验证、推理力度应用、temperature/top_p 注入（默认 custom 且未配置时省略，或使用模型预设/自定义设置）、延迟控制、超时管理、API 路由、流式解析、图片代理拦截处理和错误处理。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。
 
 #### `private async _handleInterceptedToolCall(params): Promise<void>`
 处理图片代理拦截。循环处理最多 `opencodego.visionMaxRounds` 轮（默认 5）。每轮检测 API 实例的 `interceptedToolCall`，发出 thinking 块显示“正在根据图片提问：[问题]”，关闭 thinking 块后视觉模型输出以普通文本流式显示。单图调用 `callVisionModel()`，多图调用 `callVisionModelMulti()`，构建本轮 API 请求（追加 assistant tool_call + tool result），注入 VS Code 原生工具 + ask_image（+ ask_with_multi_image 当 >=2 图时）供模型继续使用，保留 temperature/reasoning_effort 等原始参数，DeepSeek 兼容注入 `reasoning_content`。模型不再调用 ask_image/ask_with_multi_image 时退出循环。
@@ -910,7 +911,7 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 将 VS Code 消息转换为 OpenAI 格式。支持文本、图片、工具调用、工具结果、推理内容的消息转换。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据。同时递归扫描 `LanguageModelToolResultPart.content` 中的图片一并存入（确保通过工具返回的图片也能被 `ask_image` 代理识别）。
 
 #### `prepareRequestBody(rb, um?, options?): Record<string, unknown>`
-构建 OpenAI 请求体。设置 temperature、top_p、max_tokens、reasoning_effort（adaptive 模式时跳过）、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和关闭用 `{ type: false }`）、stop、tools、tool_choice 以及各种惩罚参数和 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。
+构建 OpenAI 请求体。按配置设置 temperature/top_p（未配置时省略）、max_tokens、reasoning_effort（adaptive 模式时跳过）、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和关闭用 `{ type: false }`）、stop、tools、tool_choice 以及各种惩罚参数和 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。
 
 #### `processStreamingResponse(responseBody, progress, token): Promise<void>`
 处理 OpenAI SSE 流式响应。逐行解析 `data:` 前缀的 SSE 事件，处理 `[DONE]` 标记，解析 usage 用量信息，委托 `processDelta()`。注册取消回调：`token.onCancellationRequested` 时调用 `reader.cancel()` 立即中断流式读取。在 `finally` 块中 dispose 该回调，防止多次调用 `processStreamingResponse` 时回调累积。
