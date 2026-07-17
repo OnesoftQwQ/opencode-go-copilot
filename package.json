@@ -215,7 +215,7 @@
 				},
 				"opencodego.modelPreset": {
 					"type": "string",
-					"default": "precise",
+					"default": "custom",
 					"description": "%config.modelPreset.desc%",
 					"editPresentation": "singlelineText"
 				},
