@@ -54,6 +54,8 @@ Built-in presets:
 
 You can also configure `opencodego.temperature` and `opencodego.top_p` directly in `settings.json` (requires `opencodego.modelPreset` set to `"custom"`).
 
+By default, `opencodego.modelPreset` is `"custom"` and neither `temperature` nor `top_p` is sent unless a value is configured. This lets each model use its own defaults. Selecting a built-in preset or entering custom values enables those parameters.
+
 ### Extended Vision Understanding
 
 This extension adds **extended vision understanding** capability to **text-only models** that do not natively support vision. When you send a message with an image to these models, they can call a vision-capable model to describe the image, and then answer based on that description.
@@ -70,6 +72,7 @@ Available in `settings.json`:
 
 ```json
 {
+  "opencodego.modelPreset": "custom",
   "opencodego.commitLanguage": "auto",
   "opencodego.commitModel": "deepseek-v4-flash",
   "opencodego.commitMessagePrompt": "",
@@ -166,12 +169,15 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 
 也可在 `settings.json` 中直接配置 `opencodego.temperature` 和 `opencodego.top_p`（需将 `opencodego.modelPreset` 设为 `"custom"`）。
 
+默认情况下，`opencodego.modelPreset` 为 `"custom"`，未设置数值时不会发送 `temperature` 和 `top_p`，模型将使用自身默认值。选择内置预设或填写自定义值后，才会发送对应参数。
+
 ### 配置
 
 可在 `settings.json` 中配置：
 
 ```json
 {
+  "opencodego.modelPreset": "custom",
   "opencodego.commitLanguage": "auto",
   "opencodego.commitModel": "deepseek-v4-flash",
   "opencodego.commitMessagePrompt": "",
