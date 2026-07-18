@@ -55,6 +55,7 @@ const BUILT_IN_MODELS: BuiltInModelDef[] = [
     { baseId: "kimi-k2.5", displayName: "Kimi K2.5", vision: true, thinkingMode: "always", contextLength: 262144, maxTokens: 16384 },
     { baseId: "kimi-k2.6", displayName: "Kimi K2.6", vision: true, thinkingMode: "always", contextLength: 262144, maxTokens: 16384 },
     { baseId: "kimi-k2.7-code", displayName: "Kimi K2.7 Code", vision: true, thinkingMode: "always", supportsTemperature: false, contextLength: 262144, maxTokens: 16384 },
+    { baseId: "kimi-k3", displayName: "Kimi K3", vision: true, thinkingMode: "switchable", supportsTemperature: false, contextLength: 1048576, maxTokens: 131072 },
 
     // ── DeepSeek series ── 官方文档: 1M context, 384K max output ──
     { baseId: "deepseek-v4-pro", displayName: "DeepSeek V4 Pro", vision: false, thinkingMode: "switchable", defaultReasoningEffort: "max", supportedReasoningEfforts: ["high", "max"], contextLength: 1000000, maxTokens: 393216 },

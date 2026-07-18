@@ -27,7 +27,7 @@
 | 能力 | 说明 |
 |------|------|
 | **Chat 模型提供商** | 实现 `LanguageModelChatProvider` 接口，向 VS Code 注册为 `opencodego` 厂商 |
-| **多模型支持** | 内置 17 个模型定义，覆盖 6 大模型系列，统一通过推理强度选择器切换思考模式。可选开启 OpenCode Zen 免费模型（8 个）。支持自动模型发现：开启后从 API 获取模型列表，自动过滤不可用模型并发现新增模型 |
+| **多模型支持** | 内置 18 个模型定义，覆盖 6 大模型系列，统一通过推理强度选择器切换思考模式。可选开启 OpenCode Zen 免费模型（8 个）。支持自动模型发现：开启后从 API 获取模型列表，自动过滤不可用模型并发现新增模型 |
 | **自动模型发现** | 通过 `opencodego.enableAutoModelDiscovery` 配置（默认开启）。启动时从 `/zen/go/v1/models` 获取当前可用模型 ID 列表，过滤内置模型列表（不可用模型自动隐藏）。新增模型从 `models.dev` 数据库获取元数据（上下文长度、视觉能力、工具调用、推理能力等）并自动添加，`thinkingMode` 从 `reasoning` 字段推断（支持推理→switchable，不支持→always）。API 不可用时静默回退到全量内置列表。内存缓存（5 分钟 TTL） |
 | **OpenCode Zen 免费模型** | 通过设置开关启用，从 Zen API 获取模型列表并过滤出 6 个免费模型（Big Pickle、DeepSeek V4 Flash、MiniMax M3、MiniMax M2.5、Ring 2.6 1T、Nemotron 3 Super），以 `OpenCode Zen` 标识追加到模型选择器。支持内存缓存（5 分钟 TTL），API 不可用时静默降级 |
 | **双 API 模式** | 同时支持 **OpenAI 兼容格式** (`/chat/completions`) 和 **Anthropic 格式** (`/v1/messages`) |
@@ -60,8 +60,9 @@
 |------|---------|------|----------------|----------|
 | GLM | `glm-5.2`, `glm-5.1`, `glm-5` | ❌ | `禁用思考` / `高` / `最大` (5.2)² / `思考`（5.1/5 不支持思考切换） | OpenAI |
 | Kimi | `kimi-k2.5`, `kimi-k2.6`, `kimi-k2.7-code`¹ | ✅ | `思考`（不支持思考切换） | OpenAI |
+| Kimi | `kimi-k3`¹ | ✅ | `禁用思考` / `思考` | OpenAI |
 
-> ¹ `kimi-k2.7-code` 不支持设置 Temperature 参数。  
+> ¹ `kimi-k2.7-code` 和 `kimi-k3` 不支持设置 Temperature 参数。  
 > ² GLM-5.2 支持通过 reasoning_effort 设置 thinking 强度 (high/max)，GLM-5.1/GLM-5 不支持 thinking 切换。
 | DeepSeek | `deepseek-v4-pro`, `deepseek-v4-flash` | ❌ | `禁用思考` / `高` / `极高` | OpenAI |
 | MiMo | `mimo-v2-pro`, `mimo-v2-omni`, `mimo-v2.5-pro`, `mimo-v2.5` | mimo-v2-omni ✅ | `禁用思考` / `思考` | OpenAI |
@@ -417,7 +418,7 @@ src/
 |------|------|------|
 | `extension.ts` | ~210 | 扩展激活/停用，注册 Provider 和 6 条命令，首次安装欢迎页引导 |
 | `provider.ts` | ~700 | 实现 `LanguageModelChatProvider`，处理聊天请求全流程及图片代理多轮循环处理 |
-| `models.ts` | ~230 | 17 个内置模型定义，模型配置查询（所有模型声明 `imageInput: true`） |
+| `models.ts` | ~230 | 18 个内置模型定义，模型配置查询（所有模型声明 `imageInput: true`） |
 | `types.ts` | ~95 | `OpenCodeGoModelItem`, `ModelPreset`, `ModelsResponse`, `RetryConfig` 等类型 |
 | `apiModelList.ts` | ~80 | API 模型列表获取：从 `/zen/go/v1/models` 拉取可用模型 ID，5 分钟缓存，静默降级 |
 | `modelsDev.ts` | ~130 | models.dev 元数据拉取与查询：从 `models.dev/models.json` 下载并索引模型规格，支持短 ID 匹配，1 小时缓存 |
@@ -519,7 +520,7 @@ src/
 | `apiMode` | `"openai" \| "anthropic"` (可选) | API 格式模式 |
 
 #### `const BUILT_IN_MODELS: BuiltInModelDef[]`
-17 个内置模型定义常量数组。
+18 个内置模型定义常量数组。
 
 #### `getBuiltInModelInfos(): LanguageModelChatInformation[]`
 将内置模型定义转换为 VS Code 的模型信息列表。每个模型注册**一个条目**，带 `isUserSelectable: true` 确保在模型选择器中可见（VS Code 1.120+ 要求），并通过 `configurationSchema` 附加推理强度选择器（中文标签）。switchable 模型显示 `禁用思考/思考` 或 `禁用思考/高/最大`（可关闭推理）；adaptive 模型仅显示 `禁用思考/自动`；always 模型不显示 `禁用思考` 选项，仅在支持推理强度时显示强度选项。
