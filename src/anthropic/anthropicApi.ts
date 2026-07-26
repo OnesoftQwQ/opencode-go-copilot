@@ -24,6 +24,8 @@ import { CommonApi } from "../commonApi";
 import { logger } from "../logger";
 import type { StoredImage } from "../vision/types";
 import { ASK_IMAGE_TOOL_NAME, ASK_IMAGE_TOOL_DEF, ASK_WITH_MULTI_IMAGE_TOOL_NAME, ASK_WITH_MULTI_IMAGE_TOOL_DEF } from "../vision/types";
+import { parseVisionToolHistoryPart } from "../vision/historyPart";
+import { toAnthropicVisionToolMessages, type VisionToolHistoryEntry } from "../vision/historyCodec";
 
 export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBody> {
 	constructor(modelId: string) {
@@ -98,9 +100,13 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 			const toolCalls: AnthropicToolUseBlock[] = [];
 			const toolResults: AnthropicToolResultBlock[] = [];
 			const thinkingParts: string[] = [];
+			const visionToolHistory: VisionToolHistoryEntry[] = [];
 
 			for (const part of m.content ?? []) {
-				if (part instanceof vscode.LanguageModelTextPart) {
+				const historyEntry = parseVisionToolHistoryPart(part);
+				if (historyEntry) {
+					visionToolHistory.push(historyEntry);
+				} else if (part instanceof vscode.LanguageModelTextPart) {
 					if (modelSupportsVision) {
 						textParts.push(part.value);
 					} else {
@@ -152,6 +158,12 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 
 			const joinedText = textParts.join("").trim();
 			const joinedThinking = thinkingParts.join("").trim();
+
+			// Restore persisted vision calls before the normal content of this
+			// message, preserving assistant tool_use → user tool_result order.
+			for (const entry of visionToolHistory) {
+				out.push(...toAnthropicVisionToolMessages(entry));
+			}
 
 			// Handle system messages separately (Anthropic uses top-level system field)
 			if (role === "system") {

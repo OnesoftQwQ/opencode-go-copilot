@@ -34,7 +34,7 @@
 | **流式推理** | 支持 SSE (Server-Sent Events) 流式响应，实时输出文本和工具调用 |
 | **Thinking/推理** | 支持模型的推理过程展示 ("thinking" 状态)，包括 XML think 块解析 |
 | **工具调用 (Tool Calling)** | 支持 VS Code 的 LanguageModelToolCallPart 机制 |
-| **图片代理 (Tool-based)** | 为不支持视觉的模型注入 `ask_image` 工具，模型可自主选择调用视觉模型（默认 Qwen3.6-Plus）回答关于图片的具体问题，支持两轮 API 请求完成"调用工具→提问→获取答案→继续回答"的完整流程。与旧版 `describe_image` 不同，`ask_image` 允许模型针对图片提出具体问题（如"按钮是什么颜色？"），视觉模型会针对性回答。视觉模型 ID、查询提示词和思考模式均可通过设置配置；视觉代理会在同一个 thinking 块中显示“正在根据图片提问：[问题]”并实时追加视觉模型流式输出 |
+| **图片代理 (Tool-based)** | 为不支持视觉的模型注入 `ask_image` 工具，模型可自主选择调用视觉模型（默认 Qwen3.6-Plus）回答关于图片的具体问题，支持多轮 API 请求完成"调用工具→提问→获取答案→继续回答"的完整流程。与旧版 `describe_image` 不同，`ask_image` 允许模型针对图片提出具体问题（如"按钮是什么颜色？"），视觉模型会针对性回答。每次内部视觉调用完成后还会输出专用 MIME 的 `LanguageModelDataPart`，下一轮从该记录重建标准 tool call + tool result，保持跨轮上下文。视觉模型 ID、查询提示词和思考模式均可通过设置配置；视觉代理会在同一个 thinking 块中显示“正在根据图片提问：[问题]”并实时追加视觉模型流式输出 |
 | **Token 计数** | 使用 `o200k_base` tiktoken 分词器精确统计 token 用量 |
 | **状态栏** | 实时显示当前会话 token 使用量、累计用量、缓存命中率 |
 | **原生 Token 指示器** | 始终启用，向 Copilot Chat 原生 Token 指示器报告 token 用量。通过发送 MIME 类型为 `usage` 的 `LanguageModelDataPart`（TextEncoder 编码 JSON）实现，无需自建状态栏。依赖 VS Code/Copilot Chat 1.116+ 对外部模型 `usage` data part 的识别 |
@@ -240,6 +240,7 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   │           │   ├── Anthropic 模式额外恢复 system 和 thinking 配置
   │           │   └── DeepSeek 兼容注入 reasoning_content
   │           ├── 注入工具: 本轮注入 VS Code 原生工具 + ask_image（+ ask_with_multi_image 当 >=2 张图时）
+  │           ├── 将完成的调用/结果写入 vision history DataPart
   │           └── 循环: 若模型再次调用 ask_image 则继续下一轮，无限追问
   │
   ├── 12. 错误处理:
@@ -287,7 +288,7 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   3. tryEmitBufferedToolCall() → 参数可解析 JSON 时立即发射
   4. flushToolCallBuffers() → finish_reason 时强制发射剩余
   5. adjustReadFileParameters() → 自动扩增 read_file 行数
-  ask_image 拦截: 不在 tryEmit/flush 中发出，改为设置 interceptedToolCall
+  ask_image 拦截: 不在 tryEmit/flush 中发出，改为设置 interceptedToolCall；视觉结果完成后由 provider 写入持久化 history DataPart
 ```
 
 ### 2.6 图片代理（ask_image Tool）流程
@@ -319,6 +320,7 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
            ├── 使用模型的具体 query 调用 callVisionModel()，并将视觉模型文本流实时追加到同一 thinking 块
            │   └── 发送图片 + 查询到视觉模型，收集流式回答
            ├── 关闭 thinking
+           ├── 通过 `application/vnd.opencodego.vision-tool-history+json` DataPart 持久化本轮 tool call + result
            ├── 构建本轮消息: 追加 assistant(tool_call) + tool(result)
            ├── 注入工具: VS Code 原生工具 + ask_image（两者共存）
            ├── 发送 API 请求并流式处理
@@ -330,7 +332,8 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
 
 - **支持无限追问**: 模型拿到图片描述后可以继续调用 ask_image 追问细节（最多 `visionMaxRounds` 次，默认 5）
 - **工具共存**: 每轮同时注入 VS Code 原生工具（read_file 等）+ ask_image，模型可混合使用
-- **图片数据生命周期**: 图片存于 API 实例的 `_localImages` 数组，请求结束后随实例 GC 自动回收
+- **图片数据生命周期**: 图片存于 API 实例的 `_localImages` 数组，请求结束后随实例 GC 自动回收；历史记录只持久化调用参数、结果和必要的 reasoning_content，不复制原始图片字节
+- **跨轮工具历史**: `historyCodec.ts` 负责序列化/校验及 OpenAI/Anthropic 标准消息重建，`historyPart.ts` 负责 VS Code DataPart 的创建与解析；旧 history DataPart 在新请求中被消费，不会再次输出造成重复
 - **OpenAI 模式**: 使用 `tool_calls` + `tool` role 消息格式构建每轮
 - **Anthropic 模式**: 使用 `tool_use` + `tool_result` content block 格式构建每轮
 - **参数保留**: 每轮保留 temperature、top_p、thinking 模式等原始参数
@@ -398,6 +401,8 @@ src/
 │   └── imageUtils.ts                     # 图片尺寸解析
 ├── vision/
 │   ├── types.ts                          # Vision proxy 类型定义
+│   ├── historyCodec.ts                   # 视觉工具历史序列化、校验和标准 API 消息重建
+│   ├── historyPart.ts                    # VS Code vision history DataPart 创建与解析
 │   └── imageProxy.ts                     # 图片代理核心 (ask_image)
 ├── zen/
 │   └── zenModels.ts                      # Zen 免费模型定义与 API 交互
@@ -438,6 +443,8 @@ src/
 | `tokenizer/tokenizerManager.ts` | ~115 | o200k_base 分词器管理 (含 LRU 缓存) |
 | `tokenizer/imageUtils.ts` | ~130 | 图片尺寸解析 (PNG/GIF/JPEG/WebP) |
 | `vision/types.ts` | ~53 | Vision proxy 类型定义（`StoredImage`, `InterceptedToolCall`, `ASK_IMAGE_TOOL_DEF`, `ASK_IMAGE_TOOL_NAME`, `ASK_WITH_MULTI_IMAGE_TOOL_DEF`, `ASK_WITH_MULTI_IMAGE_TOOL_NAME`, `DEFAULT_VISION_PROMPT`） |
+| `vision/historyCodec.ts` | ~150 | 视觉工具历史 DataPart 的 MIME、数据校验/编解码，以及 OpenAI/Anthropic 标准 tool call + tool result 消息重建；由 `scripts/test-vision-history.mjs` 做编解码和双 API 转换器顺序闭环测试 |
+| `vision/historyPart.ts` | ~28 | 创建和解析 `application/vnd.opencodego.vision-tool-history+json` DataPart；测试脚本使用 VS Code 最小运行时桩验证下一轮消息转换 |
 | `vision/imageProxy.ts` | ~95 | 图片代理核心：调用视觉模型描述图片（`callVisionModel`/`callVisionModelMulti`），支持 thinking 模式配置和文本流式转发 |
 | `zen/zenModels.ts` | ~256 | Zen 免费模型定义、API 拉取、缓存管理、配置查询（所有模型声明 `imageInput: true`） |
 
@@ -483,7 +490,7 @@ src/
 核心方法：处理聊天请求，流式返回响应。包括模型配置获取（内置模型 → Zen 模型回退 → 自动发现回退）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理、API 路由、流式解析、图片代理拦截处理和错误处理。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。
 
 #### `private async _handleInterceptedToolCall(params): Promise<void>`
-处理图片代理拦截。循环处理最多 `opencodego.visionMaxRounds` 轮（默认 5）。每轮检测 API 实例的 `interceptedToolCall`，发出 thinking 块显示“正在根据图片提问：[问题]”，关闭 thinking 块后视觉模型输出以普通文本流式显示。单图调用 `callVisionModel()`，多图调用 `callVisionModelMulti()`，构建本轮 API 请求（追加 assistant tool_call + tool result），注入 VS Code 原生工具 + ask_image（+ ask_with_multi_image 当 >=2 图时）供模型继续使用，保留 temperature/reasoning_effort 等原始参数，DeepSeek 兼容注入 `reasoning_content`。模型不再调用 ask_image/ask_with_multi_image 时退出循环。
+处理图片代理拦截。循环处理最多 `opencodego.visionMaxRounds` 轮（默认 5）。每轮检测 API 实例的 `interceptedToolCall`，发出 thinking 块显示“正在根据图片提问：[问题]”，关闭 thinking 块后视觉模型输出以普通文本流式显示，并立即输出一个 `application/vnd.opencodego.vision-tool-history+json` DataPart 保存调用 ID、参数、视觉结果和 OpenAI 模式所需的 `reasoning_content`。单图调用 `callVisionModel()`，多图调用 `callVisionModelMulti()`，构建本轮 API 请求（追加 assistant tool_call + tool result），注入 VS Code 原生工具 + ask_image（+ ask_with_multi_image 当 >=2 图时）供模型继续使用，保留 temperature/reasoning_effort 等原始参数，DeepSeek 兼容注入 `reasoning_content`。模型不再调用 ask_image/ask_with_multi_image 时退出循环。
 
 - 视觉模型调用期间用户取消则跳过本轮。
 - 每轮创建独立 AbortController，带独立超时。
@@ -796,6 +803,29 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 
 #### `callVisionModelMulti(images, visionModelId, query, token, progress?): Promise<string>`
 多图版本的视觉模型调用。将多张图片的 `LanguageModelDataPart` 和 query 文本放在同一条消息中发送给视觉模型，使其可以同时看到所有图片进行比较分析。支持流式输出转发。
+
+---
+
+### 4.24 `src/vision/historyCodec.ts`
+
+#### `serializeVisionToolHistory(entry): Uint8Array` / `deserializeVisionToolHistory(data): VisionToolHistoryEntry | null`
+将一个已完成的 `ask_image`/`ask_with_multi_image` 调用及视觉结果编码为可持久化 JSON，并在读取时严格校验版本、工具名、参数和结果字段。
+
+#### `toOpenAIVisionToolMessages(entry): OpenAIChatMessage[]`
+重建 OpenAI 标准 `assistant.tool_calls` + `tool` 消息，保留 DeepSeek 需要的 `reasoning_content`。
+
+#### `toAnthropicVisionToolMessages(entry): AnthropicMessage[]`
+重建 Anthropic 标准 `assistant.tool_use` + `user.tool_result` 消息。
+
+---
+
+### 4.25 `src/vision/historyPart.ts`
+
+#### `createVisionToolHistoryPart(entry): vscode.LanguageModelDataPart`
+创建专用 MIME 的响应 DataPart，使 VS Code 能将视觉工具历史带入下一轮上下文。
+
+#### `parseVisionToolHistoryPart(part): VisionToolHistoryEntry | null`
+识别并解析视觉工具历史 DataPart，忽略普通图片、usage 等其它 DataPart。
 
 ---
 

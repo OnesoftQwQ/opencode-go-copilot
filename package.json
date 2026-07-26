@@ -317,6 +317,7 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
+		"test:vision-history": "npm run compile && node scripts/test-vision-history.mjs",
 		"lint": "eslint",
 		"watch": "tsc -watch -p ./",
 		"build": "npx @vscode/vsce package -o extension.vsix",

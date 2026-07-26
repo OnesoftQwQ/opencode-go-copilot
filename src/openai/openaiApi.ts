@@ -33,6 +33,8 @@ import { CommonApi, StreamUsage } from "../commonApi";
 import { logger } from "../logger";
 import type { StoredImage } from "../vision/types";
 import { ASK_IMAGE_TOOL_NAME, ASK_IMAGE_TOOL_DEF, ASK_WITH_MULTI_IMAGE_TOOL_NAME, ASK_WITH_MULTI_IMAGE_TOOL_DEF } from "../vision/types";
+import { parseVisionToolHistoryPart } from "../vision/historyPart";
+import { toOpenAIVisionToolMessages, type VisionToolHistoryEntry } from "../vision/historyCodec";
 
 export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unknown>> {
     constructor(modelId: string) {
@@ -105,9 +107,13 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
             const toolCalls: OpenAIToolCall[] = [];
             const toolResults: { callId: string; content: string }[] = [];
             const reasoningParts: string[] = [];
+            const visionToolHistory: VisionToolHistoryEntry[] = [];
 
             for (const part of m.content ?? []) {
-                if (part instanceof vscode.LanguageModelTextPart) {
+                const historyEntry = parseVisionToolHistoryPart(part);
+                if (historyEntry) {
+                    visionToolHistory.push(historyEntry);
+                } else if (part instanceof vscode.LanguageModelTextPart) {
                     if (modelSupportsVision) {
                         textParts.push(part.value);
                     } else {
@@ -164,6 +170,14 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
 
             const joinedText = textParts.join("").trim();
             const joinedThinking = reasoningParts.join("").trim();
+
+            // Persisted ask_image calls are restored as ordinary API messages.
+            // Put them before this message's normal content so that a DataPart
+            // appended after the previous assistant text still forms the valid
+            // sequence: assistant tool_call → tool result → assistant text.
+            for (const entry of visionToolHistory) {
+                out.push(...toOpenAIVisionToolMessages(entry));
+            }
 
             // process assistant message
             if (role === "assistant") {
