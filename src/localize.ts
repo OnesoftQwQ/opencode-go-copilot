@@ -17,6 +17,8 @@ const zhCN: Record<string, string> = {
 	// provider.ts
 	"OpenCode Go API key not found": "未找到 OpenCode Go API 密钥",
 	"Invalid base URL configuration.": "无效的 Base URL 配置。",
+	"Plain HTTP is only allowed for localhost or private network addresses. Use HTTPS for remote endpoints.":
+		"纯 HTTP 仅允许用于本地或私有网络地址，远程端点请使用 HTTPS。",
 
 	// statusBar cache tooltip
 	"Cache": "缓存",

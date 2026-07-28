@@ -282,10 +282,21 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 throw new Error(l10n("OpenCode Go API key not found"));
             }
 
-            // Send chat request
+            // Send chat request — validate base URL (reject plain HTTP for remote addresses)
             const BASE_URL = baseUrl;
             if (!BASE_URL || !BASE_URL.startsWith("http")) {
                 throw new Error(l10n("Invalid base URL configuration."));
+            }
+            {
+                const url = new URL(BASE_URL);
+                if (url.protocol === "http:") {
+                    const host = url.hostname.toLowerCase();
+                    const isLocal = host === "localhost" || host === "127.0.0.1" || host === "::1"
+                        || host.startsWith("192.168.") || host.startsWith("10.") || host === "0.0.0.0";
+                    if (!isLocal) {
+                        throw new Error(l10n("Plain HTTP is only allowed for localhost or private network addresses. Use HTTPS for remote endpoints."));
+                    }
+                }
             }
 
             // Get retry config
