@@ -2,69 +2,43 @@ import * as vscode from "vscode";
 import type { LanguageModelChatInformation } from "vscode";
 import type { OpenCodeGoModelItem } from "../types";
 import { l10n } from "../localize";
-
-// ── Hardcoded Zen free model IDs (from OpenCode Zen official documentation) ──
-export const ZEN_FREE_MODEL_IDS: readonly string[] = [
-    "big-pickle",
-    "deepseek-v4-flash-free",
-    "minimax-m3-free",
-    "minimax-m2.5-free",
-    "mimo-v2.5-free",
-    "ring-2.6-1t-free",
-    "nemotron-3-super-free",
-    "qwen3.6-plus-free",
-];
+import { ensureModelsDevLoaded, lookupModelDevEntry, type ModelsDevEntry } from "../modelsDev";
 
 /**
- * Metadata for each Zen free model.
- * Context lengths are conservative estimates; actual limits depend on Zen provider.
- * thinkingMode: "always" = thinking always on (no switch), "switchable" = user can toggle.
- * supportedReasoningEfforts: optional multi-level efforts (e.g. ["high", "max"]) for switchable models.
- * defaultReasoningEffort: default effort when thinking is enabled.
+ * Minimal overrides for Zen free models that need non-default values.
+ *
+ * Defaults (used when no override and no models.dev data):
+ *   thinkingMode: "switchable"
+ *   apiMode: "openai"
+ *   contextLength: 128000
+ *   maxTokens: 4096
+ *   vision: false
  */
-const ZEN_FREE_MODEL_METADATA: Record<
-    string,
-    { displayName: string; contextLength: number; vision: boolean; maxTokens: number; thinkingMode: "switchable" | "always" | "adaptive"; supportedReasoningEfforts?: string[]; defaultReasoningEffort?: string; apiMode?: "openai" | "anthropic" }
-> = {
-    "big-pickle": {
-        displayName: "Zen/Big Pickle Free",
-        contextLength: 128000,
-        vision: false,
-        maxTokens: 4096,
-        thinkingMode: "always",
-    },
+const ZEN_MODEL_OVERRIDES: Record<string, Partial<{
+    displayName: string;
+    contextLength: number;
+    vision: boolean;
+    maxTokens: number;
+    thinkingMode: "switchable" | "always" | "adaptive";
+    supportedReasoningEfforts?: string[];
+    defaultReasoningEffort?: string;
+    apiMode?: "openai" | "anthropic";
+}>> = {
     "deepseek-v4-flash-free": {
-        displayName: "Zen/DeepSeek V4 Flash Free",
-        contextLength: 1000000,
-        vision: false,
-        maxTokens: 32768,
         thinkingMode: "switchable",
         supportedReasoningEfforts: ["high", "max"],
         defaultReasoningEffort: "max",
+        maxTokens: 32768,
+        contextLength: 1000000,
     },
     "minimax-m3-free": {
-        displayName: "Zen/MiniMax M3 Free",
-        contextLength: 1000000,
-        vision: true,
-        maxTokens: 32768,
         thinkingMode: "adaptive",
         defaultReasoningEffort: "adaptive",
         apiMode: "anthropic",
-    },
-    "mimo-v2.5-free": {
-        displayName: "Zen/MiMo V2.5 Free",
+        maxTokens: 32768,
         contextLength: 1000000,
         vision: true,
-        maxTokens: 32768,
-        thinkingMode: "switchable",
     },
-    "nemotron-3-super-free": {
-        displayName: "Zen/Nemotron 3 Super Free",
-        contextLength: 1000000,
-        vision: false,
-        maxTokens: 4096,
-        thinkingMode: "switchable",
-    }
 };
 
 const EXTENSION_LABEL_ZEN = "OpenCode Zen";
@@ -74,6 +48,27 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // ── Module-level cache for Zen model list ──
 let cachedModelIds: string[] | null = null;
 let cacheTimestamp = 0;
+
+/**
+ * Deduce API mode (openai vs anthropic) from a model ID and optional models.dev entry.
+ * Replicates the same logic as the deduceApiMode helper in provideModel.ts.
+ */
+function deduceApiModeFromFamily(modelId: string, entry?: ModelsDevEntry): "openai" | "anthropic" {
+    const family = entry?.family?.toLowerCase() ?? "";
+    if (family.includes("claude") || family.includes("anthropic")) {
+        return "anthropic";
+    }
+    if (family.includes("qwen")) {
+        if (modelId.includes("3.6") || modelId.includes("3.7")) {
+            return "anthropic";
+        }
+        return "openai";
+    }
+    if (family.includes("gemma")) {
+        return "anthropic";
+    }
+    return "openai";
+}
 
 /**
  * Fetch the full model list from OpenCode Zen API.
@@ -98,7 +93,7 @@ async function fetchZenModelList(apiKey: string): Promise<string[]> {
 
 /**
  * Build LanguageModelChatInformation array from a list of model IDs.
- * Only models present in ZEN_FREE_MODEL_METADATA are included.
+ * For each model, merge metadata from: ZEN_MODEL_OVERRIDES > models.dev > conservative defaults.
  * - switchable models: include "disabled" option so user can turn off thinking
  * - always models: no "disabled" option, thinking always on
  */
@@ -106,10 +101,17 @@ function buildModelInfos(modelIds: string[]): LanguageModelChatInformation[] {
     const infos: LanguageModelChatInformation[] = [];
 
     for (const modelId of modelIds) {
-        const meta = ZEN_FREE_MODEL_METADATA[modelId];
-        if (!meta) {
-            continue;
-        }
+        // Merge: overrides > models.dev > defaults
+        const override = ZEN_MODEL_OVERRIDES[modelId];
+        const entry = lookupModelDevEntry(modelId);
+
+        const displayName = override?.displayName ?? entry?.name ?? modelId;
+        const contextLength = override?.contextLength ?? entry?.limit?.context ?? 128000;
+        const maxTokens = override?.maxTokens ?? entry?.limit?.output ?? 4096;
+        const vision = override?.vision ?? (entry?.attachment === true || (entry?.modalities?.input?.includes("image") ?? false)) ?? false;
+        const thinkingMode = override?.thinkingMode ?? "switchable";
+        const supportedReasoningEfforts = override?.supportedReasoningEfforts;
+        const defaultReasoningEffort = override?.defaultReasoningEffort ?? "enabled";
 
         // Build reasoning effort enum based on thinking mode
         // - "switchable" + hasEfforts: disabled / [effort levels]
@@ -117,18 +119,20 @@ function buildModelInfos(modelIds: string[]): LanguageModelChatInformation[] {
         // - "adaptive"               : disabled / adaptive
         // - "always"    + hasEfforts: [effort levels]
         // - "always"    + no efforts: enabled
-        const hasEfforts = meta.supportedReasoningEfforts && meta.supportedReasoningEfforts.length > 0;
+        const hasEfforts = supportedReasoningEfforts && supportedReasoningEfforts.length > 0;
         let enumValues: string[];
         if (hasEfforts) {
-            if (meta.thinkingMode === "switchable") {
-                enumValues = ["disabled", ...meta.supportedReasoningEfforts!];
+            if (thinkingMode === "switchable") {
+                enumValues = ["disabled", ...supportedReasoningEfforts];
+            } else if (thinkingMode === "adaptive") {
+                enumValues = ["disabled", "adaptive"];
             } else {
-                enumValues = [...meta.supportedReasoningEfforts!];
+                enumValues = [...supportedReasoningEfforts];
             }
         } else {
-            if (meta.thinkingMode === "switchable") {
+            if (thinkingMode === "switchable") {
                 enumValues = ["disabled", "enabled"];
-            } else if (meta.thinkingMode === "adaptive") {
+            } else if (thinkingMode === "adaptive") {
                 enumValues = ["disabled", "adaptive"];
             } else {
                 enumValues = ["enabled"];
@@ -154,17 +158,16 @@ function buildModelInfos(modelIds: string[]): LanguageModelChatInformation[] {
                 default: return e;
             }
         });
-        const defaultEffort = meta.defaultReasoningEffort ?? "enabled";
 
         infos.push({
             id: modelId,
-            name: meta.displayName,
+            name: displayName,
             detail: "OpenCode Zen",
             tooltip: "OpenCode Zen",
             family: EXTENSION_LABEL_ZEN,
             version: "1.0.0",
-            maxInputTokens: meta.contextLength,
-            maxOutputTokens: meta.maxTokens,
+            maxInputTokens: contextLength,
+            maxOutputTokens: maxTokens,
             isUserSelectable: true,
             capabilities: {
                 toolCalling: true,
@@ -180,7 +183,7 @@ function buildModelInfos(modelIds: string[]): LanguageModelChatInformation[] {
                         enum: enumValues,
                         enumItemLabels: enumItemLabels,
                         enumDescriptions: enumDescriptions,
-                        default: defaultEffort,
+                        default: defaultReasoningEffort,
                         group: "navigation",
                     },
                 },
@@ -196,8 +199,9 @@ function buildModelInfos(modelIds: string[]): LanguageModelChatInformation[] {
  *
  * Flow:
  * 1. Try to fetch the model list from Zen API (with 5 min cache)
- * 2. Intersect with hardcoded free model IDs
- * 3. If API is unreachable or no API key, return the full hardcoded list (optimistic)
+ * 2. Filter to only models with IDs ending in "-free"
+ * 3. Load models.dev metadata for enhanced model info
+ * 4. If API is unreachable, use stale cache; if no cache, return empty
  *
  * @param secrets SecretStorage instance for reading the API key.
  */
@@ -206,6 +210,7 @@ export async function getZenFreeModelInfos(secrets: vscode.SecretStorage): Promi
 
     // Use cached result if still fresh
     if (cachedModelIds !== null && now - cacheTimestamp < CACHE_TTL_MS) {
+        await ensureModelsDevLoaded();
         return buildModelInfos(cachedModelIds);
     }
 
@@ -215,56 +220,63 @@ export async function getZenFreeModelInfos(secrets: vscode.SecretStorage): Promi
     if (apiKey) {
         try {
             const allModelIds = await fetchZenModelList(apiKey);
-            // Intersect with hardcoded free model IDs
-            const availableFreeModels = allModelIds.filter((id) => ZEN_FREE_MODEL_IDS.includes(id));
+            // Filter to free models (IDs ending with "-free")
+            const availableFreeModels = allModelIds.filter((id) => id.endsWith("-free"));
 
             // Update cache
             cachedModelIds = availableFreeModels;
             cacheTimestamp = now;
 
+            await ensureModelsDevLoaded();
             return buildModelInfos(availableFreeModels);
         } catch (error) {
             console.error("[OpenCodeGo] Failed to fetch Zen model list:", error);
-            // Fall through to use stale cache or full hardcoded list
+            // Fall through to use stale cache
         }
     }
 
     // Use stale cache if available
     if (cachedModelIds !== null) {
+        await ensureModelsDevLoaded();
         return buildModelInfos(cachedModelIds);
     }
 
-    // Optimistic: return all hardcoded free models
-    cachedModelIds = [...ZEN_FREE_MODEL_IDS];
-    cacheTimestamp = now;
-    return buildModelInfos(cachedModelIds);
+    // No cache and API failed — return empty (Zen models require API reachability)
+    return [];
 }
 
 /**
  * Get model configuration for a Zen free model.
- * Returns undefined if the model ID is not a known Zen free model.
+ * Returns undefined if the model ID does not end with "-free".
+ * Merges metadata from: ZEN_MODEL_OVERRIDES > models.dev > conservative defaults.
  */
 export function getZenFreeModelConfig(modelId: string): OpenCodeGoModelItem | undefined {
-    if (!ZEN_FREE_MODEL_IDS.includes(modelId)) {
+    if (!modelId.endsWith("-free")) {
         return undefined;
     }
 
-    const meta = ZEN_FREE_MODEL_METADATA[modelId];
-    if (!meta) {
-        return undefined;
-    }
+    // Merge: overrides > models.dev > defaults
+    const override = ZEN_MODEL_OVERRIDES[modelId];
+    const entry = lookupModelDevEntry(modelId);
+
+    const displayName = override?.displayName ?? entry?.name ?? modelId;
+    const contextLength = override?.contextLength ?? entry?.limit?.context ?? 128000;
+    const maxTokens = override?.maxTokens ?? entry?.limit?.output ?? 4096;
+    const vision = override?.vision ?? (entry?.attachment === true || (entry?.modalities?.input?.includes("image") ?? false)) ?? false;
+    const thinkingMode = override?.thinkingMode ?? "switchable";
+    const apiMode = override?.apiMode ?? deduceApiModeFromFamily(modelId, entry);
 
     return {
         id: modelId,
         owned_by: "opencode",
-        displayName: meta.displayName,
+        displayName: displayName,
         baseUrl: ZEN_BASE_URL,
-        vision: meta.vision,
-        context_length: meta.contextLength,
-        max_completion_tokens: meta.maxTokens,
-        apiMode: meta.apiMode ?? "openai",
+        vision: vision,
+        context_length: contextLength,
+        max_completion_tokens: maxTokens,
+        apiMode: apiMode,
         enable_thinking: true,
         include_reasoning_in_request: true,
-        thinkingMode: meta.thinkingMode,
+        thinkingMode: thinkingMode,
     };
 }

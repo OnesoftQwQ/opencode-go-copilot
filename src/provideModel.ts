@@ -13,6 +13,27 @@ const EXTENSION_LABEL = "OpenCodeGo";
 const DEFAULT_CONTEXT_LENGTH = 128000;
 const DEFAULT_MAX_TOKENS = 4096;
 
+/**
+ * Deduce API mode (openai vs anthropic) from model ID and optional models.dev entry.
+ * Uses family-based heuristics — models.dev does not directly expose apiMode.
+ */
+function deduceApiMode(modelId: string, entry?: ModelsDevEntry): "openai" | "anthropic" {
+    const family = entry?.family?.toLowerCase() ?? "";
+    if (family.includes("claude") || family.includes("anthropic")) {
+        return "anthropic";
+    }
+    if (family.includes("qwen")) {
+        if (modelId.includes("3.6") || modelId.includes("3.7")) {
+            return "anthropic";
+        }
+        return "openai";
+    }
+    if (family.includes("gemma")) {
+        return "anthropic";
+    }
+    return "openai";
+}
+
 // ── Module-level registry for auto-discovered model configs ──
 // Key: model ID (API ID), Value: OpenCodeGoModelItem
 const _autoDiscoveredConfigs = new Map<string, OpenCodeGoModelItem>();
@@ -115,7 +136,7 @@ function storeAutoDiscoveredConfig(modelId: string, entry: ModelsDevEntry | unde
         supportsTemperature: entry?.temperature ?? true,
         context_length: entry?.limit?.context ?? DEFAULT_CONTEXT_LENGTH,
         max_completion_tokens: entry?.limit?.output ?? DEFAULT_MAX_TOKENS,
-        apiMode: "openai",
+        apiMode: deduceApiMode(modelId, entry),
         enable_thinking: hasReasoning,
         include_reasoning_in_request: hasReasoning,
         thinkingMode: hasReasoning ? "switchable" : "always",
