@@ -5,6 +5,8 @@ import { getGitDiff, getRecentCommits } from "./gitUtils";
 import { OpenaiApi } from "../openai/openaiApi";
 import { AnthropicApi } from "../anthropic/anthropicApi";
 import { getBuiltInModelConfig } from "../models";
+import { getZenFreeModelConfig } from "../zen/zenModels";
+import { getAutoDiscoveredModelConfig } from "../provideModel";
 import { logger } from "../logger";
 import { l10n } from "../localize";
 import type { OpenCodeGoModelItem } from "../types";
@@ -222,7 +224,10 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
         // Use model from config or default to deepseek-v4-flash
         const commitModelId = config.get<string>("opencodego.commitModel", "deepseek-v4-flash");
         // Fetch full model config (apiMode, max_completion_tokens, extra, etc.)
-        const selectedModel: OpenCodeGoModelItem = getBuiltInModelConfig(commitModelId) ?? { id: commitModelId, owned_by: "opencode" };
+        const selectedModel: OpenCodeGoModelItem = getBuiltInModelConfig(commitModelId)
+            ?? getZenFreeModelConfig(commitModelId)
+            ?? getAutoDiscoveredModelConfig(commitModelId)
+            ?? { id: commitModelId, owned_by: "opencode" };
         // Commit messages are simple tasks — disable thinking to speed up generation.
         selectedModel.enable_thinking = false;
         selectedModel.reasoning_effort = "high";
