@@ -174,7 +174,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             const config = vscode.workspace.getConfiguration();
             let um: OpenCodeGoModelItem | undefined = getBuiltInModelConfig(model.id);
             if (!um) {
-                um = getZenFreeModelConfig(model.id);
+                um = await getZenFreeModelConfig(model.id);
             }
             if (!um) {
                 um = getAutoDiscoveredModelConfig(model.id);
@@ -292,7 +292,8 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 if (url.protocol === "http:") {
                     const host = url.hostname.toLowerCase();
                     const isLocal = host === "localhost" || host === "127.0.0.1" || host === "::1"
-                        || host.startsWith("192.168.") || host.startsWith("10.") || host === "0.0.0.0";
+                        || host.startsWith("192.168.") || host.startsWith("10.") || host === "0.0.0.0"
+                        || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
                     if (!isLocal) {
                         throw new Error(l10n("Plain HTTP is only allowed for localhost or private network addresses. Use HTTPS for remote endpoints."));
                     }
@@ -527,8 +528,8 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
             // Detect Zen free model expiration: a 401 from a Zen free model
             // means the free promotion has ended (error text may vary - don't match on it)
-            if (errMessage.includes("[401]") && getZenFreeModelConfig(model.id)) {
-                const zenModelName = getZenFreeModelConfig(model.id)?.displayName ?? model.id;
+            if (errMessage.includes("[401]") && await getZenFreeModelConfig(model.id)) {
+                const zenModelName = (await getZenFreeModelConfig(model.id))?.displayName ?? model.id;
                 logger.error("request.error", {
                     modelId: model.id,
                     error: "zen_free_model_expired",

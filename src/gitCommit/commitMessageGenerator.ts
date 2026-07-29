@@ -225,7 +225,7 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
         const commitModelId = config.get<string>("opencodego.commitModel", "deepseek-v4-flash");
         // Fetch full model config (apiMode, max_completion_tokens, extra, etc.)
         const selectedModel: OpenCodeGoModelItem = getBuiltInModelConfig(commitModelId)
-            ?? getZenFreeModelConfig(commitModelId)
+            ?? await getZenFreeModelConfig(commitModelId)
             ?? getAutoDiscoveredModelConfig(commitModelId)
             ?? { id: commitModelId, owned_by: "opencode" };
         // Commit messages are simple tasks — disable thinking to speed up generation.
@@ -247,6 +247,19 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
         if (!baseUrl || !baseUrl.startsWith("http")) {
             throw new Error(l10n("Invalid base URL configuration."));
         }
+        {
+            const url = new URL(baseUrl);
+            if (url.protocol === "http:") {
+                const host = url.hostname.toLowerCase();
+                const isLocal = host === "localhost" || host === "127.0.0.1" || host === "::1"
+                    || host.startsWith("192.168.") || host.startsWith("10.")
+                    || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+                    || host === "0.0.0.0";
+                if (!isLocal) {
+                    throw new Error(l10n("Plain HTTP is only allowed for localhost or private network addresses. Use HTTPS for remote endpoints."));
+                }
+            }
+        }
 
         // Apply language instruction: auto mode lets the model infer from style reference
         const commitLanguage = config.get<string>("opencodego.commitLanguage", "auto");
@@ -257,8 +270,7 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
         const messages = [{ role: "user", content: prompt }];
 
         // Use the appropriate API based on model config
-        const commitModelConfig = getBuiltInModelConfig(commitModelId);
-        const apiMode = commitModelConfig?.apiMode || "openai";
+        const apiMode = selectedModel.apiMode || "openai";
 
         const apiInstance = apiMode === "anthropic"
             ? new AnthropicApi(modelId)

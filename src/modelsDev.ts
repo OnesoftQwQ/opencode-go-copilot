@@ -154,6 +154,27 @@ export function hasModelDevEntry(apiModelId: string): boolean {
 }
 
 /**
+ * Deduce API mode (openai vs anthropic) from a model ID and optional models.dev entry.
+ * Uses family-based heuristics since models.dev does not directly expose apiMode.
+ */
+export function deduceApiModeFromFamily(modelId: string, entry?: ModelsDevEntry): "openai" | "anthropic" {
+    const family = entry?.family?.toLowerCase() ?? "";
+    if (family.includes("claude") || family.includes("anthropic")) {
+        return "anthropic";
+    }
+    if (family.includes("qwen")) {
+        if (modelId.includes("3.6") || modelId.includes("3.7")) {
+            return "anthropic";
+        }
+        return "openai";
+    }
+    if (family.includes("gemma")) {
+        return "anthropic";
+    }
+    return "openai";
+}
+
+/**
  * Clear the cached metadata (for testing / manual refresh).
  */
 export function clearModelsDevCache(): void {
