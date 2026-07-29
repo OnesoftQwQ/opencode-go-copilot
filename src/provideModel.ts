@@ -205,7 +205,7 @@ async function processNewModels(
         logger.info("models.discovery", {
             action: "added",
             count: addedModels.length,
-            total: updatedInfos.length,
+            // total: updatedInfos.length,
             source: "auto-discovered" + (haveAPIKey ? " (API)" : " (stale)"),
             infos: addedModels.join(", "),
         });
@@ -250,9 +250,13 @@ async function runAutoDiscoveryPass(
             remaining: filtered.length,
         });
     }
-
-    // const existingIds = new Set(filtered.map((i) => i.id));
-    const existingIds = new Set(); // Use empty set to treat all fetched IDs as new for discovery
+    // TODO: Consider Pros and Cons of fetching all models.dev entries vs. only those that are new. 
+    // fetching all -> latest cost and other meta
+    // fetching only new -> More resilient to models.dev changes and possible network failures
+    // To next stage maiintainer: as of 30/7/2026, fetch all reliabily fetches all cost info
+    // will be useful if integrating cost tracking and filtering in the future.
+    const existingIds = new Set(filtered.map((i) => i.id));
+    // const existingIds = new Set(); // Use empty set to treat all fetched IDs as new for discovery
     const newModelIds = fetchedIdsArray.filter((id) => !existingIds.has(id));
 
     // Cleanup stored configs for models no longer returned by API
