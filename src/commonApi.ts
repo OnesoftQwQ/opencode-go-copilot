@@ -10,6 +10,7 @@ import {
 } from "vscode";
 import { OpenCodeGoModelItem } from "./types";
 import { tryParseJSONObject } from "./utils";
+import { VersionManager } from "./versionManager";
 import type { InterceptedToolCall, StoredImage } from "./vision/types";
 import { ASK_IMAGE_TOOL_NAME, ASK_WITH_MULTI_IMAGE_TOOL_NAME } from "./vision/types";
 
@@ -434,9 +435,13 @@ export abstract class CommonApi<TMessage, TRequestBody> {
         apiMode: string,
         customHeaders?: Record<string, string>
     ): Record<string, string> {
+        const config = vscode.workspace.getConfiguration();
+        const customUserAgent = config.get<string>("opencodego.userAgent", "");
+        const userAgent = customUserAgent.trim() || VersionManager.getUserAgent();
+
         const headers: Record<string, string> = {
             "Content-Type": "application/json",
-            "User-Agent": "ai-sdk/openai-compatible/2.0.41 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.11",
+            "User-Agent": userAgent,
             "Accept": "*/*",
             "Accept-Encoding": "gzip, deflate, br, zstd",
         };
