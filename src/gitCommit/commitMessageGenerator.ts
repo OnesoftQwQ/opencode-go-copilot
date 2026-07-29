@@ -224,13 +224,15 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
         // Use model from config or default to deepseek-v4-flash
         const commitModelId = config.get<string>("opencodego.commitModel", "deepseek-v4-flash");
         // Fetch full model config (apiMode, max_completion_tokens, extra, etc.)
-        const selectedModel: OpenCodeGoModelItem = getBuiltInModelConfig(commitModelId)
-            ?? await getZenFreeModelConfig(commitModelId)
-            ?? getAutoDiscoveredModelConfig(commitModelId)
-            ?? { id: commitModelId, owned_by: "opencode" };
+        // Shallow copy to avoid mutating the shared cached config (e.g. auto-discovered models).
+        const selectedModel: OpenCodeGoModelItem = {
+            ...(getBuiltInModelConfig(commitModelId)
+                ?? await getZenFreeModelConfig(commitModelId)
+                ?? getAutoDiscoveredModelConfig(commitModelId)
+                ?? { id: commitModelId, owned_by: "opencode" })
+        };
         // Commit messages are simple tasks — disable thinking to speed up generation.
         selectedModel.enable_thinking = false;
-        selectedModel.reasoning_effort = "high";
         // Cap max_completion_tokens to avoid proxy 500 errors with oversized values
         if (selectedModel.max_completion_tokens && selectedModel.max_completion_tokens > 8192) {
             selectedModel.max_completion_tokens = 8192;
@@ -247,7 +249,8 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
         if (!baseUrl || !baseUrl.startsWith("http")) {
             throw new Error(l10n("Invalid base URL configuration."));
         }
-        {
+        const httpAllowInsecure = config.get<boolean>("opencodego.httpAllowInsecure", false);
+        if (!httpAllowInsecure) {
             const url = new URL(baseUrl);
             if (url.protocol === "http:") {
                 const host = url.hostname.toLowerCase();

@@ -129,7 +129,8 @@ function storeAutoDiscoveredConfig(modelId: string, entry: ModelsDevEntry | unde
  * Returns undefined if the model ID was not auto-discovered.
  */
 export function getAutoDiscoveredModelConfig(modelId: string): OpenCodeGoModelItem | undefined {
-    return _autoDiscoveredConfigs.get(modelId);
+    const config = _autoDiscoveredConfigs.get(modelId);
+    return config ? { ...config } : undefined;
 }
 
 /**
@@ -188,6 +189,9 @@ export async function prepareLanguageModelChatInformation(
             const newModelIds = [...apiModelIds].filter((id) => !builtInIds.has(id));
 
             if (newModelIds.length > 0) {
+                // Prune stale auto-discovered entries before rebuilding
+                _autoDiscoveredConfigs.clear();
+
                 // Load models.dev metadata
                 await ensureModelsDevLoaded();
 

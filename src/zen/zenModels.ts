@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import type { LanguageModelChatInformation } from "vscode";
 import type { OpenCodeGoModelItem } from "../types";
 import { l10n } from "../localize";
+import { logger } from "../logger";
 import { ensureModelsDevLoaded, lookupModelDevEntry, deduceApiModeFromFamily, type ModelsDevEntry } from "../modelsDev";
 
 /**
@@ -56,18 +57,27 @@ let cacheTimestamp = 0;
  */
 async function fetchZenModelList(apiKey: string): Promise<string[]> {
     const url = `${ZEN_BASE_URL.replace(/\/+$/, "")}/models`;
-    const response = await fetch(url, {
-        headers: {
-            Authorization: `Bearer ${apiKey}`,
-        },
-    });
-
-    if (!response.ok) {
-        throw new Error(`Zen API error: [${response.status}] ${response.statusText}`);
+    const TIMEOUT_MS = 10000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+        const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (!response.ok) {
+            throw new Error(`Zen API error: [${response.status}] ${response.statusText}`);
+        }
+        const body = (await response.json()) as { data?: Array<{ id: string }> };
+        return (body.data ?? []).map((m) => m.id);
+    } catch (err: unknown) {
+        clearTimeout(timeoutId);
+        if (err instanceof DOMException && err.name === "AbortError") {
+            logger.warn("zen.fetch.timeout", { url });
+        }
+        throw err;
     }
-
-    const body = (await response.json()) as { data?: Array<{ id: string }> };
-    return (body.data ?? []).map((m) => m.id);
 }
 
 /**
@@ -248,7 +258,7 @@ export async function getZenFreeModelConfig(modelId: string): Promise<OpenCodeGo
     const thinkingMode = override?.thinkingMode ?? "switchable";
     const apiMode = override?.apiMode ?? deduceApiModeFromFamily(modelId, entry);
 
-    return {
+    const config: OpenCodeGoModelItem = {
         id: modelId,
         owned_by: "opencode",
         displayName: displayName,
@@ -261,4 +271,12 @@ export async function getZenFreeModelConfig(modelId: string): Promise<OpenCodeGo
         include_reasoning_in_request: true,
         thinkingMode: thinkingMode,
     };
+
+    // Propagate reasoning_effort from override map (matching getBuiltInModelConfig pattern)
+    const defaultReasoningEffort = override?.defaultReasoningEffort;
+    if (defaultReasoningEffort) {
+        config.reasoning_effort = defaultReasoningEffort;
+    }
+
+    return config;
 }

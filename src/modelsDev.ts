@@ -11,6 +11,8 @@
  * Cached in memory for 1 hour. Silent degradation on failure.
  */
 
+import { logger } from "./logger";
+
 const MODELS_DEV_URL = "https://models.dev/models.json";
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -53,11 +55,22 @@ let cacheTimestamp = 0;
  * Fetch the full models.dev catalog JSON.
  */
 async function fetchModelsDevCatalog(): Promise<Record<string, ModelsDevEntry>> {
-    const response = await fetch(MODELS_DEV_URL);
-    if (!response.ok) {
-        throw new Error(`models.dev error: [${response.status}] ${response.statusText}`);
+    try {
+        const response = await fetch(MODELS_DEV_URL, {
+            signal: AbortSignal.timeout(10000),
+        });
+        if (!response.ok) {
+            throw new Error(`models.dev error: [${response.status}] ${response.statusText}`);
+        }
+        return (await response.json()) as Record<string, ModelsDevEntry>;
+    } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+            logger.warn("modelsDev.fetch.timeout", { url: MODELS_DEV_URL });
+            // Throw a regular error so caller preserves existing cache
+            throw new Error(`Request timed out after 10000ms`);
+        }
+        throw err;
     }
-    return (await response.json()) as Record<string, ModelsDevEntry>;
 }
 
 function rebuildIndex(data: Record<string, ModelsDevEntry>): void {
@@ -163,7 +176,7 @@ export function deduceApiModeFromFamily(modelId: string, entry?: ModelsDevEntry)
         return "anthropic";
     }
     if (family.includes("qwen")) {
-        if (modelId.includes("3.6") || modelId.includes("3.7")) {
+        if (/qwen[\s-]*3\.[67]/i.test(modelId)) {
             return "anthropic";
         }
         return "openai";
