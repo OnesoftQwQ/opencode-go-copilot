@@ -76,6 +76,11 @@
 				"command": "opencodego.setModelPreset",
 				"category": "%commandCategory%",
 				"title": "%command.setModelPreset%"
+			},
+			{
+				"command": "opencodego.updateModelList",
+				"category": "%commandCategory%",
+				"title": "%command.updateModelList%"
 			}
 		],
 		"walkthroughs": [
@@ -277,6 +282,12 @@
 					"type": "boolean",
 					"default": true,
 					"description": "%config.enableAutoModelDiscovery.desc%"
+				},
+				"opencodego.modelsDevUpdateInterval": {
+					"type": "number",
+					"default": 3600000,
+					"minimum": 30000,
+					"description": "%config.modelsDevUpdateInterval.desc%"
 				},
 				"opencodego.modelPresets": {
 					"type": "array",

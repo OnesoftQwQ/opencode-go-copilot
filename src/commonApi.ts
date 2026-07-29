@@ -13,7 +13,7 @@ import { tryParseJSONObject } from "./utils";
 import { VersionManager } from "./versionManager";
 import type { InterceptedToolCall, StoredImage } from "./vision/types";
 import { ASK_IMAGE_TOOL_NAME, ASK_WITH_MULTI_IMAGE_TOOL_NAME } from "./vision/types";
-
+import { logger } from "./logger";
 /**
  * Token usage information extracted from streaming response usage chunk.
  */
@@ -445,7 +445,11 @@ export abstract class CommonApi<TMessage, TRequestBody> {
             "Accept": "*/*",
             "Accept-Encoding": "gzip, deflate, br, zstd",
         };
-
+        logger.debug("prepareHeaders", {
+            apiMode: apiMode,
+            headersUsed: headers,
+            customHeadersProvided: customHeaders ? Object.keys(customHeaders) : [],
+        });
         // Provider-specific header formats
         if (apiMode === "anthropic") {
             headers["x-api-key"] = apiKey;

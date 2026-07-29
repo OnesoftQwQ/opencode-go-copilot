@@ -15,6 +15,7 @@ import * as path from "path";
 import type { ModelPreset, OpenCodeGoModelItem } from "./types";
 
 import { createRetryConfig, executeWithRetry, convertToolsToOpenAI } from "./utils";
+import { getCatalogProviderBaseUrl } from "./modelsDev";
 
 import { prepareLanguageModelChatInformation, getAutoDiscoveredModelConfig } from "./provideModel";
 import { getBuiltInModelConfig } from "./models";
@@ -237,7 +238,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
             // Determine API mode from model config (default: openai)
             const apiMode = um?.apiMode || "openai";
-            const baseUrl = um?.baseUrl || "https://opencode.ai/zen/go/v1/";
+            const baseUrl = um?.baseUrl || getCatalogProviderBaseUrl("opencode-go", "https://opencode.ai/zen/go/v1/");
 
             logger.info("request.start", {
                 modelId: model.id,
@@ -508,8 +509,8 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 !isTimeout &&
                 !isUserCancelled &&
                 (errMessage.includes("terminated") ||
-                 errMessage.includes("aborted") ||
-                 (err instanceof Error && err.name === "AbortError"));
+                    errMessage.includes("aborted") ||
+                    (err instanceof Error && err.name === "AbortError"));
 
             // If user cancelled, just re-throw the original error without wrapping
             if (isUserCancelled) {
@@ -756,87 +757,87 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             }
 
             try {
-            if (params.apiMode === "anthropic") {
-                // Anthropic format: tool_use + tool_result
-                currentMessages.push({
-                    role: "assistant" as const,
-                    content: [
-                        { type: "tool_use" as const, id: intercepted.id, name: intercepted.name, input: intercepted.args },
-                    ],
-                });
-                currentMessages.push({
-                    role: "user" as const,
-                    content: [
-                        { type: "tool_result" as const, tool_use_id: intercepted.id, content: description },
-                    ],
-                });
-
-                const body: Record<string, unknown> = {
-                    model: params.um?.id ?? params.model.id,
-                    messages: currentMessages,
-                    stream: true,
-                };
-                if (params.um?.max_completion_tokens !== undefined) {
-                    body.max_tokens = params.um.max_completion_tokens;
-                } else if (params.um?.max_tokens !== undefined) {
-                    body.max_tokens = params.um.max_tokens;
-                }
-                if (params.um?.temperature !== undefined && params.um.temperature !== null) {
-                    if (params.um.supportsTemperature !== false) {
-                        body.temperature = params.um.temperature;
-                    }
-                }
-                const systemContent = (params.api as any)._systemContent as string | undefined;
-                if (systemContent) {
-                    body.system = systemContent;
-                }
-                if (params.um?.enable_thinking === true) {
-                    if (params.um?.reasoning_effort === 'adaptive') {
-                        body.thinking = { type: "adaptive" };
-                    } else {
-                        body.thinking = { type: "enabled", budget_tokens: 8192 };
-                    }
-                } else {
-                    body.thinking = { type: "disabled" as const };
-                }
-
-                // Inject tools (VS Code + ask_image + ask_with_multi_image)
-                const anthropicToolList: Array<{ name: string; description?: string; input_schema?: object }> = [];
-                const toolConfig = convertToolsToOpenAI(params.options);
-                if (toolConfig.tools) {
-                    for (const tool of toolConfig.tools) {
-                        anthropicToolList.push({
-                            name: tool.function.name,
-                            description: tool.function.description,
-                            input_schema: tool.function.parameters,
-                        });
-                    }
-                }
-                if (hasLocalImages) {
-                    const singleDef = ASK_IMAGE_TOOL_DEF as unknown as { function: { name: string; description: string; parameters: object } };
-                    anthropicToolList.push({
-                        name: singleDef.function.name,
-                        description: singleDef.function.description,
-                        input_schema: singleDef.function.parameters,
+                if (params.apiMode === "anthropic") {
+                    // Anthropic format: tool_use + tool_result
+                    currentMessages.push({
+                        role: "assistant" as const,
+                        content: [
+                            { type: "tool_use" as const, id: intercepted.id, name: intercepted.name, input: intercepted.args },
+                        ],
                     });
-                    if (((api as any)._localImages as any[])?.length >= 2) {
-                        const multiDef = ASK_WITH_MULTI_IMAGE_TOOL_DEF as unknown as { function: { name: string; description: string; parameters: object } };
-                        anthropicToolList.push({
-                            name: multiDef.function.name,
-                            description: multiDef.function.description,
-                            input_schema: multiDef.function.parameters,
-                        });
-                    }
-                }
-                if (anthropicToolList.length > 0) {
-                    body.tools = anthropicToolList;
-                }
-                // Allow the model to freely call ask_image again in this round
-                if (hasLocalImages) {
-                    body.tool_choice = { type: "auto" };
-                }
+                    currentMessages.push({
+                        role: "user" as const,
+                        content: [
+                            { type: "tool_result" as const, tool_use_id: intercepted.id, content: description },
+                        ],
+                    });
 
-                const normalizedUrl = params.baseUrl.replace(/\/+$/, "");
+                    const body: Record<string, unknown> = {
+                        model: params.um?.id ?? params.model.id,
+                        messages: currentMessages,
+                        stream: true,
+                    };
+                    if (params.um?.max_completion_tokens !== undefined) {
+                        body.max_tokens = params.um.max_completion_tokens;
+                    } else if (params.um?.max_tokens !== undefined) {
+                        body.max_tokens = params.um.max_tokens;
+                    }
+                    if (params.um?.temperature !== undefined && params.um.temperature !== null) {
+                        if (params.um.supportsTemperature !== false) {
+                            body.temperature = params.um.temperature;
+                        }
+                    }
+                    const systemContent = (params.api as any)._systemContent as string | undefined;
+                    if (systemContent) {
+                        body.system = systemContent;
+                    }
+                    if (params.um?.enable_thinking === true) {
+                        if (params.um?.reasoning_effort === 'adaptive') {
+                            body.thinking = { type: "adaptive" };
+                        } else {
+                            body.thinking = { type: "enabled", budget_tokens: 8192 };
+                        }
+                    } else {
+                        body.thinking = { type: "disabled" as const };
+                    }
+
+                    // Inject tools (VS Code + ask_image + ask_with_multi_image)
+                    const anthropicToolList: Array<{ name: string; description?: string; input_schema?: object }> = [];
+                    const toolConfig = convertToolsToOpenAI(params.options);
+                    if (toolConfig.tools) {
+                        for (const tool of toolConfig.tools) {
+                            anthropicToolList.push({
+                                name: tool.function.name,
+                                description: tool.function.description,
+                                input_schema: tool.function.parameters,
+                            });
+                        }
+                    }
+                    if (hasLocalImages) {
+                        const singleDef = ASK_IMAGE_TOOL_DEF as unknown as { function: { name: string; description: string; parameters: object } };
+                        anthropicToolList.push({
+                            name: singleDef.function.name,
+                            description: singleDef.function.description,
+                            input_schema: singleDef.function.parameters,
+                        });
+                        if (((api as any)._localImages as any[])?.length >= 2) {
+                            const multiDef = ASK_WITH_MULTI_IMAGE_TOOL_DEF as unknown as { function: { name: string; description: string; parameters: object } };
+                            anthropicToolList.push({
+                                name: multiDef.function.name,
+                                description: multiDef.function.description,
+                                input_schema: multiDef.function.parameters,
+                            });
+                        }
+                    }
+                    if (anthropicToolList.length > 0) {
+                        body.tools = anthropicToolList;
+                    }
+                    // Allow the model to freely call ask_image again in this round
+                    if (hasLocalImages) {
+                        body.tool_choice = { type: "auto" };
+                    }
+
+                    const normalizedUrl = params.baseUrl.replace(/\/+$/, "");
                     const url = normalizedUrl.endsWith("/v1")
                         ? `${normalizedUrl}/messages`
                         : `${normalizedUrl}/v1/messages`;

@@ -7,6 +7,7 @@ import { AnthropicApi } from "../anthropic/anthropicApi";
 import { getBuiltInModelConfig } from "../models";
 import { getZenFreeModelConfig } from "../zen/zenModels";
 import { getAutoDiscoveredModelConfig } from "../provideModel";
+import { getCatalogProviderBaseUrl } from "../modelsDev";
 import { logger } from "../logger";
 import { l10n } from "../localize";
 import type { OpenCodeGoModelItem } from "../types";
@@ -245,7 +246,7 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
             throw new Error(l10n("OpenCode Go API key not found"));
         }
 
-        const baseUrl = selectedModel.baseUrl || "https://opencode.ai/zen/go/v1/";
+        const baseUrl = selectedModel.baseUrl || getCatalogProviderBaseUrl("opencode-go", "https://opencode.ai/zen/go/v1/");
         if (!baseUrl || !baseUrl.startsWith("http")) {
             throw new Error(l10n("Invalid base URL configuration."));
         }

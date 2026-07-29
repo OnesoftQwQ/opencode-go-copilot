@@ -1,15 +1,13 @@
 {
 	"providerDisplayName": "OpenCode Go",
 	"commandCategory": "OpenCodeGo",
-
 	"command.setApiKey": "Set OpenCode Go API Key",
 	"command.getApiKey": "Get OpenCode Go API Key",
 	"command.openSettings": "Open OpenCode Go Settings",
 	"command.generateCommit": "Generate Commit Message with OpenCodeGo",
 	"command.abortCommit": "Generate Commit Message with OpenCodeGo - Stop",
-
+	"command.updateModelList": "Update OpenCode Go Model List (forced)",
 	"config.title": "OpenCode Go Copilot",
-
 	"config.commitLanguage.desc": "Language for generated Git commit messages. When set to \"auto\", the language is detected from recent commit history. Defaults to English if no history exists.",
 	"config.commitLanguage.auto.desc": "Auto-detect language from recent commit history (defaults to English)",
 	"config.commitLanguage.enum.English.desc": "Generate commit messages in English",
@@ -32,23 +30,21 @@
 	"config.recentCommitsCount.desc": "Number of recent commits to analyze for style reference when generating commit messages. Set to 0 to disable. Default: 10.",
 	"config.commitIncludeCommitDiff.desc": "When enabled, include the actual code changes (diff) of recent commits in the style reference, helping the model generate messages that better match the project's commit style. Default: false.",
 	"config.commitAttachContextFiles.desc": "When enabled, attach the content of AGENTS.md and README.md from the repository root as additional context for commit message generation, helping the model better understand the project. Default: true.",
-
 	"config.modelPreset.desc": "Current model preset ID. Use the 'Set Model Preset' command to select a preset. Set to 'custom' to use manual values from 'opencodego.temperature' and 'opencodego.top_p'.",
 	"config.temperature.desc": "Model temperature (0.0 - 2.0). Paired with 'opencodego.top_p'. Only used when 'opencodego.modelPreset' is set to 'custom'.",
 	"config.top_p.desc": "Model top_p (0.0 - 1.0). Paired with 'opencodego.temperature'. Only used when 'opencodego.modelPreset' is set to 'custom'.",
 	"config.enableZenFreeModels.desc": "Enable OpenCode Zen free models in the model picker. When enabled, the extension fetches the model list from the Zen API and shows free models (Big Pickle, DeepSeek V4 Flash, MiniMax M2.5, Ring 2.6 1T, Nemotron 3 Super). Zen free models are currently NOT supported for git commit message generation. Requires a full reload of VS Code to take effect after changing this setting.",
 	"config.enableAutoModelDiscovery.desc": "Enable automatic model discovery. When enabled, the extension fetches the model list from the API and filters the model picker to show only models available on the server. Models not in the API list are hidden. New models on the server that are not in the built-in list are automatically added with default capabilities (thinking always on). Disable to see all built-in models regardless of API availability.",
+	"config.modelsDevUpdateInterval.desc": "Interval in milliseconds for checking model updates from the API when 'opencodego.enableAutoModelDiscovery' is enabled. Default: 3600000 (1 hour). Minimum: 30000 (30 seconds).",
 	"config.modelPresets.desc": "Model presets for quick selection via command palette. Each preset includes temperature and top_p. You can customize the presets.",
 	"config.modelPreset.id.desc": "Preset identifier (must match the value in modelPreset setting).",
 	"config.modelPreset.label.desc": "Display name of the preset.",
 	"config.modelPreset.temperature.desc": "Temperature value (0.0 - 2.0).",
 	"config.modelPreset.top_p.desc": "top_p value (0.0 - 1.0).",
-
 	"config.visionProxyModel.desc": "Vision model ID used by the ask_image tool to answer questions about attached images when the selected model does not support vision.",
 	"config.visionProxyThinking.desc": "Enable thinking/reasoning in the vision proxy model when answering image queries.",
 	"config.enableThirdPartyTokenIndicator.desc": "Enable the Advanced Token indicator in the status bar. The native Copilot token indicator always shows. When this is enabled, the extension also shows an advanced token counter in the VS Code status bar. Default: true.",
 	"config.userAgent.desc": "Custom User-Agent header for API requests. Leave empty to use the default (`opencode-go-copilot/{version} VSCode/{vs_version}`). Useful for identifying your extension instance in server logs or when routing through proxies.",
-
 	"config.delay.desc": "Delay in milliseconds between consecutive API requests to avoid rate limiting. Set to 0 for no delay. Default: 0.",
 	"config.visionMaxRounds.desc": "Maximum number of vision proxy rounds for non-vision models using the `ask_image` tool to query images. Limits follow-up queries per request. Default: 5.",
 	"opencodego.config.httpAllowInsecure": "Allow plain HTTP connections to any server (insecure). When disabled, plain HTTP is only allowed for localhost and private network addresses.",
@@ -57,9 +53,7 @@
 	"config.retry.maxAttempts.desc": "Maximum number of retry attempts for failed API requests. Default: 3.",
 	"config.retry.intervalMs.desc": "Initial delay in milliseconds before the first retry attempt. Increases exponentially with each retry. Default: 1000.",
 	"config.retry.statusCodes.desc": "Additional HTTP status codes that trigger automatic retry beyond the default set (429, 500, 502, 503, 504). Default: [].",
-
 	"command.setModelPreset": "Set Model Temperature Preset",
-
 	"walkthrough.title": "OpenCode Go for Copilot Chat",
 	"walkthrough.description": "Set up OpenCode Go models in Copilot Chat.",
 	"walkthrough.setApiKey.title": "Set your OpenCode Go API key",
