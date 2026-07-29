@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import type { LanguageModelChatInformation } from "vscode";
 import type { OpenCodeGoModelItem } from "../types";
 import { l10n } from "../localize";
-import { ensureModelsDevLoaded, lookupModelDevEntry, type ModelsDevEntry } from "../modelsDev";
+import { ensureModelsDevLoaded, lookupModelDevEntry, deduceApiModeFromFamily, type ModelsDevEntry } from "../modelsDev";
 
 /**
  * Minimal overrides for Zen free models that need non-default values.
@@ -48,27 +48,6 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // ── Module-level cache for Zen model list ──
 let cachedModelIds: string[] | null = null;
 let cacheTimestamp = 0;
-
-/**
- * Deduce API mode (openai vs anthropic) from a model ID and optional models.dev entry.
- * Replicates the same logic as the deduceApiMode helper in provideModel.ts.
- */
-function deduceApiModeFromFamily(modelId: string, entry?: ModelsDevEntry): "openai" | "anthropic" {
-    const family = entry?.family?.toLowerCase() ?? "";
-    if (family.includes("claude") || family.includes("anthropic")) {
-        return "anthropic";
-    }
-    if (family.includes("qwen")) {
-        if (modelId.includes("3.6") || modelId.includes("3.7")) {
-            return "anthropic";
-        }
-        return "openai";
-    }
-    if (family.includes("gemma")) {
-        return "anthropic";
-    }
-    return "openai";
-}
 
 /**
  * Fetch the full model list from OpenCode Zen API.
@@ -250,10 +229,13 @@ export async function getZenFreeModelInfos(secrets: vscode.SecretStorage): Promi
  * Returns undefined if the model ID does not end with "-free".
  * Merges metadata from: ZEN_MODEL_OVERRIDES > models.dev > conservative defaults.
  */
-export function getZenFreeModelConfig(modelId: string): OpenCodeGoModelItem | undefined {
+export async function getZenFreeModelConfig(modelId: string): Promise<OpenCodeGoModelItem | undefined> {
     if (!modelId.endsWith("-free")) {
         return undefined;
     }
+
+    // Ensure models.dev metadata is loaded for correct apiMode/context/token info
+    await ensureModelsDevLoaded();
 
     // Merge: overrides > models.dev > defaults
     const override = ZEN_MODEL_OVERRIDES[modelId];
