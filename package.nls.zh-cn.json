@@ -49,6 +49,14 @@
 	"config.enableThirdPartyTokenIndicator.desc": "启用高级 Token 指示器。Copilot 原生 Token 指示器始终保持开启。开启后，扩展还会在 VS Code 状态栏中显示高级Token计数器。默认: 开启。",
 	"config.userAgent.desc": "API 请求的自定义 User-Agent 头。留空则使用默认值 (`opencode-go-copilot/{version} VSCode/{vs_version}`)。可用于在服务器日志中识别您的扩展实例或配置代理路由。",
 
+	"config.delay.desc": "连续 API 请求之间的延迟时间（毫秒），用于避免触发频率限制。设为 0 表示不延迟。默认值: 0。",
+	"config.visionMaxRounds.desc": "非视觉模型使用 `ask_image` 工具查询图片时的最大视觉代理轮数。限制每次请求的后续追问次数。默认值: 5。",
+	"config.readFileLines.desc": "`read_file` 工具的默认读取行数。设为正值时，扩展会自动调整 `read_file` 工具调用的读取行数。设为 0 表示不调整。默认值: 0。",
+	"config.retry.enabled.desc": "启用失败 API 请求的自动重试（指数退避）。默认值: 开启。",
+	"config.retry.maxAttempts.desc": "失败 API 请求的最大重试次数。默认值: 3。",
+	"config.retry.intervalMs.desc": "首次重试前的初始延迟时间（毫秒）。每次重试后按指数递增。默认值: 1000。",
+	"config.retry.statusCodes.desc": "除默认状态码（429、500、502、503、504）之外，额外触发自动重试的 HTTP 状态码列表。默认值: []。",
+
 	"command.setModelPreset": "设置模型温度预设",
 
 	"walkthrough.title": "OpenCode Go for Copilot Chat",
