@@ -83,7 +83,15 @@ function rebuildIndex(data: Record<string, ModelsDevEntry>): void {
         const slashIdx = fullId.lastIndexOf("/");
         if (slashIdx >= 0) {
             const shortId = fullId.slice(slashIdx + 1);
-            shortIdMap.set(shortId, entry);
+            if (!shortIdMap.has(shortId)) {
+                shortIdMap.set(shortId, entry);
+            } else {
+                logger.warn("modelsDev.index.collision", {
+                    shortId,
+                    existing: shortIdMap.get(shortId)!.id,
+                    ignored: entry.id,
+                });
+            }
         }
     }
 }
