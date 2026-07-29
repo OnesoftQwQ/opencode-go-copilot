@@ -67,6 +67,13 @@ export interface ModelsDevEntry {
     provider?: {
         npm?: string;
     };
+    cost?: {
+        cache_read: number;
+        input: number;
+        output: number;
+    };
+    // Additional fields may be present in provider-specific entries
+    [key: string]: unknown;
 }
 
 /**

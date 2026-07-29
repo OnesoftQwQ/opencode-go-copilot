@@ -51,8 +51,8 @@ function resolveDiscoveredModelMeta(modelId: string) {
     const supportedReasoningEfforts = entry ? inferReasoningEfforts(entry) : undefined;
     const defaultReasoningEffort = entry ? inferDefaultReasoningEffort(entry) : "enabled";
     const vision = entry ? inferVision(entry) : false;
-
-    return { displayName, contextLength, maxOutputTokens, toolCalling, thinkingMode, supportedReasoningEfforts, defaultReasoningEffort, vision, entry };
+    const cost = entry?.cost ?? { cache_read: 0, input: 0, output: 0 };
+    return { displayName, contextLength, maxOutputTokens, toolCalling, thinkingMode, supportedReasoningEfforts, defaultReasoningEffort, vision, entry, cost };
 }
 
 /**
@@ -151,6 +151,7 @@ function storeAutoDiscoveredConfig(modelId: string, entry: ModelsDevEntry | unde
         enable_thinking: meta.thinkingMode !== "always",
         include_reasoning_in_request: meta.thinkingMode !== "always",
         thinkingMode: meta.thinkingMode,
+        cost: meta.cost,
     };
 
     if (meta.defaultReasoningEffort) {
@@ -250,7 +251,8 @@ async function runAutoDiscoveryPass(
         });
     }
 
-    const existingIds = new Set(filtered.map((i) => i.id));
+    // const existingIds = new Set(filtered.map((i) => i.id));
+    const existingIds = new Set(); // Use empty set to treat all fetched IDs as new for discovery
     const newModelIds = fetchedIdsArray.filter((id) => !existingIds.has(id));
 
     // Cleanup stored configs for models no longer returned by API

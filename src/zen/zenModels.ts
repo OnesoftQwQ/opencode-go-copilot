@@ -32,6 +32,7 @@ const ZEN_MODEL_OVERRIDES: Record<string, Partial<{
     supportedReasoningEfforts?: string[];
     defaultReasoningEffort?: string;
     apiMode?: "openai" | "anthropic";
+    cost?: { cache_read: number; input: number; output: number };
 }>> = {};
 
 const EXTENSION_LABEL_ZEN = "OpenCode Zen";
@@ -105,7 +106,9 @@ function resolveZenMetadata(modelId: string) {
     const supportedReasoningEfforts = override?.supportedReasoningEfforts ?? (entry ? inferReasoningEfforts(entry) : undefined);
     const defaultReasoningEffort = override?.defaultReasoningEffort ?? (entry ? inferDefaultReasoningEffort(entry) : "enabled");
     const apiMode = override?.apiMode ?? (entry ? deduceApiModeFromFamily(modelId, entry) : "openai");
-    return { displayName, contextLength, maxTokens, vision, thinkingMode, supportedReasoningEfforts, defaultReasoningEffort, apiMode };
+
+    const cost = override?.cost ?? entry?.cost ?? { cache_read: 0, input: 0, output: 0 };
+    return { displayName, contextLength, maxTokens, vision, thinkingMode, supportedReasoningEfforts, defaultReasoningEffort, apiMode, cost };
 }
 
 /**
