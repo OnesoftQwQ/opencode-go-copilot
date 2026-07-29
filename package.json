@@ -309,6 +309,11 @@
 					"type": "boolean",
 					"default": true,
 					"description": "%config.enableThirdPartyTokenIndicator.desc%"
+				},
+				"opencodego.userAgent": {
+					"type": "string",
+					"default": "",
+					"markdownDescription": "%config.userAgent.desc%"
 				}
 			}
 		}

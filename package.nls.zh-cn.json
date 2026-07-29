@@ -47,6 +47,7 @@
 	"config.visionProxyModel.desc": "用于 ask_image 工具的视觉模型 ID。当所选模型不支持视觉时，该模型用于回答图片相关问题。",
 	"config.visionProxyThinking.desc": "在视觉代理模型回答图片查询时启用思考/推理功能。",
 	"config.enableThirdPartyTokenIndicator.desc": "启用高级 Token 指示器。Copilot 原生 Token 指示器始终保持开启。开启后，扩展还会在 VS Code 状态栏中显示高级Token计数器。默认: 开启。",
+	"config.userAgent.desc": "API 请求的自定义 User-Agent 头。留空则使用默认值 (`opencode-go-copilot/{version} VSCode/{vs_version}`)。可用于在服务器日志中识别您的扩展实例或配置代理路由。",
 
 	"command.setModelPreset": "设置模型温度预设",
 

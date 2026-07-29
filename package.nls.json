@@ -47,6 +47,7 @@
 	"config.visionProxyModel.desc": "Vision model ID used by the ask_image tool to answer questions about attached images when the selected model does not support vision.",
 	"config.visionProxyThinking.desc": "Enable thinking/reasoning in the vision proxy model when answering image queries.",
 	"config.enableThirdPartyTokenIndicator.desc": "Enable the Advanced Token indicator in the status bar. The native Copilot token indicator always shows. When this is enabled, the extension also shows an advanced token counter in the VS Code status bar. Default: true.",
+	"config.userAgent.desc": "Custom User-Agent header for API requests. Leave empty to use the default (`opencode-go-copilot/{version} VSCode/{vs_version}`). Useful for identifying your extension instance in server logs or when routing through proxies.",
 
 	"command.setModelPreset": "Set Model Temperature Preset",
 
