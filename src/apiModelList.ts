@@ -6,6 +6,8 @@
  * Falls back to stale cache or an empty list on failure (silent degradation).
  */
 
+import { logger } from "./logger";
+
 const API_BASE_URL = "https://opencode.ai/zen/go/v1/";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -21,18 +23,24 @@ let lastFetchSuccess = false;
  */
 async function fetchApiModelList(apiKey: string): Promise<string[]> {
     const url = `${API_BASE_URL.replace(/\/+$/, "")}/models`;
-    const response = await fetch(url, {
-        headers: {
-            Authorization: `Bearer ${apiKey}`,
-        },
-    });
-
-    if (!response.ok) {
-        throw new Error(`API model list error: [${response.status}] ${response.statusText}`);
+    try {
+        const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            signal: AbortSignal.timeout(10000),
+        });
+        if (!response.ok) {
+            throw new Error(`API model list error: [${response.status}] ${response.statusText}`);
+        }
+        const body = (await response.json()) as { data?: Array<{ id: string }> };
+        return (body.data ?? []).map((m) => m.id);
+    } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+            logger.warn("apiModelList.fetch.timeout", { url });
+            // Throw a regular error so caller's catch block preserves stale cache
+            throw new Error(`Request timed out after 10000ms`);
+        }
+        throw err;
     }
-
-    const body = (await response.json()) as { data?: Array<{ id: string }> };
-    return (body.data ?? []).map((m) => m.id);
 }
 
 /**

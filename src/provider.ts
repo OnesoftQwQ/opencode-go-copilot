@@ -172,7 +172,9 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
         try {
             // Get built-in model config (with fallback to Zen free model config, then auto-discovered)
             const config = vscode.workspace.getConfiguration();
+            // Shallow copy to avoid mutating the shared built-in config singleton.
             let um: OpenCodeGoModelItem | undefined = getBuiltInModelConfig(model.id);
+            if (um) { um = { ...um }; }
             if (!um) {
                 um = await getZenFreeModelConfig(model.id);
             }
@@ -283,11 +285,12 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             }
 
             // Send chat request — validate base URL (reject plain HTTP for remote addresses)
+            const httpAllowInsecure = config.get<boolean>("opencodego.httpAllowInsecure", false);
             const BASE_URL = baseUrl;
             if (!BASE_URL || !BASE_URL.startsWith("http")) {
                 throw new Error(l10n("Invalid base URL configuration."));
             }
-            {
+            if (!httpAllowInsecure) {
                 const url = new URL(BASE_URL);
                 if (url.protocol === "http:") {
                     const host = url.hostname.toLowerCase();

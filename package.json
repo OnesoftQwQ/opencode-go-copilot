@@ -351,6 +351,11 @@
 					"default": true,
 					"description": "%config.enableThirdPartyTokenIndicator.desc%"
 				},
+				"opencodego.httpAllowInsecure": {
+					"type": "boolean",
+					"default": false,
+					"description": "%opencodego.config.httpAllowInsecure%"
+				},
 				"opencodego.userAgent": {
 					"type": "string",
 					"default": "",

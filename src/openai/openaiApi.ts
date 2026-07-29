@@ -355,8 +355,10 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
         // Extra body parameters (filter reserved keys with warning)
         const OPENAI_RESERVED_EXTRA_KEYS = new Set([
             "model", "messages", "stream", "temperature", "top_p",
-            "max_tokens", "tools", "tool_choice", "stop",
-            "reasoning_effort", "thinking", "top_k",
+            "max_tokens", "max_completion_tokens", "tools", "tool_choice", "stop",
+            "reasoning_effort", "thinking", "top_k", "min_p",
+            "frequency_penalty", "presence_penalty", "repetition_penalty",
+            "stream_options", "reasoning",
         ]);
         if (um?.extra && typeof um.extra === "object") {
             for (const [key, value] of Object.entries(um.extra)) {

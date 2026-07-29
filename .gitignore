@@ -17,3 +17,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Temp files
+*.tmp
+temp/

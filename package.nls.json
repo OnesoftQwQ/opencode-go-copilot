@@ -51,6 +51,7 @@
 
 	"config.delay.desc": "Delay in milliseconds between consecutive API requests to avoid rate limiting. Set to 0 for no delay. Default: 0.",
 	"config.visionMaxRounds.desc": "Maximum number of vision proxy rounds for non-vision models using the `ask_image` tool to query images. Limits follow-up queries per request. Default: 5.",
+	"opencodego.config.httpAllowInsecure": "Allow plain HTTP connections to any server (insecure). When disabled, plain HTTP is only allowed for localhost and private network addresses.",
 	"config.readFileLines.desc": "Default number of lines for the `read_file` tool. When set to a positive value, the extension automatically adjusts `read_file` tool calls to read this many lines. Set to 0 for no adjustment. Default: 0.",
 	"config.retry.enabled.desc": "Enable automatic retry with exponential backoff for failed API requests. Default: true.",
 	"config.retry.maxAttempts.desc": "Maximum number of retry attempts for failed API requests. Default: 3.",

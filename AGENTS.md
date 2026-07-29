@@ -27,9 +27,9 @@
 | 能力 | 说明 |
 |------|------|
 | **Chat 模型提供商** | 实现 `LanguageModelChatProvider` 接口，向 VS Code 注册为 `opencodego` 厂商 |
-| **多模型支持** | 内置 17 个模型定义，覆盖 6 大模型系列，统一通过推理强度选择器切换思考模式。可选开启 OpenCode Zen 免费模型（8 个）。支持自动模型发现：开启后从 API 获取模型列表，自动过滤不可用模型并发现新增模型 |
+| **多模型支持** | 内置 17 个模型定义，覆盖 6 大模型系列，统一通过推理强度选择器切换思考模式。可选开启 OpenCode Zen 免费模型（动态发现，通过 `-free` 后缀过滤）。支持自动模型发现：开启后从 API 获取模型列表，自动过滤不可用模型并发现新增模型 |
 | **自动模型发现** | 通过 `opencodego.enableAutoModelDiscovery` 配置（默认开启）。启动时从 `/zen/go/v1/models` 获取当前可用模型 ID 列表，过滤内置模型列表（不可用模型自动隐藏）。新增模型从 `models.dev` 数据库获取元数据（上下文长度、视觉能力、工具调用、推理能力等）并自动添加，`thinkingMode` 从 `reasoning` 字段推断（支持推理→switchable，不支持→always）。API 不可用时静默回退到全量内置列表。内存缓存（5 分钟 TTL） |
-| **OpenCode Zen 免费模型** | 通过设置开关启用，从 Zen API 获取模型列表并过滤出 6 个免费模型（Big Pickle、DeepSeek V4 Flash、MiniMax M3、MiniMax M2.5、Ring 2.6 1T、Nemotron 3 Super），以 `OpenCode Zen` 标识追加到模型选择器。支持内存缓存（5 分钟 TTL），API 不可用时静默降级 |
+| **OpenCode Zen 免费模型** | 通过设置开关启用，从 Zen API 获取模型列表并过滤出 `-free` 后缀的免费模型，以 `OpenCode Zen` 标识追加到模型选择器。元数据从 `ZEN_MODEL_OVERRIDES` > models.dev > 保守默认值合并。支持内存缓存（5 分钟 TTL），API 不可用时返回空（无降级硬编码列表） |
 | **双 API 模式** | 同时支持 **OpenAI 兼容格式** (`/chat/completions`) 和 **Anthropic 格式** (`/v1/messages`) |
 | **流式推理** | 支持 SSE (Server-Sent Events) 流式响应，实时输出文本和工具调用 |
 | **Thinking/推理** | 支持模型的推理过程展示 ("thinking" 状态)，包括 XML think 块解析 |
@@ -46,6 +46,7 @@
 | **重试机制** | 可配置的指数退避重试策略，应对网络抖动和限流 (429) |
 | **请求延迟** | 可配置的请求间隔延迟，避免触发 API 限流 |
 | **超时控制** | 可配置的请求超时时间（默认 10 分钟） |
+| **HTTP 安全检查** | 通过 `opencodego.httpAllowInsecure` 配置（默认 false）控制；开启后跳过 Base URL 协议安全检查，允许将 HTTP 用于本地/私有网络地址之外的请求 |
 | **立即取消** | 取消请求时通过 `reader.cancel()` 立即中断流式读取，停止后台接收 |
 | **视觉代理配置** | 支持通过设置 `opencodego.visionProxyModel`、`opencodego.visionProxyThinking` 配置图片代理所使用的视觉模型和思考模式。`opencodego.visionProxyThinking` 默认关闭，关闭时内部请求通过 `modelOptions.thinking={ type: false }` / `reasoning_effort="disabled"` 禁用视觉模型思考，最终 OpenAI 兼容请求体发送 `thinking: { type: false }` |
 | **安装欢迎页 (Walkthrough)** | 首次安装且未配置 API Key 时自动打开引导向导，指引用户设置 API Key 和打开语言模型管理器。包含 3 个步骤：设置 API Key、显示模型、高级设置。通过 `onStartupFinished` 激活事件确保在 VS Code 启动后立即检测 |
@@ -71,16 +72,9 @@
 
 #### OpenCode Zen 免费模型（可选）
 
-通过设置 `opencodego.enableZenFreeModels`（默认关闭）启用，从 Zen API 获取模型列表并与硬编码 ID 过滤后加入模型选择器。
+通过设置 `opencodego.enableZenFreeModels`（默认关闭）启用，从 Zen API 获取模型列表并过滤出 `-free` 后缀的免费模型，以 `OpenCode Zen` 标识追加到模型选择器。
 
-| 显示名 | 模型 ID | 视觉 | 推理强度选择器 | API 格式 | 备注 |
-|--------|---------|------|----------------|----------|------|
-| Zen/Big Pickle Free | `big-pickle` | ❌ | `思考`（不支持思考切换） | OpenAI | 限时免费 |
-| Zen/DeepSeek V4 Flash Free | `deepseek-v4-flash-free` | ❌ | `禁用思考` / `高` / `极高` | OpenAI | 限时免费 |
-| Zen/MiniMax M3 Free | `minimax-m3-free` | ✅ | `禁用思考` / `自适应` | OpenAI | 限时免费；1M 上下文，仅支持 `adaptive` / `disabled` 思考模式 |
-| Zen/MiniMax M2.5 Free | `minimax-m2.5-free` | ❌ | `禁用思考` / `思考` | OpenAI | 限时免费 |
-| Zen/Ring 2.6 1T Free | `ring-2.6-1t-free` | ❌ | `禁用思考` / `思考` | OpenAI | 限时免费 |
-| Zen/Nemotron 3 Super Free | `nemotron-3-super-free` | ❌ | `禁用思考` / `思考` | OpenAI | 限时免费 |
+> Zen 免费模型动态发现，模型列表取决于 API 可用性。元数据合并策略：`ZEN_MODEL_OVERRIDES` > models.dev > 保守默认值。常见发现的模型包括但不限于：`big-pickle`、`deepseek-v4-flash-free`、`minimax-m3-free`、`minimax-m2.5-free`、`ring-2.6-1t-free`、`nemotron-3-super-free` 等。
 
 在模型选择器中，内置模型归入 `OpenCode Go` 分组（`family="OpenCodeGo"`），Zen 免费模型归入 `OpenCode Zen` 分组（`family="OpenCode Zen"`）以作区分。
 
@@ -426,14 +420,14 @@ src/
 | `types.ts` | ~95 | `OpenCodeGoModelItem`, `ModelPreset`, `ModelsResponse`, `RetryConfig` 等类型 |
 | `apiModelList.ts` | ~80 | API 模型列表获取：从 `/zen/go/v1/models` 拉取可用模型 ID，5 分钟缓存，静默降级 |
 | `modelsDev.ts` | ~130 | models.dev 元数据拉取与查询：从 `models.dev/models.json` 下载并索引模型规格，支持短 ID 匹配，1 小时缓存 |
-| `commonApi.ts` | ~462 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截） |
-| `provideModel.ts` | ~130 | 模型信息提供函数（含自动发现）：过滤内置模型、从 API 和 models.dev 自动发现新增模型 |
+| `commonApi.ts` | ~467 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截、User-Agent 配置读取） |
+| `provideModel.ts` | ~266 | 模型信息提供函数（含自动发现、`deduceApiMode()` 从 models.dev 推断 apiMode）：过滤内置模型、从 API 和 models.dev 自动发现新增模型 |
 | `provideToken.ts` | ~100 | Token 用量计算 |
 | `utils.ts` | ~285 | 工具函数 (重试、角色映射、工具转换等) |
 | `statusBar.ts` | ~140 | 状态栏创建、更新、累计计数器 |
 | `logger.ts` | ~55 | 日志输出 (LogOutputChannel) |
 | `localize.ts` | ~109 | 中英文国际化 |
-| `versionManager.ts` | ~35 | 扩展版本信息 |
+| `versionManager.ts` | ~35 | 扩展版本信息（使用正确扩展 ID `OnesoftQwQ.opencode-go-copilot-provider`） |
 | `openai/openaiApi.ts` | ~613 | OpenAI 格式 API 实现 (消息转换/请求构建/流式处理/图片代理) |
 | `openai/openaiTypes.ts` | ~75 | OpenAI 类型定义 |
 | `anthropic/anthropicApi.ts` | ~535 | Anthropic 格式 API 实现 (消息转换/请求构建/流式处理/图片代理) |
@@ -446,7 +440,7 @@ src/
 | `vision/historyCodec.ts` | ~150 | 视觉工具历史 DataPart 的 MIME、数据校验/编解码，以及 OpenAI/Anthropic 标准 tool call + tool result 消息重建；由 `scripts/test-vision-history.mjs` 做编解码和双 API 转换器顺序闭环测试 |
 | `vision/historyPart.ts` | ~28 | 创建和解析 `application/vnd.opencodego.vision-tool-history+json` DataPart；测试脚本使用 VS Code 最小运行时桩验证下一轮消息转换 |
 | `vision/imageProxy.ts` | ~95 | 图片代理核心：调用视觉模型描述图片（`callVisionModel`/`callVisionModelMulti`），支持 thinking 模式配置和文本流式转发 |
-| `zen/zenModels.ts` | ~256 | Zen 免费模型定义、API 拉取、缓存管理、配置查询（所有模型声明 `imageInput: true`） |
+| `zen/zenModels.ts` | ~282 | Zen 免费模型动态发现（通过 `-free` 后缀过滤）、`ZEN_MODEL_OVERRIDES` 最小覆盖映射、`deduceApiModeFromFamily()` 辅助函数、缓存管理、配置查询（所有模型声明 `imageInput: true`，无硬编码 ID 列表） |
 
 ---
 
@@ -487,7 +481,7 @@ src/
 计算文本或消息的 Token 数量。委托给 `countMessageTokens()`。
 
 #### `provideLanguageModelChatResponse(model, messages, options, progress, token): Promise<void>`
-核心方法：处理聊天请求，流式返回响应。包括模型配置获取（内置模型 → Zen 模型回退 → 自动发现回退）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理、API 路由、流式解析、图片代理拦截处理和错误处理。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。
+核心方法：处理聊天请求，流式返回响应。包括模型配置获取（内置模型 → Zen 模型回退 → 自动发现回退）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理、API 路由、流式解析、图片代理拦截处理和错误处理。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。内置模型配置通过 `{ ...um }` 浅拷贝后再修改 thinking/temperature，防止并发会话间互相泄漏设置。
 
 #### `private async _handleInterceptedToolCall(params): Promise<void>`
 处理图片代理拦截。循环处理最多 `opencodego.visionMaxRounds` 轮（默认 5）。每轮检测 API 实例的 `interceptedToolCall`，发出 thinking 块显示“正在根据图片提问：[问题]”，关闭 thinking 块后视觉模型输出以普通文本流式显示，并立即输出一个 `application/vnd.opencodego.vision-tool-history+json` DataPart 保存调用 ID、参数、视觉结果和 OpenAI 模式所需的 `reasoning_content`。单图调用 `callVisionModel()`，多图调用 `callVisionModelMulti()`，构建本轮 API 请求（追加 assistant tool_call + tool result），注入 VS Code 原生工具 + ask_image（+ ask_with_multi_image 当 >=2 图时）供模型继续使用，保留 temperature/reasoning_effort 等原始参数，DeepSeek 兼容注入 `reasoning_content`。模型不再调用 ask_image/ask_with_multi_image 时退出循环。
@@ -502,6 +496,9 @@ src/
 
 #### `private async ensureApiKey(): Promise<string | undefined>`
 确保 API Key 存在于 SecretStorage 中，缺失时弹出输入框提示用户输入。
+
+#### Base URL HTTP 安全检查
+在发送请求前验证 base URL：拒绝非 HTTP 协议；针对 `http:` 协议仅允许 localhost、127.0.0.1、::1、192.168.\*、10.\*、0.0.0.0 等本地/私有网络地址，远程端点强制使用 HTTPS。可通过 `opencodego.httpAllowInsecure` 配置（默认 false）跳过整个 HTTP 协议安全检查。
 
 ---
 
@@ -660,14 +657,14 @@ API 实现的抽象基类。
 处理普通文本内容，发射到进度报告器。
 
 #### `static prepareHeaders(apiKey, apiMode, customHeaders?): Record<string, string>`
-准备 HTTP 请求头。Anthropic 模式使用 `x-api-key`，OpenAI 模式使用 `Bearer` 令牌。
+准备 HTTP 请求头。读取 `opencodego.userAgent` 配置设置 User-Agent（回退到 `VersionManager.getUserAgent()`）。Anthropic 模式使用 `x-api-key`，OpenAI 模式使用 `Bearer` 令牌。
 
 ---
 
 ### 4.6 `src/apiModelList.ts`
 
 #### `getApiModelIds(apiKey): Promise<Set<string>>`
-从 `/zen/go/v1/models` 拉取可用模型 ID 列表并返回 Set。使用内存缓存（5 分钟 TTL），API 不可用时返回空 Set 或上次缓存。导出 `isApiFetchSuccessful()` 检查上次请求是否成功。
+从 `/zen/go/v1/models` 拉取可用模型 ID 列表并返回 Set。使用内存缓存（5 分钟 TTL），API 不可用时返回空 Set 或上次缓存。内部 `fetchApiModelList()` 使用 10 秒 `AbortSignal.timeout(10000)`，超时后记录警告并抛出普通 `Error`（非 AbortError）以保留调用方缓存。导出 `isApiFetchSuccessful()` 检查上次请求是否成功。
 
 #### `isApiFetchSuccessful(): boolean`
 返回最近一次 API 模型列表拉取是否成功。用于模型提供者决定是否应用 API 过滤。
@@ -680,20 +677,26 @@ API 实现的抽象基类。
 `{ id, name?, family?, reasoning?, tool_call?, structured_output?, temperature?, attachment?, modalities?, limit? }` — models.dev 数据库中单个模型条目的接口。
 
 #### `ensureModelsDevLoaded(): Promise<void>`
-从 `https://models.dev/models.json` 下载完整模型目录并构建内存索引（完整 ID → 条目 + 短 ID → 条目）。1 小时缓存 TTL，失败时静默保留旧缓存。首次无缓存时初始化为空 Map。
+从 `https://models.dev/models.json` 下载完整模型目录并构建内存索引（完整 ID → 条目 + 短 ID → 条目）。内部 `fetchModelsDevCatalog()` 使用 10 秒 `AbortSignal.timeout(10000)`，超时后记录警告并抛出普通 `Error`（非 AbortError）以保留现有缓存。1 小时缓存 TTL，失败时静默保留旧缓存。首次无缓存时初始化为空 Map。
 
 #### `lookupModelDevEntry(apiModelId): ModelsDevEntry | undefined`
 按 API 模型 ID 查找 models.dev 元数据。匹配策略：1) 完整 models.dev ID 精确匹配，2) 短 ID（斜杠后最后一段）匹配，3) 后缀匹配。
+
+#### `deduceApiModeFromFamily(modelId, entry?)`
+根据模型 ID 和可选的 models.dev 条目推断 API 格式（`"openai"` 或 `"anthropic"`）。使用 family 启发式判断：Claude/Anthropic 系列、Qwen 3.6/3.7 系列（匹配 `/qwen[\s-]*3\.[67]/i`）、Gemma 系列 → Anthropic；其余 → OpenAI。被 `storeAutoDiscoveredConfig()` 调用于确定自动发现模型的 apiMode。
 
 ---
 
 ### 4.10 `src/provideModel.ts`
 
 #### `prepareLanguageModelChatInformation(options, _token, _secrets): Promise<LanguageModelChatInformation[]>`
-获取模型信息列表。默认使用硬编码的内置模型列表（委托 `getBuiltInModelInfos()`）。当配置 `opencodego.enableAutoModelDiscovery` 开启时（默认），从 API 获取可用模型 ID 列表，过滤内置模型（仅保留 API 中存在的模型），并从 models.dev 自动发现新增模型（默认 `thinkingMode="always"`）。API 不可用时静默回退到全量内置列表。当配置 `opencodego.enableZenFreeModels` 开启时，额外调用 `getZenFreeModelInfos()` 获取 Zen 免费模型并追加到列表末尾。
+获取模型信息列表。默认使用硬编码的内置模型列表（委托 `getBuiltInModelInfos()`）。当配置 `opencodego.enableAutoModelDiscovery` 开启时（默认），从 API 获取可用模型 ID 列表，过滤内置模型（仅保留 API 中存在的模型），并从 models.dev 自动发现新增模型（默认 `thinkingMode="always"`）。自动发现前调用 `_autoDiscoveredConfigs.clear()` 清空旧条目。API 不可用时静默回退到全量内置列表。当配置 `opencodego.enableZenFreeModels` 开启时，额外调用 `getZenFreeModelInfos()` 获取 Zen 免费模型并追加到列表末尾。
+
+#### `deduceApiMode(modelId, entry?)`
+根据模型 ID 和可选的 models.dev 条目推断 API 格式（`"openai"` 或 `"anthropic"`）。使用 family 启发式判断：Claude/Anthropic 系列、Qwen 3.6/3.7 系列、Gemma 系列 → Anthropic；其余 → OpenAI。被 `storeAutoDiscoveredConfig()` 调用于确定自动发现模型的 apiMode。
 
 #### `getAutoDiscoveredModelConfig(modelId): OpenCodeGoModelItem | undefined`
-返回之前自动发现的模型配置。由 `provider.ts` 在 `getBuiltInModelConfig()` 和 `getZenFreeModelConfig()` 都返回 undefined 时作为第三回退调用。
+返回之前自动发现的模型配置（返回 `{ ...config }` 浅拷贝，防止调用方突变共享缓存）。由 `provider.ts` 在 `getBuiltInModelConfig()` 和 `getZenFreeModelConfig()` 都返回 undefined 时作为第三回调调用。
 
 ---
 
@@ -881,6 +884,9 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 #### `l10nFormat(template, ...args): string`
 格式化本地化字符串，替换 `{0}`, `{1}` 等占位符。
 
+新增本地化键：
+- `"Plain HTTP is only allowed for localhost or private network addresses. Use HTTPS for remote endpoints."` — Base URL 安全验证错误提示
+
 ---
 
 ### 4.12 `src/versionManager.ts`
@@ -889,8 +895,8 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 
 | 静态方法 | 说明 |
 |----------|------|
-| `getVersion(): string` | 获取扩展版本号（从 `package.json` 读取） |
-| `getUserAgent(): string` | 构建 User-Agent 字符串 |
+| `getVersion(): string` | 获取扩展版本号（从 `package.json` 读取，使用正确扩展 ID `OnesoftQwQ.opencode-go-copilot-provider` 而非旧值 `my-company.opencode-go-copilot`） |
+| `getUserAgent(): string` | 构建 User-Agent 字符串（被 `CommonApi.prepareHeaders()` 用作回退 User-Agent） |
 | `getClientInfo(): { name, version, author }` | 获取客户端信息 |
 
 ---
@@ -940,7 +946,7 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 将 VS Code 消息转换为 OpenAI 格式。支持文本、图片、工具调用、工具结果、推理内容的消息转换。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据。同时递归扫描 `LanguageModelToolResultPart.content` 中的图片一并存入（确保通过工具返回的图片也能被 `ask_image` 代理识别）。
 
 #### `prepareRequestBody(rb, um?, options?): Record<string, unknown>`
-构建 OpenAI 请求体。设置 temperature、top_p、max_tokens、reasoning_effort（adaptive 模式时跳过）、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和关闭用 `{ type: false }`）、stop、tools、tool_choice 以及各种惩罚参数和 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。
+构建 OpenAI 请求体。设置 temperature、top_p、max_tokens、reasoning_effort（adaptive 模式时跳过）、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和关闭用 `{ type: false }`）、stop、tools、tool_choice 以及各种惩罚参数和 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。Extra 参数合并前过滤保留键（`model`, `messages`, `stream`, `temperature`, `top_p`, `max_tokens`, `max_completion_tokens`, `tools`, `tool_choice`, `stop`, `reasoning_effort`, `thinking`, `top_k`, `min_p`, `frequency_penalty`, `presence_penalty`, `repetition_penalty`, `stream_options`, `reasoning` 等），冲突时 `logger.warn()` 记录。
 
 #### `processStreamingResponse(responseBody, progress, token): Promise<void>`
 处理 OpenAI SSE 流式响应。逐行解析 `data:` 前缀的 SSE 事件，处理 `[DONE]` 标记，解析 usage 用量信息，委托 `processDelta()`。注册取消回调：`token.onCancellationRequested` 时调用 `reader.cancel()` 立即中断流式读取。在 `finally` 块中 dispose 该回调，防止多次调用 `processStreamingResponse` 时回调累积。
@@ -1004,7 +1010,7 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 将 VS Code 消息转换为 Anthropic 格式。系统消息提取到 `_systemContent`。支持文本、图片、工具使用、工具结果、推理内容。使用 `content` 块数组格式。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据。同时递归扫描 `AnthropicToolResultBlock.content` 中的图片一并存入（确保通过工具返回的图片也能被 `ask_image` 代理识别）。
 
 #### `prepareRequestBody(rb, um?, options?): AnthropicRequestBody`
-构建 Anthropic 请求体。设置 max_tokens、system、temperature、top_p、top_k、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和 `{ type: "disabled" }`）、tools（转换为 Anthropic 格式）、tool_choice（auto/any/none）以及 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。
+构建 Anthropic 请求体。设置 max_tokens、system、temperature、top_p、top_k、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和 `{ type: "disabled" }`）、tools（转换为 Anthropic 格式）、tool_choice（auto/any/none）以及 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。Extra 参数合并前过滤保留键（`model`, `messages`, `stream` 等），冲突时 `logger.warn()` 记录。
 
 #### `processStreamingResponse(responseBody, progress, token): Promise<void>`
 处理 Anthropic SSE 流式响应。逐行解析 `data:` 前缀的 SSE 事件，委托 `processAnthropicChunk()`。注册取消回调：`token.onCancellationRequested` 时调用 `reader.cancel()` 立即中断流式读取。在 `finally` 块中 dispose 该回调，防止多次调用 `processStreamingResponse` 时回调累积。
@@ -1051,7 +1057,7 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 确保 API Key 存在。
 
 #### `performCommitMsgGeneration(secrets, gitDiff, inputBox, repoPath?): Promise<void>`
-核心生成逻辑。构建 prompt（含自定义提示词、最近提交风格、用户输入、diff 内容），支持 `auto` 语言模式（由模型根据历史 commit 风格自动推断），创建 API 实例，流式输出提交消息到 InputBox。支持通过配置 `opencodego.commitIncludeCommitDiff` 控制风格参考中是否包含历史提交的实际代码变更（默认关闭）。支持通过配置 `opencodego.commitAttachContextFiles`（默认开启）控制是否将仓库根目录的 `AGENTS.md` 和 `README.md` 内容附加到 prompt 中作为额外上下文。
+核心生成逻辑。构建 prompt（含自定义提示词、最近提交风格、用户输入、diff 内容），支持 `auto` 语言模式（由模型根据历史 commit 风格自动推断），创建 API 实例，流式输出提交消息到 InputBox。支持通过配置 `opencodego.commitIncludeCommitDiff` 控制风格参考中是否包含历史提交的实际代码变更（默认关闭）。支持通过配置 `opencodego.commitAttachContextFiles`（默认开启）控制是否将仓库根目录的 `AGENTS.md` 和 `README.md` 内容附加到 prompt 中作为额外上下文。在选择模型配置后浅拷贝（`{ ...config }`）再修改 `enable_thinking` 和 `max_completion_tokens`，防止对共享的自动发现配置缓存的突变。
 
 #### `abortCommitGeneration(): void`
 中止提交消息生成。
@@ -1151,11 +1157,8 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 
 ### 4.21 `src/zen/zenModels.ts`
 
-#### `const ZEN_FREE_MODEL_IDS: readonly string[]`
-5 个硬编码的 Zen 免费模型 ID 数组：`big-pickle`、`deepseek-v4-flash-free`、`minimax-m2.5-free`、`ring-2.6-1t-free`、`nemotron-3-super-free`。
-
-#### `const ZEN_FREE_MODEL_METADATA`
-免费模型元数据映射，包含 `displayName`、`contextLength`、`vision`、`maxTokens` 字段。
+#### `const ZEN_MODEL_OVERRIDES`
+最小覆盖映射，为特定 Zen 免费模型提供非默认元数据值（如 `deepseek-v4-flash-free` 的 thinking 强度选项、`minimax-m3-free` 的 vision 和 apiMode 等）。合并优先级：`ZEN_MODEL_OVERRIDES` > models.dev > 保守默认值。
 
 #### `const ZEN_BASE_URL`
 Zen API 基础 URL：`https://opencode.ai/zen/v1/`。
@@ -1169,22 +1172,25 @@ Zen API 基础 URL：`https://opencode.ai/zen/v1/`。
 #### `let cacheTimestamp: number`
 缓存时间戳，用于判断缓存是否过期。
 
+#### `function deduceApiModeFromFamily(modelId, entry?)`
+根据模型 ID 和可选的 models.dev 条目推断 API 格式。复制 `provideModel.ts` 中 `deduceApiMode` 相同逻辑。使用 family 启发式判断：Claude/Anthropic 系列、Qwen 3.6/3.7 系列、Gemma 系列 → Anthropic；其余 → OpenAI。
+
 #### `async function fetchZenModelList(apiKey): Promise<string[]>`
-从 `https://opencode.ai/zen/v1/models` 拉取完整的模型 ID 列表。API 遵循 OpenAI `/v1/models` 格式，返回 `{ object: "list", data: [{ id, object, created, owned_by }] }`。
+从 `https://opencode.ai/zen/v1/models` 拉取完整的模型 ID 列表。API 遵循 OpenAI `/v1/models` 格式，返回 `{ object: "list", data: [{ id, object, created, owned_by }] }`。使用 `AbortController` 实现 10 秒超时（`setTimeout` + `controller.abort()`），超时后记录警告并抛出 `AbortError` 供调用方处理缓存回退。
 
 #### `function buildModelInfos(modelIds): LanguageModelChatInformation[]`
-根据模型 ID 列表构建 VS Code 模型信息数组。只包含在 `ZEN_FREE_MODEL_METADATA` 中有对应元数据的模型。每个模型注册为 `isUserSelectable: true`，带 `detail="OpenCode Zen"` 和基础版推理强度选择器（`禁用思考` / `思考`）。
+根据模型 ID 列表构建 VS Code 模型信息数组。对每个模型合并元数据：`ZEN_MODEL_OVERRIDES` > models.dev > 保守默认值（`thinkingMode="switchable"`、`contextLength=128000`、`maxTokens=4096`、`vision=false`）。switchable 模型包含 `disabled` 选项，always 模型不包含。
 
 #### `async function getZenFreeModelInfos(secrets): Promise<LanguageModelChatInformation[]>`
 获取 Zen 免费模型列表。流程：
 1. 检查缓存（5 分钟 TTL），有效则直接返回
-2. 获取 API Key，存在则调用 `fetchZenModelList()` 与 `ZEN_FREE_MODEL_IDS` 做交集过滤
-3. 拉取成功 → 更新缓存 → 返回过滤后的模型
-4. 拉取失败 → 使用过期缓存或全量硬编码列表（乐观降级）
-5. 无 API Key → 使用过期缓存或全量硬编码列表
+2. 获取 API Key，存在则调用 `fetchZenModelList()` 过滤出 `id.endsWith("-free")` 的模型
+3. 拉取成功 → 更新缓存 → 加载 models.dev 元数据 → 返回过滤后的模型
+4. 拉取失败 → 使用过期缓存（如有）
+5. 无 API Key 或无缓存 → 返回空数组（无降级硬编码列表）
 
 #### `function getZenFreeModelConfig(modelId): OpenCodeGoModelItem | undefined`
-按模型 ID 查找 Zen 免费模型配置。返回 `baseUrl: "https://opencode.ai/zen/v1/"`、`apiMode: "openai"`、`thinkingMode: "switchable"` 的模型配置对象。内置模型找不到时由 `provider.ts` 作为回退调用。
+按模型 ID 查找 Zen 免费模型配置。要求 `modelId.endsWith("-free")`，否则返回 undefined。元数据合并：`ZEN_MODEL_OVERRIDES` > models.dev > 保守默认值。使用 `deduceApiModeFromFamily()` 推断 apiMode。将 `ZEN_MODEL_OVERRIDES` 中的 `defaultReasoningEffort` 传播到返回配置的 `reasoning_effort` 字段。内置模型找不到时由 `provider.ts` 作为回退调用。
 
 ---
 
