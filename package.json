@@ -196,6 +196,41 @@
 					"minimum": 10000,
 					"description": "%config.requestTimeout.desc%"
 				},
+				"opencodego.delay": {
+					"type": "number",
+					"default": 0,
+					"minimum": 0,
+					"markdownDescription": "%config.delay.desc%"
+				},
+				"opencodego.retry.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "%config.retry.enabled.desc%"
+				},
+				"opencodego.retry.max_attempts": {
+					"type": "number",
+					"default": 3,
+					"minimum": 1,
+					"maximum": 10,
+					"description": "%config.retry.maxAttempts.desc%"
+				},
+				"opencodego.retry.interval_ms": {
+					"type": "number",
+					"default": 1000,
+					"minimum": 0,
+					"description": "%config.retry.intervalMs.desc%"
+				},
+				"opencodego.retry.status_codes": {
+					"type": "array",
+					"items": {
+						"type": "integer",
+						"minimum": 100,
+						"maximum": 599
+					},
+					"uniqueItems": true,
+					"default": [],
+					"description": "%config.retry.statusCodes.desc%"
+				},
 				"opencodego.recentCommitsCount": {
 					"type": "number",
 					"default": 10,
@@ -295,6 +330,12 @@
 					},
 					"description": "%config.modelPresets.desc%"
 				},
+				"opencodego.readFileLines": {
+					"type": "number",
+					"default": 0,
+					"minimum": 0,
+					"markdownDescription": "%config.readFileLines.desc%"
+				},
 				"opencodego.visionProxyModel": {
 					"type": "string",
 					"default": "qwen3.6-plus",
@@ -314,6 +355,13 @@
 					"type": "string",
 					"default": "",
 					"markdownDescription": "%config.userAgent.desc%"
+				},
+				"opencodego.visionMaxRounds": {
+					"type": "number",
+					"default": 5,
+					"minimum": 1,
+					"maximum": 20,
+					"markdownDescription": "%config.visionMaxRounds.desc%"
 				}
 			}
 		}

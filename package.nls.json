@@ -49,6 +49,14 @@
 	"config.enableThirdPartyTokenIndicator.desc": "Enable the Advanced Token indicator in the status bar. The native Copilot token indicator always shows. When this is enabled, the extension also shows an advanced token counter in the VS Code status bar. Default: true.",
 	"config.userAgent.desc": "Custom User-Agent header for API requests. Leave empty to use the default (`opencode-go-copilot/{version} VSCode/{vs_version}`). Useful for identifying your extension instance in server logs or when routing through proxies.",
 
+	"config.delay.desc": "Delay in milliseconds between consecutive API requests to avoid rate limiting. Set to 0 for no delay. Default: 0.",
+	"config.visionMaxRounds.desc": "Maximum number of vision proxy rounds for non-vision models using the `ask_image` tool to query images. Limits follow-up queries per request. Default: 5.",
+	"config.readFileLines.desc": "Default number of lines for the `read_file` tool. When set to a positive value, the extension automatically adjusts `read_file` tool calls to read this many lines. Set to 0 for no adjustment. Default: 0.",
+	"config.retry.enabled.desc": "Enable automatic retry with exponential backoff for failed API requests. Default: true.",
+	"config.retry.maxAttempts.desc": "Maximum number of retry attempts for failed API requests. Default: 3.",
+	"config.retry.intervalMs.desc": "Initial delay in milliseconds before the first retry attempt. Increases exponentially with each retry. Default: 1000.",
+	"config.retry.statusCodes.desc": "Additional HTTP status codes that trigger automatic retry beyond the default set (429, 500, 502, 503, 504). Default: [].",
+
 	"command.setModelPreset": "Set Model Temperature Preset",
 
 	"walkthrough.title": "OpenCode Go for Copilot Chat",
