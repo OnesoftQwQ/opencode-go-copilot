@@ -4,7 +4,7 @@ import { CancellationToken, LanguageModelChatInformation, LanguageModelChatCapab
 import { logger } from "./logger";
 import { getBuiltInModelInfos } from "./models";
 import { getZenFreeModelInfos } from "./zen/zenModels";
-import { getApiModelIds, isApiFetchSuccessful } from "./apiModelList";
+import { getApiModelIds } from "./apiModelList";
 import { ensureModelsDevLoaded, lookupModelDevEntry, deduceApiModeFromFamily, type ModelsDevEntry } from "./modelsDev";
 import type { OpenCodeGoModelItem } from "./types";
 import { l10n } from "./localize";
@@ -170,7 +170,7 @@ export async function prepareLanguageModelChatInformation(
         const apiKey = await _secrets.get("opencodego.apiKey");
         const apiModelIds = await getApiModelIds(apiKey);
 
-        if (apiModelIds.size > 0 && isApiFetchSuccessful()) {
+        if (apiModelIds.size > 0) {
             const beforeCount = infos.length;
 
             // Step 1: Filter built-in models — keep only those present in the API list
