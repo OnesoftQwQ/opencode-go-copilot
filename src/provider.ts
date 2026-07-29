@@ -528,14 +528,17 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
             // Detect Zen free model expiration: a 401 from a Zen free model
             // means the free promotion has ended (error text may vary - don't match on it)
-            if (errMessage.includes("[401]") && await getZenFreeModelConfig(model.id)) {
-                const zenModelName = (await getZenFreeModelConfig(model.id))?.displayName ?? model.id;
-                logger.error("request.error", {
-                    modelId: model.id,
-                    error: "zen_free_model_expired",
-                    errorMessage: errMessage,
-                });
-                throw new Error(l10nFormat("{0} is no longer available as a free model. Please use a different model.", zenModelName));
+            if (errMessage.includes("[401]")) {
+                const zenConfig = await getZenFreeModelConfig(model.id);
+                if (zenConfig) {
+                    const zenModelName = zenConfig.displayName ?? model.id;
+                    logger.error("request.error", {
+                        modelId: model.id,
+                        error: "zen_free_model_expired",
+                        errorMessage: errMessage,
+                    });
+                    throw new Error(l10nFormat("{0} is no longer available as a free model. Please use a different model.", zenModelName));
+                }
             }
 
             // Detect image content moderation rejection from the API
@@ -790,6 +793,8 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     } else {
                         body.thinking = { type: "enabled", budget_tokens: 8192 };
                     }
+                } else {
+                    body.thinking = { type: "disabled" as const };
                 }
 
                 // Inject tools (VS Code + ask_image + ask_with_multi_image)
