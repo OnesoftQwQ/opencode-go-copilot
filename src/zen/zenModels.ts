@@ -257,6 +257,16 @@ export async function getZenFreeModelInfos(secrets: vscode.SecretStorage): Promi
 }
 
 /**
+ * Clear the cached Zen model list and base URL.
+ * Used during forced refresh to ensure fresh data is fetched.
+ */
+export function clearZenModelCache(): void {
+    cachedModelIds = null;
+    cacheTimestamp = 0;
+    cachedBaseUrl = null;
+}
+
+/**
  * Get model configuration for a Zen free model.
  * Returns undefined if the model ID does not end with "-free".
  * Metadata resolved from: overrides > catalog provider entry > global catalog entry > defaults.

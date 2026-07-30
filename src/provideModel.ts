@@ -3,8 +3,8 @@ import { CancellationToken, LanguageModelChatInformation, PrepareLanguageModelCh
 
 import { logger } from "./logger";
 import { getBuiltInModelInfos } from "./models";
-import { getZenFreeModelInfos } from "./zen/zenModels";
-import { getApiModelIds } from "./apiModelList";
+import { getZenFreeModelInfos, clearZenModelCache } from "./zen/zenModels";
+import { getApiModelIds, clearApiModelCache } from "./apiModelList";
 import {
     ensureModelsDevLoaded,
     lookupModelDevEntry,
@@ -15,6 +15,7 @@ import {
     inferReasoningEfforts,
     inferDefaultReasoningEffort,
     inferVision,
+    clearModelsDevCache,
     type ModelsDevEntry,
 } from "./modelsDev";
 import type { OpenCodeGoModelItem } from "./types";
@@ -279,6 +280,9 @@ export function resetAutoDiscoveryState(): void {
     cachedZenInfos = null;
     lastZenUpdate = 0;
     _autoDiscoveredConfigs.clear();
+    clearApiModelCache();
+    clearZenModelCache();
+    clearModelsDevCache();
     logger.info("models.discovery", {
         action: "reset",
     });

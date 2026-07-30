@@ -106,6 +106,8 @@ let shortIdMap: Map<string, ModelsDevEntry> | null = null;
 /** Provider catalog keyed by provider ID. */
 let providersMap: Map<string, CatalogProvider> | null = null;
 let cacheTimestamp = 0;
+/** Whether the last fetch attempt succeeded. Used to retry sooner after failure. */
+let lastLoadFailed = false;
 
 // ── Internal helpers ──
 
@@ -257,12 +259,19 @@ export function inferVision(entry: ModelsDevEntry): boolean {
 export async function ensureModelsDevLoaded(): Promise<void> {
     const now = Date.now();
 
-    if (metadataMap !== null && now - cacheTimestamp < CACHE_TTL_MS) {
+    // Successful cache within TTL — skip fetch
+    if (!lastLoadFailed && metadataMap !== null && now - cacheTimestamp < CACHE_TTL_MS) {
         return;
     }
 
-    if (metadataMap !== null && now - cacheTimestamp < CACHE_TTL_MS * 2) {
+    // Successful cache within stale window (2x TTL) — extend and skip fetch
+    if (!lastLoadFailed && metadataMap !== null && now - cacheTimestamp < CACHE_TTL_MS * 2) {
         cacheTimestamp = now;
+        return;
+    }
+
+    // Failed load — respect minimum retry interval (1 minute)
+    if (lastLoadFailed && metadataMap !== null && now - cacheTimestamp < 60000) {
         return;
     }
 
@@ -270,13 +279,15 @@ export async function ensureModelsDevLoaded(): Promise<void> {
         const data = await fetchCatalog();
         rebuildIndex(data);
         cacheTimestamp = now;
+        lastLoadFailed = false;
     } catch {
         if (metadataMap === null) {
             metadataMap = new Map();
             shortIdMap = new Map();
             providersMap = new Map();
-            cacheTimestamp = now;
         }
+        cacheTimestamp = now;
+        lastLoadFailed = true;
     }
 }
 
@@ -339,4 +350,5 @@ export function clearModelsDevCache(): void {
     shortIdMap = null;
     providersMap = null;
     cacheTimestamp = 0;
+    lastLoadFailed = false;
 }
