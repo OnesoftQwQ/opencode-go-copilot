@@ -98,7 +98,10 @@ function resolveZenMetadata(modelId: string) {
 
     // Prefer provider-specific entry, fall back to global entry
     const entry = providerEntry ?? globalEntry;
-    const displayName = "[Zen] ".concat(override?.displayName ?? entry?.name ?? modelId);
+    const isDeprecated = entry?.status === "deprecated";
+    const rawName = override?.displayName ?? entry?.name ?? modelId;
+    const displayName = `[Zen] ${isDeprecated ? "[Depr] " : ""}${rawName}`;
+    const status = entry?.status;
     const contextLength = override?.contextLength ?? entry?.limit?.context ?? 128000;
     const maxTokens = override?.maxTokens ?? entry?.limit?.output ?? 4096;
     const vision = override?.vision ?? (entry ? inferVision(entry) : false);
@@ -108,7 +111,7 @@ function resolveZenMetadata(modelId: string) {
     const apiMode = override?.apiMode ?? (entry ? deduceApiModeFromFamily(modelId, entry) : "openai");
 
     const cost = override?.cost ?? entry?.cost ?? { cache_read: 0, input: 0, output: 0 };
-    return { displayName, contextLength, maxTokens, vision, thinkingMode, supportedReasoningEfforts, defaultReasoningEffort, apiMode, cost };
+    return { displayName, contextLength, maxTokens, vision, thinkingMode, supportedReasoningEfforts, defaultReasoningEffort, apiMode, status, cost };
 }
 
 /**

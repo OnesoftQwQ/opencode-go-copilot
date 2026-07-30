@@ -43,7 +43,9 @@ function resolveDiscoveredModelMeta(modelId: string) {
     const globalEntry = lookupModelDevEntry(modelId);
     const entry = providerEntry ?? globalEntry;
 
-    const displayName = entry?.name ?? modelId;
+    const isDeprecated = entry?.status === "deprecated";
+    const rawName = entry?.name ?? modelId;
+    const displayName = isDeprecated ? `[Depr] ${rawName}` : rawName;
     const contextLength = entry?.limit?.context ?? DEFAULT_CONTEXT_LENGTH;
     const maxOutputTokens = entry?.limit?.output ?? DEFAULT_MAX_TOKENS;
     const toolCalling = entry?.tool_call ?? true;
@@ -51,8 +53,9 @@ function resolveDiscoveredModelMeta(modelId: string) {
     const supportedReasoningEfforts = entry ? inferReasoningEfforts(entry) : undefined;
     const defaultReasoningEffort = entry ? inferDefaultReasoningEffort(entry) : "enabled";
     const vision = entry ? inferVision(entry) : false;
+    const status = entry?.status;
     const cost = entry?.cost ?? { cache_read: 0, input: 0, output: 0 };
-    return { displayName, contextLength, maxOutputTokens, toolCalling, thinkingMode, supportedReasoningEfforts, defaultReasoningEffort, vision, entry, cost };
+    return { displayName, contextLength, maxOutputTokens, toolCalling, thinkingMode, supportedReasoningEfforts, defaultReasoningEffort, vision, status, entry, cost };
 }
 
 /**
