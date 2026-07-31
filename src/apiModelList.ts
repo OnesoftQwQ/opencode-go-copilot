@@ -2,7 +2,7 @@
  * API model list fetcher.
  *
  * Fetches the list of available model IDs from the OpenCode Go API
- * (/zen/go/v1/models) and caches it with a 5-minute TTL.
+ * (/zen/go/v1/models) and caches it with a 1-minute TTL.
  * Falls back to stale cache or an empty list on failure (silent degradation).
  *
  * The API base URL is resolved from the models.dev catalog's "opencode-go" provider.
@@ -12,7 +12,7 @@ import { logger } from "./logger";
 import { ensureModelsDevLoaded, getCatalogProviderBaseUrl } from "./modelsDev";
 
 const FALLBACK_BASE_URL = "https://opencode.ai/zen/go/v1/";
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 60 * 1000; // 1 minute — short TTL dedupes concurrent startup activations
 
 // ── Module-level cache ──
 let cachedModelIds: string[] | null = null;

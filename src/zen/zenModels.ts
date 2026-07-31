@@ -36,7 +36,7 @@ const ZEN_MODEL_OVERRIDES: Record<string, Partial<{
 }>> = {};
 
 const EXTENSION_LABEL_ZEN = "OpenCode Zen";
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 60 * 1000; // 1 minute — short TTL dedupes concurrent startup activations
 
 // ── Module-level cache for Zen model list ──
 let cachedModelIds: string[] | null = null;

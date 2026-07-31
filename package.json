@@ -285,7 +285,7 @@
 				},
 				"opencodego.modelsDevUpdateInterval": {
 					"type": "number",
-					"default": 3600000,
+					"default": 60000,
 					"minimum": 30000,
 					"description": "%config.modelsDevUpdateInterval.desc%"
 				},

@@ -35,7 +35,7 @@
 	"config.top_p.desc": "模型 top_p (0.0 - 1.0)。与「opencodego.temperature」配对使用。仅在「opencodego.modelPreset」设为「custom」时生效。",
 	"config.enableZenFreeModels.desc": "启用 OpenCode Zen 免费模型并将其添加到模型选择器中。开启后，扩展将从 Zen API 获取模型列表并显示免费模型（Big Pickle、DeepSeek V4 Flash、MiniMax M2.5、Ring 2.6 1T、Nemotron 3 Super）。Zen 免费模型暂不支持用于 Git 提交消息生成。更改此设置后需要重新加载 VS Code 才能生效。",
 	"config.enableAutoModelDiscovery.desc": "启用自动模型发现。开启后，扩展将从 API 获取模型列表，过滤模型选择器仅显示服务器上可用的模型。不在 API 列表中的模型将被隐藏。服务器上存在但内置列表中没有的新模型将自动添加并使用默认功能（始终开启思考）。关闭后可看到所有内置模型，不受 API 可用性影响。",
-	"config.modelsDevUpdateInterval.desc": "当「opencodego.enableAutoModelDiscovery」启用时，检查 API 模型更新的间隔时间（毫秒）。默认值: 3600000（1小时）。最小值: 30000（30秒）。",
+	"config.modelsDevUpdateInterval.desc": "当「opencodego.enableAutoModelDiscovery」启用时，检查 API 模型更新的缓存 TTL（毫秒）。默认值: 60000（1分钟）。最小值: 30000（30秒）。",
 	"config.modelPresets.desc": "模型预设列表，可通过命令面板快速选择。每个预设包含温度（temperature）和 top_p 两个参数。你可以修改各预设的字段来自定义。",
 	"config.modelPreset.id.desc": "预设标识符（必须与 modelPreset 设置中的值一致）。",
 	"config.modelPreset.label.desc": "预设档位的显示名称。",

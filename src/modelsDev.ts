@@ -14,13 +14,16 @@
  * populate model metadata (context length, max output tokens, vision, reasoning,
  * thinking modes, etc.) instead of hardcoding.
  *
- * Cached in memory for 1 hour. Silent degradation on failure.
+ * Cached in memory for 1 minute. The short TTL keeps every extension
+ * activation (and model-picker refresh) fetching a fresh catalog, while
+ * still deduping the burst of concurrent activation calls VS Code fires
+ * on startup. Silent degradation on failure.
  */
 
 import { logger } from "./logger";
 
 const CATALOG_URL = "https://models.dev/catalog.json";
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const CACHE_TTL_MS = 60 * 1000; // 1 minute — dedupes concurrent startup activations
 
 // ── Types ──
 
@@ -259,14 +262,8 @@ export function inferVision(entry: ModelsDevEntry): boolean {
 export async function ensureModelsDevLoaded(): Promise<void> {
     const now = Date.now();
 
-    // Successful cache within TTL — skip fetch
+    // Fresh cache within TTL — skip fetch (dedupes the startup activation burst)
     if (!lastLoadFailed && metadataMap !== null && now - cacheTimestamp < CACHE_TTL_MS) {
-        return;
-    }
-
-    // Successful cache within stale window (2x TTL) — extend and skip fetch
-    if (!lastLoadFailed && metadataMap !== null && now - cacheTimestamp < CACHE_TTL_MS * 2) {
-        cacheTimestamp = now;
         return;
     }
 

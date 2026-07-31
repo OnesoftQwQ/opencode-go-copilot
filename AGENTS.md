@@ -28,8 +28,8 @@
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Chat 模型提供商**          | 实现 `LanguageModelChatProvider` 接口，向 VS Code 注册为 `opencodego` 厂商                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | **多模型支持**               | 内置 17 个模型定义，覆盖 6 大模型系列，统一通过推理强度选择器切换思考模式。可选开启 OpenCode Zen 免费模型（动态发现，通过 `-free` 后缀过滤）。支持自动模型发现：开启后从 API 获取模型列表，自动过滤不可用模型并发现新增模型                                                                                                                                                                                                                                                                                                                                                             |
-| **自动模型发现**             | 通过 `opencodego.enableAutoModelDiscovery` 配置（默认开启）。启动时从 `/zen/go/v1/models` 获取当前可用模型 ID 列表，过滤内置模型列表（不可用模型自动隐藏）。新增模型从 `models.dev` 数据库获取元数据（上下文长度、视觉能力、工具调用、推理能力等）并自动添加，`thinkingMode` 从 `reasoning` 字段推断（支持推理→switchable，不支持→always）。API 不可用时静默回退到全量内置列表。内存缓存（5 分钟 TTL）                                                                                                                                                                                  |
-| **OpenCode Zen 免费模型**    | 通过设置开关启用，从 Zen API 获取模型列表并过滤出 `-free` 后缀的免费模型，以 `OpenCode Zen` 标识追加到模型选择器。元数据从 `ZEN_MODEL_OVERRIDES` > models.dev > 保守默认值合并。支持内存缓存（5 分钟 TTL），API 不可用时返回空（无降级硬编码列表）                                                                                                                                                                                                                                                                                                                                      |
+| **自动模型发现**             | 通过 `opencodego.enableAutoModelDiscovery` 配置（默认开启）。每次扩展激活时（非阻塞预热）从 `/zen/go/v1/models` 获取当前可用模型 ID 列表，过滤内置模型列表（不可用模型自动隐藏）。新增模型从 `models.dev` 数据库获取元数据（上下文长度、视觉能力、工具调用、推理能力等）并自动添加，`thinkingMode` 从 `reasoning` 字段推断（支持推理→switchable，不支持→always）。API 不可用时静默回退到全量内置列表。先拉取 models.dev 目录再拉取模型列表。内存缓存（1 分钟 TTL，兼作启动并发激活去重）                                                                                                |
+| **OpenCode Zen 免费模型**    | 通过设置开关启用，从 Zen API 获取模型列表并过滤出 `-free` 后缀的免费模型，以 `OpenCode Zen` 标识追加到模型选择器。元数据从 `ZEN_MODEL_OVERRIDES` > models.dev > 保守默认值合并。支持内存缓存（1 分钟 TTL），API 不可用时返回空（无降级硬编码列表）                                                                                                                                                                                                                                                                                                                                      |
 | **双 API 模式**              | 同时支持 **OpenAI 兼容格式** (`/chat/completions`) 和 **Anthropic 格式** (`/v1/messages`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | **流式推理**                 | 支持 SSE (Server-Sent Events) 流式响应，实时输出文本和工具调用                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | **Thinking/推理**            | 支持模型的推理过程展示 ("thinking" 状态)，包括 XML think 块解析                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -136,6 +136,7 @@ activate(context)
   ├── initStatusBar()                       ← 创建状态栏条目
   ├── new OpenCodeGoChatModelProvider()      ← 创建 Provider 实例
   ├── vscode.lm.registerLanguageModelChatProvider("opencodego", provider)
+  ├── 预热模型发现 (非阻塞 fire-and-forget)  ← 每次激活刷新模型列表（先 models.dev 后模型列表，1 分钟 TTL 去重并发激活）
   ├── 注册命令:
   │   ├── opencodego.setApiKey                ← 设置 API Key
   │   ├── opencodego.getApiKey                ← 打开 OpenCode AI 官网获取 Key
@@ -418,8 +419,8 @@ src/
 | `provider.ts`                         | ~700 | 实现 `LanguageModelChatProvider`，处理聊天请求全流程及图片代理多轮循环处理                                                                                                                             |
 | `models.ts`                           | ~230 | 17 个内置模型定义，模型配置查询（所有模型声明 `imageInput: true`）                                                                                                                                     |
 | `types.ts`                            | ~95  | `OpenCodeGoModelItem`, `ModelPreset`, `ModelsResponse`, `RetryConfig` 等类型                                                                                                                           |
-| `apiModelList.ts`                     | ~80  | API 模型列表获取：从 `/zen/go/v1/models` 拉取可用模型 ID，5 分钟缓存，静默降级                                                                                                                         |
-| `modelsDev.ts`                        | ~130 | models.dev 元数据拉取与查询：从 `models.dev/models.json` 下载并索引模型规格，支持短 ID 匹配，1 小时缓存                                                                                                |
+| `apiModelList.ts`                     | ~80  | API 模型列表获取：从 `/zen/go/v1/models` 拉取可用模型 ID，1 分钟缓存，静默降级                                                                                                                         |
+| `modelsDev.ts`                        | ~130 | models.dev 元数据拉取与查询：从 `models.dev/models.json` 下载并索引模型规格，支持短 ID 匹配，1 分钟缓存                                                                                                |
 | `commonApi.ts`                        | ~467 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截、User-Agent 配置读取）                                                                                                             |
 | `provideModel.ts`                     | ~266 | 模型信息提供函数（含自动发现、`deduceApiMode()` 从 models.dev 推断 apiMode）：过滤内置模型、从 API 和 models.dev 自动发现新增模型                                                                      |
 | `provideToken.ts`                     | ~100 | Token 用量计算                                                                                                                                                                                         |
@@ -449,7 +450,7 @@ src/
 ### 4.1 `src/extension.ts`
 
 #### `activate(context: vscode.ExtensionContext): void`
-扩展激活入口。初始化日志、分词器、状态栏；注册 `LanguageModelChatProvider`；注册六条命令（设置 API Key、获取 API Key 网址、打开扩展设置、生成 Git 提交消息、中止生成、设置模型预设）；首次安装时调用 `showWelcomeIfNeeded()` 显示欢迎页引导。
+扩展激活入口。初始化日志、分词器、状态栏；注册 `LanguageModelChatProvider`；注册六条命令（设置 API Key、获取 API Key 网址、打开扩展设置、生成 Git 提交消息、中止生成、设置模型预设）；激活时非阻塞预热模型发现（fire-and-forget 调用 `prepareLanguageModelChatInformation()`，每次激活刷新模型列表，先拉取 models.dev 目录再拉取模型列表，失败仅记录日志）；首次安装时调用 `showWelcomeIfNeeded()` 显示欢迎页引导。
 
 #### `showWelcomeIfNeeded(context: vscode.ExtensionContext): Promise<void>`
 检查是否已显示过欢迎页（通过 `globalState` 的 `WELCOME_SHOWN_KEY` 标记）。如果已标记或已有 API Key，直接返回；否则通过 `workbench.action.openWalkthrough` 命令打开 Walkthrough 页面并标记为已显示。静默处理异常，不阻塞扩展激活。
@@ -664,7 +665,7 @@ API 实现的抽象基类。
 ### 4.6 `src/apiModelList.ts`
 
 #### `getApiModelIds(apiKey): Promise<Set<string>>`
-从 `/zen/go/v1/models` 拉取可用模型 ID 列表并返回 Set。使用内存缓存（5 分钟 TTL），API 不可用时返回空 Set 或上次缓存。内部 `fetchApiModelList()` 使用 10 秒 `AbortSignal.timeout(10000)`，超时后记录警告并抛出普通 `Error`（非 AbortError）以保留调用方缓存。导出 `isApiFetchSuccessful()` 检查上次请求是否成功。
+从 `/zen/go/v1/models` 拉取可用模型 ID 列表并返回 Set。使用内存缓存（1 分钟 TTL），API 不可用时返回空 Set 或上次缓存。内部 `fetchApiModelList()` 使用 10 秒 `AbortSignal.timeout(10000)`，超时后记录警告并抛出普通 `Error`（非 AbortError）以保留调用方缓存。导出 `isApiFetchSuccessful()` 检查上次请求是否成功。
 
 #### `isApiFetchSuccessful(): boolean`
 返回最近一次 API 模型列表拉取是否成功。用于模型提供者决定是否应用 API 过滤。
@@ -680,7 +681,7 @@ API 实现的抽象基类。
 `{ id, name?, family?, reasoning?, tool_call?, structured_output?, temperature?, attachment?, modalities?, limit? }` — models.dev 数据库中单个模型条目的接口。
 
 #### `ensureModelsDevLoaded(): Promise<void>`
-从 `https://models.dev/catalog.json` 下载完整模型目录并构建内存索引（完整 ID → 条目 + 短 ID → 条目）。内部 `fetchCatalog()` 使用 10 秒 `AbortSignal.timeout(10000)`，超时后记录警告并抛出普通 `Error`（非 AbortError）以保留现有缓存。1 小时缓存 TTL，失败时静默保留旧缓存。首次无缓存时初始化为空 Map。`lastLoadFailed` 标志追踪上次加载是否失败：失败后缓存 TTL 缩短为 1 分钟，避免空 Map 长期阻塞后续重试。
+从 `https://models.dev/catalog.json` 下载完整模型目录并构建内存索引（完整 ID → 条目 + 短 ID → 条目）。内部 `fetchCatalog()` 使用 10 秒 `AbortSignal.timeout(10000)`，超时后记录警告并抛出普通 `Error`（非 AbortError）以保留现有缓存。1 分钟缓存 TTL（短 TTL 兼作 VS Code 启动时多个并发 `activate()` 调用的去重窗口，同时保证每次激活/刷新均重新拉取目录）。失败时静默保留旧缓存。首次无缓存时初始化为空 Map。`lastLoadFailed` 标志追踪上次加载是否失败：失败后至少等待 1 分钟再重试，避免空 Map 长期阻塞后续重试。
 
 #### `lookupModelDevEntry(apiModelId): ModelsDevEntry | undefined`
 按 API 模型 ID 查找 models.dev 元数据。匹配策略：1) 完整 models.dev ID 精确匹配，2) 短 ID（斜杠后最后一段）匹配，3) 后缀匹配。
@@ -696,7 +697,7 @@ API 实现的抽象基类。
 ### 4.10 `src/provideModel.ts`
 
 #### `prepareLanguageModelChatInformation(options, _token, _secrets): Promise<LanguageModelChatInformation[]>`
-获取模型信息列表。默认使用硬编码的内置模型列表（委托 `getBuiltInModelInfos()`）。当配置 `opencodego.enableAutoModelDiscovery` 开启时（默认），从 API 获取可用模型 ID 列表，过滤内置模型（仅保留 API 中存在的模型），并从 models.dev 自动发现新增模型（默认 `thinkingMode="always"`）。自动发现前调用 `_autoDiscoveredConfigs.clear()` 清空旧条目。API 不可用时静默回退到全量内置列表。当配置 `opencodego.enableZenFreeModels` 开启时，额外调用 `getZenFreeModelInfos()` 获取 Zen 免费模型并追加到列表末尾。
+获取模型信息列表。默认使用硬编码的内置模型列表（委托 `getBuiltInModelInfos()`）。当配置 `opencodego.enableAutoModelDiscovery` 开启时（默认），从 API 获取可用模型 ID 列表，过滤内置模型（仅保留 API 中存在的模型），并从 models.dev 自动发现新增模型（默认 `thinkingMode="always"`）。自动发现前调用 `_autoDiscoveredConfigs.clear()` 清空旧条目。API 不可用时静默回退到全量内置列表。当配置 `opencodego.enableZenFreeModels` 开启时，额外调用 `getZenFreeModelInfos()` 获取 Zen 免费模型并追加到列表末尾。刷新频率由 `opencodego.modelsDevUpdateInterval` 控制（默认 1 分钟）：该值充当限速器，去重 VS Code 启动时多个并发 `activate()` 调用产生的刷新，同时保证每次激活与超过间隔的模型选择器打开都会刷新。发现管线先调用 `ensureModelsDevLoaded()` 拉取 models.dev 目录，再调用 `getApiModelIds()` 拉取 API 模型列表。扩展每次激活时由 `extension.ts` 非阻塞调用本函数预热刷新。
 
 #### `deduceApiMode(modelId, entry?)`
 根据模型 ID 和可选的 models.dev 条目推断 API 格式（`"openai"` 或 `"anthropic"`）。使用 family 启发式判断：Claude/Anthropic 系列、Qwen 3.6/3.7 系列、Gemma 系列 → Anthropic；其余 → OpenAI。被 `storeAutoDiscoveredConfig()` 调用于确定自动发现模型的 apiMode。
@@ -1173,7 +1174,7 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 Zen API 基础 URL：`https://opencode.ai/zen/v1/`。
 
 #### `const CACHE_TTL_MS`
-内存缓存 TTL：5 分钟。
+内存缓存 TTL：1 分钟（短 TTL 兼作启动并发激活去重）。
 
 #### `let cachedModelIds: string[] | null`
 模块级缓存：存储最近一次从 Zen API 获取并过滤后的模型 ID 列表。
@@ -1192,7 +1193,7 @@ Zen API 基础 URL：`https://opencode.ai/zen/v1/`。
 
 #### `async function getZenFreeModelInfos(secrets): Promise<LanguageModelChatInformation[]>`
 获取 Zen 免费模型列表。流程：
-1. 检查缓存（5 分钟 TTL），有效则直接返回
+1. 检查缓存（1 分钟 TTL），有效则直接返回
 2. 获取 API Key，存在则调用 `fetchZenModelList()` 过滤出 `id.endsWith("-free")` 的模型
 3. 拉取成功 → 更新缓存 → 加载 models.dev 元数据 → 返回过滤后的模型
 4. 拉取失败 → 使用过期缓存（如有）

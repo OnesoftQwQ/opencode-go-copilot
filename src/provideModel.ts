@@ -225,6 +225,12 @@ async function runAutoDiscoveryPass(
     secrets: vscode.SecretStorage
 ): Promise<LanguageModelChatInformation[] | null> {
     const apiKey = await secrets.get("opencodego.apiKey");
+
+    // Fetch the models.dev catalog FIRST — it governs model behaviour (apiMode,
+    // thinking, vision, context limits) and the API base URL. The model list
+    // fetch below depends on the catalog metadata, so it must come after.
+    await ensureModelsDevLoaded();
+
     const apiModelIds = await getApiModelIds(apiKey);
 
     if (!apiModelIds || apiModelIds.size === 0) {
@@ -338,7 +344,10 @@ export async function prepareLanguageModelChatInformation(
 
     const config = vscode.workspace.getConfiguration();
     const enableAutoDiscovery = config.get<boolean>("opencodego.enableAutoModelDiscovery", true);
-    const updateInterval = config.get<number>("opencodego.modelsDevUpdateInterval", 60 * 60 * 1000);
+    // Very short interval (default 1 minute): acts as a rate limiter that dedupes
+    // the burst of concurrent activation calls VS Code fires on startup, while
+    // still refreshing on every activation and model-picker open past the interval.
+    const updateInterval = config.get<number>("opencodego.modelsDevUpdateInterval", 60 * 1000);
     const now = Date.now();
 
     // ── Auto Model Discovery Pipeline ──

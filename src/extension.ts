@@ -212,6 +212,22 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // Warm up model discovery on every activation (non-blocking, fire-and-forget).
+    // VS Code may fire several activation events at startup; the short refresh
+    // interval in prepareLanguageModelChatInformation (default 1 minute) dedupes
+    // concurrent calls so the API is not spammed. The models.dev catalog is
+    // fetched before the model list. On failure it degrades silently to the
+    // built-in model list.
+    void prepareLanguageModelChatInformation(
+        { silent: true },
+        new vscode.CancellationTokenSource().token,
+        context.secrets
+    ).catch((error) => {
+        logger.error("models.warmup.failed", {
+            error: error instanceof Error ? error.message : String(error),
+        });
+    });
+
     // Show welcome walkthrough on first install (when no API key is configured)
     showWelcomeIfNeeded(context);
 
