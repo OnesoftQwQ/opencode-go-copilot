@@ -367,11 +367,6 @@
 					"default": false,
 					"description": "%opencodego.config.httpAllowInsecure%"
 				},
-				"opencodego.userAgent": {
-					"type": "string",
-					"default": "",
-					"markdownDescription": "%config.userAgent.desc%"
-				},
 				"opencodego.visionMaxRounds": {
 					"type": "number",
 					"default": 5,

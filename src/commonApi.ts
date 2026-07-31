@@ -435,8 +435,8 @@ export abstract class CommonApi<TMessage, TRequestBody> {
         apiMode: string,
         customHeaders?: Record<string, string>
     ): Record<string, string> {
-        const config = vscode.workspace.getConfiguration();
-        const customUserAgent = config.get<string>("opencodego.userAgent", "");
+        // Internal override for testing or contingency (e.g. if the API ever gates access by User-Agent again).
+        const customUserAgent = process.env.OPENCODEGO_USER_AGENT ?? "";
         const userAgent = customUserAgent.trim() || VersionManager.getUserAgent();
 
         const headers: Record<string, string> = {

@@ -658,7 +658,7 @@ API 实现的抽象基类。
 处理普通文本内容，发射到进度报告器。
 
 #### `static prepareHeaders(apiKey, apiMode, customHeaders?): Record<string, string>`
-准备 HTTP 请求头。读取 `opencodego.userAgent` 配置设置 User-Agent（回退到 `VersionManager.getUserAgent()`）。Anthropic 模式使用 `x-api-key`，OpenAI 模式使用 `Bearer` 令牌。
+准备 HTTP 请求头。读取 `OPENCODEGO_USER_AGENT` 环境变量覆盖 User-Agent（回退到 `VersionManager.getUserAgent()`；内部测试/应急用，非用户设置项）。Anthropic 模式使用 `x-api-key`，OpenAI 模式使用 `Bearer` 令牌。
 
 ---
 

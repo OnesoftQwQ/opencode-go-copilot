@@ -44,7 +44,6 @@
 	"config.visionProxyModel.desc": "用于 ask_image 工具的视觉模型 ID。当所选模型不支持视觉时，该模型用于回答图片相关问题。",
 	"config.visionProxyThinking.desc": "在视觉代理模型回答图片查询时启用思考/推理功能。",
 	"config.enableThirdPartyTokenIndicator.desc": "启用高级 Token 指示器。Copilot 原生 Token 指示器始终保持开启。开启后，扩展还会在 VS Code 状态栏中显示高级Token计数器。默认: 开启。",
-	"config.userAgent.desc": "API 请求的自定义 User-Agent 头。留空则使用默认值 (`opencode-go-copilot/{version} VSCode/{vs_version}`)。可用于在服务器日志中识别您的扩展实例或配置代理路由。",
 	"config.delay.desc": "连续 API 请求之间的延迟时间（毫秒），用于避免触发频率限制。设为 0 表示不延迟。默认值: 0。",
 	"config.visionMaxRounds.desc": "非视觉模型使用 `ask_image` 工具查询图片时的最大视觉代理轮数。限制每次请求的后续追问次数。默认值: 5。",
 	"opencodego.config.httpAllowInsecure": "允许明文 HTTP 连接到任意服务器（不安全）。禁用时，明文 HTTP 仅允许 localhost 和私有网络地址。",
