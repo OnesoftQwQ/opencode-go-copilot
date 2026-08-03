@@ -35,7 +35,7 @@ export interface AnthropicToolUseBlock {
 export interface AnthropicToolResultBlock {
 	type: "tool_result";
 	tool_use_id: string;
-	content: string | AnthropicTextBlock[];
+	content: string | (AnthropicTextBlock | AnthropicImageBlock)[];
 	is_error?: boolean;
 }
 
@@ -87,14 +87,14 @@ export type AnthropicToolChoice =
 
 export interface AnthropicStreamChunk {
 	type:
-		| "message_start"
-		| "content_block_start"
-		| "content_block_delta"
-		| "content_block_stop"
-		| "message_delta"
-		| "message_stop"
-		| "ping"
-		| "error";
+	| "message_start"
+	| "content_block_start"
+	| "content_block_delta"
+	| "content_block_stop"
+	| "message_delta"
+	| "message_stop"
+	| "ping"
+	| "error";
 	index?: number;
 	message?: {
 		id: string;

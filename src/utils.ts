@@ -225,6 +225,103 @@ export function isImageMimeType(mimeType: string): boolean {
 }
 
 /**
+ * VS Code MIME type for MCP tool result resource links.
+ * The data is a JSON string: { "uri": string, "underlyingMimeType"?: string }.
+ * @see https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/mcp/common/mcpTypes.ts
+ */
+export const RESOURCE_LINK_MIME = "application/vnd.code.resource-link";
+
+/**
+ * Check if a mime type is an MCP resource-link data part.
+ */
+export function isResourceLinkMimeType(mimeType: string): boolean {
+    return mimeType === RESOURCE_LINK_MIME;
+}
+
+/**
+ * Parsed contents of an MCP resource-link data part.
+ */
+export interface ParsedResourceLink {
+    uri: string;
+    underlyingMimeType?: string;
+}
+
+/**
+ * Parse the JSON payload of an MCP resource-link data part.
+ * Returns null when the payload is not a valid resource link.
+ */
+export function parseResourceLinkData(data: Uint8Array): ParsedResourceLink | null {
+    try {
+        const parsed: unknown = JSON.parse(new TextDecoder().decode(data));
+        if (parsed && typeof parsed === "object" && typeof (parsed as { uri?: unknown }).uri === "string") {
+            const uri = (parsed as { uri: string }).uri;
+            const underlying = (parsed as { underlyingMimeType?: unknown }).underlyingMimeType;
+            return {
+                uri,
+                ...(typeof underlying === "string" ? { underlyingMimeType: underlying } : {}),
+            };
+        }
+    } catch {
+        // ignore malformed payloads
+    }
+    return null;
+}
+
+const RESOURCE_LINK_EXT_MIME: Record<string, string> = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+};
+
+/**
+ * Guess an image MIME type from a resource URI path extension.
+ */
+export function guessImageMimeTypeFromUri(uri: string): string | undefined {
+    try {
+        const pathname = vscode.Uri.parse(uri).path.toLowerCase();
+        const ext = pathname.slice(pathname.lastIndexOf("."));
+        return RESOURCE_LINK_EXT_MIME[ext];
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Resolve an MCP resource-link data part to actual image bytes when possible.
+ * VS Code registers a file system provider for `vscode-chat-response-resource://`
+ * URIs, so images can be read back while the chat session is alive.
+ * Returns null when the link is not an image or cannot be read.
+ */
+export async function resolveResourceLinkToImage(
+    data: Uint8Array
+): Promise<{ data: Uint8Array; mimeType: string } | null> {
+    const link = parseResourceLinkData(data);
+    if (!link) {
+        return null;
+    }
+
+    const mimeType = link.underlyingMimeType || guessImageMimeTypeFromUri(link.uri);
+    if (!mimeType || !isImageMimeType(mimeType)) {
+        return null;
+    }
+
+    try {
+        const uri = vscode.Uri.parse(link.uri);
+        const bytes = await vscode.workspace.fs.readFile(uri);
+        if (!bytes || bytes.length === 0) {
+            return null;
+        }
+        return { data: bytes, mimeType };
+    } catch {
+        // Resource may be gone (session disposed) or scheme not readable.
+        return null;
+    }
+}
+
+/**
  * Regex pattern to match data URI encoded images in text.
  * Matches: data:image/{format};base64,{base64_data}
  */

@@ -13,12 +13,14 @@ import type {
 	AnthropicMessage,
 	AnthropicRequestBody,
 	AnthropicContentBlock,
+	AnthropicImageBlock,
+	AnthropicTextBlock,
 	AnthropicToolUseBlock,
 	AnthropicToolResultBlock,
 	AnthropicStreamChunk,
 } from "./anthropicTypes";
 
-import { isImageMimeType, isToolResultPart, collectToolResultText, convertToolsToOpenAI, mapRole, storeDataUriImages, replaceDataUriImages } from "../utils";
+import { isImageMimeType, isToolResultPart, collectToolResultText, convertToolsToOpenAI, mapRole, storeDataUriImages, replaceDataUriImages, isResourceLinkMimeType, parseResourceLinkData, resolveResourceLinkToImage } from "../utils";
 
 import { CommonApi } from "../commonApi";
 import { logger } from "../logger";
@@ -44,10 +46,10 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 	 * @param modelConfig model configuration that may affect message conversion.
 	 * @returns Anthropic-compatible messages array.
 	 */
-	convertMessages(
+	async convertMessages(
 		messages: readonly LanguageModelChatRequestMessage[],
 		modelConfig: { includeReasoningInRequest: boolean; vision?: boolean }
-	): AnthropicMessage[] {
+	): Promise<AnthropicMessage[]> {
 		const modelSupportsVision = modelConfig.vision !== false;
 		const out: AnthropicMessage[] = [];
 		let imageIndex = 0;
@@ -77,6 +79,14 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 								} else if (inner instanceof vscode.LanguageModelTextPart) {
 									// Scan text for base64 data URI images
 									storeDataUriImages(inner.value, imagesToStore);
+								} else if (inner instanceof vscode.LanguageModelDataPart && isResourceLinkMimeType(inner.mimeType)) {
+									// MCP tools may return images as resource links
+									// (application/vnd.code.resource-link); resolve them
+									// to actual image bytes for the ask_image proxy.
+									const stored = await resolveResourceLinkToImage(inner.data);
+									if (stored) {
+										imagesToStore.push(stored);
+									}
 								}
 							}
 						}
@@ -128,6 +138,7 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 					const callId = (part as { callId?: string }).callId ?? "";
 					const toolContent = (part as { content?: ReadonlyArray<unknown> }).content;
 					const toolTexts: string[] = [];
+					const toolImages: AnthropicImageBlock[] = [];
 					if (toolContent) {
 						for (const inner of toolContent) {
 							if (inner instanceof vscode.LanguageModelTextPart) {
@@ -138,13 +149,64 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 									imageIndex += result.count;
 									toolTexts.push(result.text);
 								}
-							} else if (!modelSupportsVision && inner instanceof vscode.LanguageModelDataPart && isImageMimeType(inner.mimeType)) {
-								toolTexts.push(`\n[Image data from tool call (imageIndex=${imageIndex}). I am a text-only model and CANNOT see images directly. I MUST call the ask_image tool to learn about it.\n\nRecommended strategy:\n1. First call ask_image for a brief description to get an overview of the image.\n2. Then call ask_image again with specific questions about details you need (e.g., colors, text content, UI elements, error messages, or any other visible information).\n]`);
-								imageIndex++;
+							} else if (inner instanceof vscode.LanguageModelDataPart && isImageMimeType(inner.mimeType)) {
+								if (modelSupportsVision) {
+									// Vision models receive the actual image content
+									// (e.g. the built-in view_image tool result).
+									toolImages.push({
+										type: "image",
+										source: {
+											type: "base64",
+											media_type: inner.mimeType,
+											data: Buffer.from(inner.data).toString("base64"),
+										},
+									});
+								} else {
+									toolTexts.push(`\n[Image data from tool call (imageIndex=${imageIndex}). I am a text-only model and CANNOT see images directly. I MUST call the ask_image tool to learn about it.\n\nRecommended strategy:\n1. First call ask_image for a brief description to get an overview of the image.\n2. Then call ask_image again with specific questions about details you need (e.g., colors, text content, UI elements, error messages, or any other visible information).\n]`);
+									imageIndex++;
+								}
+							} else if (inner instanceof vscode.LanguageModelDataPart && isResourceLinkMimeType(inner.mimeType)) {
+								// MCP tools may return images as resource links
+								// (application/vnd.code.resource-link) instead of raw
+								// image data; resolve the link and pass the image through.
+								const stored = await resolveResourceLinkToImage(inner.data);
+								if (stored) {
+									if (modelSupportsVision) {
+										toolImages.push({
+											type: "image",
+											source: {
+												type: "base64",
+												media_type: stored.mimeType,
+												data: Buffer.from(stored.data).toString("base64"),
+											},
+										});
+									} else {
+										toolTexts.push(`\n[Image data from tool call (imageIndex=${imageIndex}). I am a text-only model and CANNOT see images directly. I MUST call the ask_image tool to learn about it.\n\nRecommended strategy:\n1. First call ask_image for a brief description to get an overview of the image.\n2. Then call ask_image again with specific questions about details you need (e.g., colors, text content, UI elements, error messages, or any other visible information).\n]`);
+										imageIndex++;
+									}
+								} else {
+									const link = parseResourceLinkData(inner.data);
+									toolTexts.push(
+										link
+											? `\n[Tool returned an unresolvable resource link: ${link.uri}]`
+											: ""
+									);
+								}
 							}
 						}
 					}
-					const content = toolTexts.join("\n").trim();
+					const joinedText = toolTexts.join("\n").trim();
+					let content: string | (AnthropicTextBlock | AnthropicImageBlock)[];
+					if (toolImages.length > 0) {
+						const blocks: (AnthropicTextBlock | AnthropicImageBlock)[] = [];
+						if (joinedText) {
+							blocks.push({ type: "text", text: joinedText });
+						}
+						blocks.push(...toolImages);
+						content = blocks;
+					} else {
+						content = joinedText;
+					}
 					toolResults.push({
 						type: "tool_result",
 						tool_use_id: callId,
@@ -388,7 +450,7 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 		// Immediately cancel the stream when user cancels, so reader.read() won't stay pending
 		if (token.onCancellationRequested) {
 			cancelDisposable = token.onCancellationRequested(() => {
-				reader.cancel().catch(() => {});
+				reader.cancel().catch(() => { });
 			});
 		}
 
@@ -593,7 +655,7 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 		// Cancel the reader immediately when abort signal fires
 		if (signal) {
 			signal.addEventListener("abort", () => {
-				reader.cancel().catch(() => {});
+				reader.cancel().catch(() => { });
 			});
 		}
 
