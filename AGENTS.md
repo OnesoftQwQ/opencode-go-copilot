@@ -34,7 +34,8 @@
 | **流式推理**                 | 支持 SSE (Server-Sent Events) 流式响应，实时输出文本和工具调用                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | **Thinking/推理**            | 支持模型的推理过程展示 ("thinking" 状态)，包括 XML think 块解析                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **工具调用 (Tool Calling)**  | 支持 VS Code 的 LanguageModelToolCallPart 机制                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| **图片代理 (Tool-based)**    | 为不支持视觉的模型注入 `ask_image` 工具，模型可自主选择调用视觉模型（默认 Qwen3.6-Plus）回答关于图片的具体问题，支持多轮 API 请求完成"调用工具→提问→获取答案→继续回答"的完整流程。与旧版 `describe_image` 不同，`ask_image` 允许模型针对图片提出具体问题（如"按钮是什么颜色？"），视觉模型会针对性回答。每次内部视觉调用完成后还会输出专用 MIME 的 `LanguageModelDataPart`，下一轮从该记录重建标准 tool call + tool result，保持跨轮上下文。视觉模型 ID、查询提示词和思考模式均可通过设置配置；视觉代理会在同一个 thinking 块中显示“正在根据图片提问：[问题]”并实时追加视觉模型流式输出 |
+| **图片代理 (Tool-based)**    | 为不支持视觉的模型注入 `ask_image` 工具，模型可自主选择调用视觉模型（默认 Qwen3.6-Plus）回答关于图片的具体问题，支持多轮 API 请求完成"调用工具→提问→获取答案→继续回答"的完整流程。与旧版 `describe_image` 不同，`ask_image` 允许模型针对图片提出具体问题（如"按钮是什么颜色？"），视觉模型会针对性回答。每次内部视觉调用完成后还会输出专用 MIME 的 `LanguageModelDataPart`，下一轮从该记录重建标准 tool call + tool result，保持跨轮上下文。视觉模型 ID、查询提示词和思考模式均可通过设置配置；视觉代理会在同一个 thinking 块中显示“正在根据图片提问：[问题]”并实时追加视觉模型流式输出                                                                                                                                                                        |
+| **MCP 工具图片支持**        | 完整支持 MCP 工具（如 Chrome DevTools `take_screenshot`、photoshop-mcp 等）返回的图片：`type: image`/带 blob 的 `resource` 直接以图片 data part 接收；`resource`/`resource_link`（无 blob）则以 `application/vnd.code.resource-link` data part 接收，扩展会解析其中的 URI 并通过 `vscode.workspace.fs.readFile` 读取实际图片字节（VS Code 为 `vscode-chat-response-resource://` 注册了文件系统提供者）。视觉模型直接收到图片（image_url/image block），非视觉模型存入 `_localImages` 供 `ask_image` 代理使用；解析失败时以文本形式提示 URI                                                                                                                                                                                                                                                                                                                                                                                             |
 | **Token 计数**               | 使用 `o200k_base` tiktoken 分词器精确统计 token 用量                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | **状态栏**                   | 实时显示当前会话 token 使用量、累计用量、缓存命中率                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | **原生 Token 指示器**        | 始终启用，向 Copilot Chat 原生 Token 指示器报告 token 用量。通过发送 MIME 类型为 `usage` 的 `LanguageModelDataPart`（TextEncoder 编码 JSON）实现，无需自建状态栏。依赖 VS Code/Copilot Chat 1.116+ 对外部模型 `usage` data part 的识别                                                                                                                                                                                                                                                                                                                                                  |
@@ -77,7 +78,7 @@ models.dev 目录通过 `reasoning_options` 字段提供每个模型的思考能
 | `reasoning=true` 且 `reasoning_options=[]` | `always`（思考常开，无开关） | glm-5/5.1、kimi-k2.x、mimo 系列 |
 | `{"type":"budget_tokens","max":N}` | `thinking_budget`（OpenAI 模式请求体 `budget_tokens`） | qwen3.5/3.6 (81920)、qwen3.7/3.8 (262144) |
 
-> **关于图像输入：** 所有模型（包括非视觉模型）的 `imageInput` 能力均声明为 `true`，以确保 VS Code 始终传递图片数据。非视觉模型通过内部的 `ask_image` 工具代理机制处理图片，不直接支持视觉输入。
+> **关于图像输入：** 所有模型（包括非视觉模型）的 `imageInput` 能力均声明为 `true`，以确保 VS Code 始终传递图片数据。非视觉模型通过内部的 `ask_image` 工具代理机制处理图片，不直接支持视觉输入。视觉模型可直接接收工具结果（如内置 `view_image`）返回的图片 data part，以及 MCP 工具返回的 resource-link 图片（解析后发送）。
 
 ---
 
@@ -598,8 +599,8 @@ API 实现的抽象基类。
 | `_localImages`                | `StoredImage[]`                               | 实例局部图片数据，请求结束随 GC 回收    |
 | `_originalApiMessages`        | `any[] \| null`                               | 转换后的原始 API 消息，用于构建多轮请求 |
 
-#### `abstract convertMessages(messages, modelConfig): TMessage[]`
-将 VS Code 聊天消息转换为特定 API 格式的消息数组。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据。
+#### `abstract convertMessages(messages, modelConfig): Promise<TMessage[]>`
+将 VS Code 聊天消息转换为特定 API 格式的消息数组（**异步**，支持 MCP resource-link 图片解析）。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据。
 
 #### `abstract prepareRequestBody(rb, um, options?): TRequestBody`
 构建特定 API 的请求体。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。
@@ -764,6 +765,18 @@ API 实现的抽象基类。
 
 #### `isImageMimeType(mimeType): boolean`
 判断 MIME 类型是否为图片。
+
+#### `RESOURCE_LINK_MIME` / `isResourceLinkMimeType(mimeType): boolean`
+MCP 工具结果 resource-link 的 MIME 类型常量 `application/vnd.code.resource-link` 及判断函数。MCP 服务器返回 `resource`/`resource_link` 类型（无内联 blob）的图片时，VS Code 以该 MIME 的 `LanguageModelDataPart`（内容为 JSON `{ uri, underlyingMimeType? }`）传入工具结果。
+
+#### `parseResourceLinkData(data): ParsedResourceLink | null`
+解析 MCP resource-link data part 的 JSON 载荷，返回 `{ uri, underlyingMimeType? }`，非法载荷返回 null。
+
+#### `guessImageMimeTypeFromUri(uri): string | undefined`
+从 resource URI 路径扩展名（`.png`/`.jpg`/`.gif`/`.webp`/`.bmp`）推断图片 MIME 类型。
+
+#### `resolveResourceLinkToImage(data): Promise<{ data, mimeType } | null>`
+解析 MCP resource-link data part 并尝试读取实际图片字节（通过 `vscode.workspace.fs.readFile` 读取 `vscode-chat-response-resource://` 等 URI，VS Code 为其注册了文件系统提供者，会话存活期间可读）。非图片或读取失败返回 null。
 
 #### `createDataUrl(part): string`
 从 `LanguageModelDataPart` 创建 Base64 Data URL。
@@ -950,8 +963,8 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 #### `constructor(modelId: string)`
 构造函数，传入模型 ID。
 
-#### `convertMessages(messages, modelConfig): OpenAIChatMessage[]`
-将 VS Code 消息转换为 OpenAI 格式。支持文本、图片、工具调用、工具结果、推理内容的消息转换。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据。同时递归扫描 `LanguageModelToolResultPart.content` 中的图片一并存入（确保通过工具返回的图片也能被 `ask_image` 代理识别）。
+#### `async convertMessages(messages, modelConfig): Promise<OpenAIChatMessage[]>`
+将 VS Code 消息转换为 OpenAI 格式（**异步**）。支持文本、图片、工具调用、工具结果、推理内容的消息转换。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据；**视觉模型时保留工具结果（`LanguageModelToolResultPart`）内的图片 `LanguageModelDataPart`，转换为 `image_url` content 与文本合并为多模态 content 数组发送**（如内置 `view_image` 工具返回的图片）；**MCP 工具返回的 resource-link（`application/vnd.code.resource-link`）data part 会被解析并通过 `resolveResourceLinkToImage()` 读取为实际图片，视觉模型直接发送、非视觉模型存入 `_localImages` 供 `ask_image` 代理使用，解析失败时以文本形式提示 URI**。
 
 #### `prepareRequestBody(rb, um?, options?): Record<string, unknown>`
 构建 OpenAI 请求体。设置 temperature、top_p、max_tokens、reasoning_effort（adaptive 模式时跳过）、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和关闭用 `{ type: false }`）、stop、tools、tool_choice 以及各种惩罚参数和 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。Extra 参数合并前过滤保留键（`model`, `messages`, `stream`, `temperature`, `top_p`, `max_tokens`, `max_completion_tokens`, `tools`, `tool_choice`, `stop`, `reasoning_effort`, `thinking`, `top_k`, `min_p`, `frequency_penalty`, `presence_penalty`, `repetition_penalty`, `stream_options`, `reasoning` 等），冲突时 `logger.warn()` 记录。
@@ -985,7 +998,7 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 `{ type: "tool_use", id, name, input }` — 工具使用块。
 
 #### `interface AnthropicToolResultBlock`
-`{ type: "tool_result", tool_use_id, content, is_error? }` — 工具结果块。
+`{ type: "tool_result", tool_use_id, content, is_error? }` — 工具结果块。`content` 为字符串或 `(AnthropicTextBlock | AnthropicImageBlock)[]` 块数组（支持工具结果内嵌图片）。
 
 #### `type AnthropicContentBlock`
 文本 | 图片 | 推理 | 工具使用 | 工具结果的联合类型。
@@ -1014,8 +1027,8 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 #### `constructor(modelId: string)`
 构造函数，传入模型 ID。
 
-#### `convertMessages(messages, modelConfig): AnthropicMessage[]`
-将 VS Code 消息转换为 Anthropic 格式。系统消息提取到 `_systemContent`。支持文本、图片、工具使用、工具结果、推理内容。使用 `content` 块数组格式。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据。同时递归扫描 `AnthropicToolResultBlock.content` 中的图片一并存入（确保通过工具返回的图片也能被 `ask_image` 代理识别）。
+#### `async convertMessages(messages, modelConfig): Promise<AnthropicMessage[]>`
+将 VS Code 消息转换为 Anthropic 格式（**异步**）。系统消息提取到 `_systemContent`。支持文本、图片、工具使用、工具结果、推理内容。使用 `content` 块数组格式。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据；**视觉模型时保留工具结果内的图片 `LanguageModelDataPart`，转换为 `image` block（base64 source）与文本合并为 `tool_result` 块数组发送**（如内置 `view_image` 工具返回的图片）；**MCP 工具返回的 resource-link（`application/vnd.code.resource-link`）data part 会被解析并通过 `resolveResourceLinkToImage()` 读取为实际图片，视觉模型直接发送、非视觉模型存入 `_localImages` 供 `ask_image` 代理使用，解析失败时以文本形式提示 URI**。
 
 #### `prepareRequestBody(rb, um?, options?): AnthropicRequestBody`
 构建 Anthropic 请求体。设置 max_tokens、system、temperature、top_p、top_k、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和 `{ type: "disabled" }`）、tools（转换为 Anthropic 格式）、tool_choice（auto/any/none）以及 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。Extra 参数合并前过滤保留键（`model`, `messages`, `stream` 等），冲突时 `logger.warn()` 记录。

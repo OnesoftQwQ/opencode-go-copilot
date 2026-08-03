@@ -334,7 +334,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                         updateStatusBarWithApiPrompt(usage.promptTokens, model.maxInputTokens || 128000, this.statusBarItem);
                     }
                 };
-                const anthropicMessages = anthropicApi.convertMessages(messages, modelConfig);
+                const anthropicMessages = await anthropicApi.convertMessages(messages, modelConfig);
 
                 // requestBody
                 let requestBody: AnthropicRequestBody = {
@@ -410,7 +410,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                         updateStatusBarWithApiPrompt(usage.promptTokens, model.maxInputTokens || 128000, this.statusBarItem);
                     }
                 };
-                const openaiMessages = openaiApi.convertMessages(messages, modelConfig);
+                const openaiMessages = await openaiApi.convertMessages(messages, modelConfig);
 
                 // requestBody
                 let requestBody: Record<string, unknown> = {
