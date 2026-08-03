@@ -38,10 +38,10 @@ const FALLBACK_BASE_URLS: Record<ProviderId, string> = {
     "opencode": "https://opencode.ai/zen/v1/",
 };
 
-/** Per-provider display metadata (family grouping, name prefix). */
-const PROVIDER_LABELS: Record<ProviderId, { family: string; detail: string; namePrefix: string }> = {
-    "opencode-go": { family: "OpenCodeGo", detail: "OpenCode Go", namePrefix: "" },
-    "opencode": { family: "OpenCode Zen", detail: "OpenCode Zen", namePrefix: "[Zen] " },
+/** Per-provider display metadata (family grouping, name suffix). */
+const PROVIDER_LABELS: Record<ProviderId, { family: string; detail: string; nameSuffix: string }> = {
+    "opencode-go": { family: "OpenCodeGo", detail: "OpenCode Go", nameSuffix: "" },
+    "opencode": { family: "OpenCode Zen", detail: "OpenCode Zen", nameSuffix: " Free" },
 };
 
 const DEFAULT_CONTEXT_LENGTH = 128000;
@@ -213,7 +213,9 @@ export function buildCatalogModelInfo(providerId: ProviderId, modelId: string): 
     const meta = resolveModelMeta(providerId, modelId);
     const label = PROVIDER_LABELS[providerId];
     const isDeprecated = meta.status === "deprecated";
-    const name = `${label.namePrefix}${isDeprecated ? "[Depr] " : ""}${meta.displayName}`;
+    // Zen free models: append " Free" only when the catalog name doesn't already carry it
+    const nameSuffix = label.nameSuffix && !/\bfree\b/i.test(meta.displayName) ? label.nameSuffix : "";
+    const name = `${isDeprecated ? `${l10n("[Depr] ")}` : ""}${meta.displayName}${nameSuffix}`;
     const { enumValues, enumItemLabels, enumDescriptions, defaultEffort } = buildReasoningEnum(meta);
 
     return {

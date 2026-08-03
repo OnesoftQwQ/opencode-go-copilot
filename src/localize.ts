@@ -63,6 +63,9 @@ const zhCN: Record<string, string> = {
 	// reasoning effort title (key is English fallback text)
 	"Reasoning Effort": "推理强度",
 
+	// deprecated model marker
+	"[Depr] ": "[已弃用] ",
+
 	// vision proxy
 	"Querying vision model: \"{0}\"": "正在根据图片提问：{0}",
 	"The image you sent was flagged as sensitive by the content moderation system. Please try a different image.": "您发送的图片被内容审核系统判定为敏感，请尝试更换图片。",
