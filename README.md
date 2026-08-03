@@ -113,7 +113,7 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 ## 中文
 
 > [!IMPORTANT]
-> **本插件与 OpenCode 或 Anomaly 无关，也未获得其官方维护或认可。**
+> **本插件与 OpenCode 官方或 Anomaly 无关，也未获得其官方维护或认可。**
 
 将 [OpenCode Go](https://opencode.ai/go) 以及可选的 Zen 免费模型集成到 GitHub Copilot Chat 的 VS Code 插件。
 
