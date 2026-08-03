@@ -202,6 +202,17 @@ export function getCatalogProviderModelEntry(
     return providersMap?.get(providerId)?.models?.[modelId];
 }
 
+/**
+ * Get all model IDs served by a provider from the catalog.
+ * Returns an empty array if the catalog is not loaded or the provider is unknown.
+ *
+ * @param providerId - Provider ID (e.g. "opencode-go", "opencode")
+ */
+export function getCatalogProviderModelIds(providerId: string): string[] {
+    const models = providersMap?.get(providerId)?.models;
+    return models ? Object.keys(models) : [];
+}
+
 // ── Inference helpers ──
 
 /**
@@ -251,6 +262,24 @@ export function inferVision(entry: ModelsDevEntry): boolean {
     const input = entry.modalities?.input;
     if (input && (input.includes("image") || input.includes("video"))) return true;
     return false;
+}
+
+/**
+ * Extract the thinking budget range from a catalog model entry.
+ * Returns undefined if no `budget_tokens` reasoning option is defined.
+ */
+export function inferThinkingBudget(entry: ModelsDevEntry): { min?: number; max?: number } | undefined {
+    const opts = entry.reasoning_options;
+    if (!opts) return undefined;
+    for (const opt of opts) {
+        if (opt.type === "budget_tokens") {
+            const result: { min?: number; max?: number } = {};
+            if (typeof opt.min === "number") result.min = opt.min;
+            if (typeof opt.max === "number") result.max = opt.max;
+            return result;
+        }
+    }
+    return undefined;
 }
 
 // ── Public API ──
