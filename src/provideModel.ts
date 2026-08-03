@@ -2,31 +2,13 @@ import * as vscode from "vscode";
 import { CancellationToken, LanguageModelChatInformation, PrepareLanguageModelChatModelOptions } from "vscode";
 
 import { logger } from "./logger";
-import { getBuiltInModelInfos } from "./models";
-import { getZenFreeModelInfos, clearZenModelCache } from "./zen/zenModels";
 import { getApiModelIds, clearApiModelCache } from "./apiModelList";
-import {
-    ensureModelsDevLoaded,
-    lookupModelDevEntry,
-    deduceApiModeFromFamily,
-    getCatalogProviderBaseUrl,
-    getCatalogProviderModelEntry,
-    inferThinkingMode,
-    inferReasoningEfforts,
-    inferDefaultReasoningEffort,
-    inferVision,
-    clearModelsDevCache,
-    type ModelsDevEntry,
-} from "./modelsDev";
-import type { OpenCodeGoModelItem } from "./types";
-import { l10n } from "./localize";
+import { ensureModelsDevLoaded, clearModelsDevCache, getCatalogProviderModelIds } from "./modelsDev";
+import { buildCatalogModelInfo } from "./catalogModels";
 import { delay } from "./utils";
 
-const EXTENSION_LABEL = "OpenCodeGo";
-const DEFAULT_CONTEXT_LENGTH = 128000;
-const DEFAULT_MAX_TOKENS = 4096;
-
-const _autoDiscoveredConfigs = new Map<string, OpenCodeGoModelItem>();
+const GO_PROVIDER_ID = "opencode-go";
+const ZEN_PROVIDER_ID = "opencode";
 
 let isUpdatingModelsDev = false;
 let lastModelsDevUpdate = 0;
@@ -36,143 +18,48 @@ let cachedZenInfos: LanguageModelChatInformation[] | null = null;
 let lastZenUpdate = 0;
 
 /**
- * Resolve metadata for an auto-discovered model.
- * Prefers provider-specific catalog entry, falls back to global entry.
+ * Build the full OpenCode Go model list from the catalog.
+ * When the API model list is available, models the server does not serve are
+ * filtered out (this also drops stale/dirty IDs the API may return, e.g. ones
+ * absent from the catalog). When the API is unreachable, the full catalog list
+ * is returned.
  */
-function resolveDiscoveredModelMeta(modelId: string) {
-    const providerEntry = getCatalogProviderModelEntry("opencode-go", modelId);
-    const globalEntry = lookupModelDevEntry(modelId);
-    const entry = providerEntry ?? globalEntry;
+async function runCatalogPass(secrets: vscode.SecretStorage): Promise<LanguageModelChatInformation[] | null> {
+    // The catalog governs model behaviour (apiMode, thinking, vision, context
+    // limits) and the API base URL — it must be loaded first.
+    await ensureModelsDevLoaded();
 
-    const isDeprecated = entry?.status === "deprecated";
-    const rawName = entry?.name ?? modelId;
-    const displayName = isDeprecated ? `[Depr] ${rawName}` : rawName;
-    const contextLength = entry?.limit?.context ?? DEFAULT_CONTEXT_LENGTH;
-    const maxOutputTokens = entry?.limit?.output ?? DEFAULT_MAX_TOKENS;
-    const toolCalling = entry?.tool_call ?? true;
-    const thinkingMode = entry ? inferThinkingMode(entry) : "switchable";
-    const supportedReasoningEfforts = entry ? inferReasoningEfforts(entry) : undefined;
-    const defaultReasoningEffort = entry ? inferDefaultReasoningEffort(entry) : "enabled";
-    const vision = entry ? inferVision(entry) : false;
-    const status = entry?.status;
-    const cost = entry?.cost ?? { cache_read: 0, input: 0, output: 0 };
-    return { displayName, contextLength, maxOutputTokens, toolCalling, thinkingMode, supportedReasoningEfforts, defaultReasoningEffort, vision, status, entry, cost };
-}
+    const catalogIds = getCatalogProviderModelIds(GO_PROVIDER_ID);
+    if (catalogIds.length === 0) {
+        logger.info("models.discovery", {
+            action: "fallback",
+            reason: "catalog_empty_or_failed",
+        });
+        return null;
+    }
 
-/**
- * Build a LanguageModelChatInformation entry for an auto-discovered model.
- */
-function buildAutoDiscoveredInfo(
-    modelId: string,
-    entry: ModelsDevEntry | undefined
-): LanguageModelChatInformation {
-    const meta = resolveDiscoveredModelMeta(modelId);
-
-    const hasEfforts = meta.supportedReasoningEfforts && meta.supportedReasoningEfforts.length > 0;
-    let enumValues: string[];
-    if (meta.thinkingMode === "switchable") {
-        if (hasEfforts) {
-            enumValues = ["disabled", ...meta.supportedReasoningEfforts!];
-        } else {
-            enumValues = ["disabled", "enabled"];
-        }
-    } else {
-        if (hasEfforts) {
-            enumValues = [...meta.supportedReasoningEfforts!];
-        } else {
-            enumValues = ["enabled"];
+    // Optionally filter against the actual API model list
+    let availableIds = catalogIds;
+    const config = vscode.workspace.getConfiguration();
+    const enableAutoDiscovery = config.get<boolean>("opencodego.enableAutoModelDiscovery", true);
+    if (enableAutoDiscovery) {
+        const apiKey = await secrets.get("opencodego.apiKey");
+        const apiModelIds = await getApiModelIds(apiKey);
+        if (apiModelIds.size > 0) {
+            availableIds = catalogIds.filter((id) => apiModelIds.has(id));
         }
     }
 
-    const getLabel = (e: string): string => {
-        switch (e) {
-            case 'disabled': return l10n("Disabled");
-            case 'enabled': return l10n("Thinking");
-            case 'high': return l10n("High");
-            case 'max': return l10n("Maximum");
-            default: return e.charAt(0).toUpperCase() + e.slice(1);
-        }
-    };
-    const getDesc = (e: string): string => {
-        switch (e) {
-            case 'disabled': return l10n("Do not enable thinking");
-            case 'enabled': return l10n("Enable thinking");
-            case 'high': return l10n("Deeper thinking, slower response");
-            case 'max': return l10n("Maximum thinking depth, slowest response");
-            default: return e;
-        }
-    };
+    const infos = availableIds.map((id) => buildCatalogModelInfo(GO_PROVIDER_ID, id));
 
-    const enumItemLabels = enumValues.map(getLabel);
-    const enumDescriptions = enumValues.map(getDesc);
+    logger.info("models.discovery", {
+        action: "catalog_loaded",
+        catalogCount: catalogIds.length,
+        availableCount: infos.length,
+        ids: infos.map((i) => i.id).join(", "),
+    });
 
-    return {
-        id: modelId,
-        name: meta.displayName,
-        detail: "OpenCode Go",
-        tooltip: "OpenCode Go",
-        family: EXTENSION_LABEL,
-        version: "1.0.0",
-        maxInputTokens: meta.contextLength,
-        maxOutputTokens: meta.maxOutputTokens,
-        isUserSelectable: true,
-        capabilities: {
-            toolCalling: meta.toolCalling,
-            imageInput: true,
-        },
-        configurationSchema: {
-            properties: {
-                reasoningEffort: {
-                    type: "string",
-                    title: l10n("Reasoning Effort"),
-                    enum: enumValues,
-                    enumItemLabels: enumItemLabels,
-                    enumDescriptions: enumDescriptions,
-                    default: meta.defaultReasoningEffort,
-                    group: "navigation",
-                },
-            },
-        },
-    } satisfies LanguageModelChatInformation;
-}
-
-/**
- * Build and store an OpenCodeGoModelItem config for an auto-discovered model.
- */
-function storeAutoDiscoveredConfig(modelId: string, entry: ModelsDevEntry | undefined): OpenCodeGoModelItem {
-    const meta = resolveDiscoveredModelMeta(modelId);
-
-    const config: OpenCodeGoModelItem = {
-        id: modelId,
-        owned_by: "opencode",
-        displayName: meta.displayName,
-        baseUrl: getCatalogProviderBaseUrl("opencode-go", "https://opencode.ai/zen/go/v1/"),
-        vision: meta.vision,
-        supportsTemperature: meta.entry?.temperature ?? true,
-        context_length: meta.contextLength,
-        max_completion_tokens: meta.maxOutputTokens,
-        apiMode: deduceApiModeFromFamily(modelId, meta.entry),
-        enable_thinking: meta.thinkingMode !== "always",
-        include_reasoning_in_request: meta.thinkingMode !== "always",
-        thinkingMode: meta.thinkingMode,
-        cost: meta.cost,
-    };
-
-    if (meta.defaultReasoningEffort) {
-        config.reasoning_effort = meta.defaultReasoningEffort;
-    }
-
-    _autoDiscoveredConfigs.set(modelId, config);
-    return config;
-}
-
-export function getAutoDiscoveredModelConfig(modelId: string): OpenCodeGoModelItem | undefined {
-    const config = _autoDiscoveredConfigs.get(modelId);
-    return config ? { ...config } : undefined;
-}
-
-export function clearAutoDiscoveredConfigs(): void {
-    _autoDiscoveredConfigs.clear();
+    return infos;
 }
 
 async function waitForPendingUpdate(token: CancellationToken): Promise<void> {
@@ -181,108 +68,13 @@ async function waitForPendingUpdate(token: CancellationToken): Promise<void> {
     }
 }
 
-/**
- * Load models.dev metadata and map newly discovered API models.
- */
-async function processNewModels(
-    newModelIds: string[],
-    currentInfos: LanguageModelChatInformation[],
-    haveAPIKey: boolean,
-): Promise<LanguageModelChatInformation[]> {
-    if (newModelIds.length === 0) return currentInfos;
-
-    await ensureModelsDevLoaded();
-
-    const updatedInfos = [...currentInfos];
-    const addedModels: string[] = [];
-
-    for (const modelId of newModelIds) {
-        const entry = lookupModelDevEntry(modelId);
-        const newInfo = buildAutoDiscoveredInfo(modelId, entry);
-
-        updatedInfos.push(newInfo);
-        storeAutoDiscoveredConfig(modelId, entry);
-        addedModels.push(modelId);
-    }
-
-    if (addedModels.length > 0) {
-        logger.info("models.discovery", {
-            action: "added",
-            count: addedModels.length,
-            source: "auto-discovered" + (haveAPIKey ? " (API)" : " (stale)"),
-            infos: addedModels.join(", "),
-        });
-    }
-
-    return updatedInfos;
-}
-
-/**
- * Fetch remote model IDs and perform filtering/discovery logic.
- */
-async function runAutoDiscoveryPass(
-    secrets: vscode.SecretStorage
-): Promise<LanguageModelChatInformation[] | null> {
-    const apiKey = await secrets.get("opencodego.apiKey");
-
-    // Fetch the models.dev catalog FIRST — it governs model behaviour (apiMode,
-    // thinking, vision, context limits) and the API base URL. The model list
-    // fetch below depends on the catalog metadata, so it must come after.
-    await ensureModelsDevLoaded();
-
-    const apiModelIds = await getApiModelIds(apiKey);
-
-    if (!apiModelIds || apiModelIds.size === 0) {
-        logger.info("models.discovery", {
-            action: "fallback",
-            reason: "api_empty_or_failed",
-        });
-        return null;
-    }
-
-    // Print all fetched model IDs every time an actual API fetch takes place
-    const fetchedIdsArray = Array.from(apiModelIds);
-    logger.info("models.discovery", {
-        action: "fetched_api_ids",
-        count: fetchedIdsArray.length,
-        ids: fetchedIdsArray.join(", "),
-    });
-
-    const builtIn = getBuiltInModelInfos();
-    const filtered = builtIn.filter((info) => apiModelIds.has(info.id));
-    const removedCount = builtIn.length - filtered.length;
-
-    if (removedCount > 0) {
-        logger.info("models.discovery", {
-            action: "filtered",
-            removed: removedCount,
-            remaining: filtered.length,
-        });
-    }
-    // Only newly fetched IDs are discovered here. To refresh metadata (e.g.
-    // cost) for already-known models, iterate over all fetched IDs instead.
-    const existingIds = new Set(filtered.map((i) => i.id));
-    const newModelIds = fetchedIdsArray.filter((id) => !existingIds.has(id));
-
-    // Cleanup stored configs for models no longer returned by API
-    for (const key of _autoDiscoveredConfigs.keys()) {
-        if (!apiModelIds.has(key)) {
-            _autoDiscoveredConfigs.delete(key);
-        }
-    }
-
-    return processNewModels(newModelIds, filtered, !!apiKey);
-}
-
 export function resetAutoDiscoveryState(): void {
     isUpdatingModelsDev = false;
     lastModelsDevUpdate = 0;
     cachedDiscoveredInfos = null;
     cachedZenInfos = null;
     lastZenUpdate = 0;
-    _autoDiscoveredConfigs.clear();
     clearApiModelCache();
-    clearZenModelCache();
     clearModelsDevCache();
     logger.info("models.discovery", {
         action: "reset",
@@ -290,10 +82,10 @@ export function resetAutoDiscoveryState(): void {
 }
 
 /**
- * Fetch and append Zen free models with interval-based caching.
+ * Fetch the OpenCode Zen free model list from the catalog with interval caching.
+ * Only models with IDs ending in "-free" are included.
  */
 async function fetchZenFreeModelsCached(
-    secrets: vscode.SecretStorage,
     token: CancellationToken,
     updateInterval: number
 ): Promise<LanguageModelChatInformation[]> {
@@ -305,7 +97,9 @@ async function fetchZenFreeModelsCached(
     if (token.isCancellationRequested) return cachedZenInfos ?? [];
 
     try {
-        const zenInfos = await getZenFreeModelInfos(secrets);
+        await ensureModelsDevLoaded();
+        const zenIds = getCatalogProviderModelIds(ZEN_PROVIDER_ID).filter((id) => id.endsWith("-free"));
+        const zenInfos = zenIds.map((id) => buildCatalogModelInfo(ZEN_PROVIDER_ID, id));
         cachedZenInfos = zenInfos;
         lastZenUpdate = Date.now();
         if (zenInfos.length > 0) {
@@ -334,49 +128,41 @@ export async function prepareLanguageModelChatInformation(
     _secrets: vscode.SecretStorage
 ): Promise<LanguageModelChatInformation[]> {
     if (_token.isCancellationRequested) {
-        return cachedDiscoveredInfos ?? getBuiltInModelInfos();
+        return cachedDiscoveredInfos ?? [];
     }
 
     const config = vscode.workspace.getConfiguration();
-    const enableAutoDiscovery = config.get<boolean>("opencodego.enableAutoModelDiscovery", true);
-    // Very short interval (default 1 minute): acts as a rate limiter that dedupes
-    // the burst of concurrent activation calls VS Code fires on startup, while
-    // still refreshing on every activation and model-picker open past the interval.
     const updateInterval = config.get<number>("opencodego.modelsDevUpdateInterval", 60 * 1000);
     const now = Date.now();
 
-    // ── Auto Model Discovery Pipeline ──
-    if (enableAutoDiscovery) {
-        if (isUpdatingModelsDev) {
-            await waitForPendingUpdate(_token);
-        } else if (now - lastModelsDevUpdate >= updateInterval) {
-            isUpdatingModelsDev = true;
-            try {
-                if (!_token.isCancellationRequested) {
-                    const discovered = await runAutoDiscoveryPass(_secrets);
-                    if (discovered) {
-                        cachedDiscoveredInfos = discovered;
-                        lastModelsDevUpdate = Date.now();
-                    }
+    // ── Catalog Pass ──
+    if (isUpdatingModelsDev) {
+        await waitForPendingUpdate(_token);
+    } else if (now - lastModelsDevUpdate >= updateInterval) {
+        isUpdatingModelsDev = true;
+        try {
+            if (!_token.isCancellationRequested) {
+                const discovered = await runCatalogPass(_secrets);
+                if (discovered) {
+                    cachedDiscoveredInfos = discovered;
+                    lastModelsDevUpdate = Date.now();
                 }
-            } catch (error) {
-                logger.error("models.discovery", {
-                    action: "error",
-                    error: error instanceof Error ? error.message : String(error),
-                });
-            } finally {
-                isUpdatingModelsDev = false;
             }
+        } catch (error) {
+            logger.error("models.discovery", {
+                action: "error",
+                error: error instanceof Error ? error.message : String(error),
+            });
+        } finally {
+            isUpdatingModelsDev = false;
         }
     }
 
     // ── Assemble Base & Secondary Model Lists ──
-    const baseInfos = enableAutoDiscovery && cachedDiscoveredInfos
-        ? [...cachedDiscoveredInfos]
-        : getBuiltInModelInfos();
+    const baseInfos = cachedDiscoveredInfos ? [...cachedDiscoveredInfos] : [];
 
     const enableZen = config.get<boolean>("opencodego.enableZenFreeModels", false);
-    const zenInfos = enableZen ? await fetchZenFreeModelsCached(_secrets, _token, updateInterval) : [];
+    const zenInfos = enableZen ? await fetchZenFreeModelsCached(_token, updateInterval) : [];
 
     return [...baseInfos, ...zenInfos];
 }

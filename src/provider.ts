@@ -17,9 +17,8 @@ import type { ModelPreset, OpenCodeGoModelItem } from "./types";
 import { createRetryConfig, executeWithRetry, convertToolsToOpenAI } from "./utils";
 import { getCatalogProviderBaseUrl } from "./modelsDev";
 
-import { prepareLanguageModelChatInformation, getAutoDiscoveredModelConfig } from "./provideModel";
-import { getBuiltInModelConfig } from "./models";
-import { getZenFreeModelConfig } from "./zen/zenModels";
+import { prepareLanguageModelChatInformation } from "./provideModel";
+import { getCatalogModelConfig, resolveProviderForModelId } from "./catalogModels";
 import { l10nFormat } from "./localize";
 import { countMessageTokens, textTokenLength } from "./provideToken";
 import { updateContextStatusBar, recordUsage, updateCumulativeTooltip, updateStatusBarWithApiPrompt } from "./statusBar";
@@ -171,17 +170,10 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
         let dispatchFetch: typeof fetch;
 
         try {
-            // Get built-in model config (with fallback to Zen free model config, then auto-discovered)
+            // Resolve model config from the unified catalog layer (Go or Zen by ID suffix).
             const config = vscode.workspace.getConfiguration();
-            // Shallow copy to avoid mutating the shared built-in config singleton.
-            let um: OpenCodeGoModelItem | undefined = getBuiltInModelConfig(model.id);
-            if (um) { um = { ...um }; }
-            if (!um) {
-                um = await getZenFreeModelConfig(model.id);
-            }
-            if (!um) {
-                um = getAutoDiscoveredModelConfig(model.id);
-            }
+            // Shallow copy to avoid mutating the shared resolved config.
+            let um: OpenCodeGoModelItem | undefined = { ...getCatalogModelConfig(model.id) };
 
             // Apply reasoning effort from model configuration to determine thinking mode
             // - "disabled" → turn off thinking (unless model has thinkingMode="always")
@@ -532,17 +524,15 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
             // Detect Zen free model expiration: a 401 from a Zen free model
             // means the free promotion has ended (error text may vary - don't match on it)
-            if (errMessage.includes("[401]")) {
-                const zenConfig = await getZenFreeModelConfig(model.id);
-                if (zenConfig) {
-                    const zenModelName = zenConfig.displayName ?? model.id;
-                    logger.error("request.error", {
-                        modelId: model.id,
-                        error: "zen_free_model_expired",
-                        errorMessage: errMessage,
-                    });
-                    throw new Error(l10nFormat("{0} is no longer available as a free model. Please use a different model.", zenModelName));
-                }
+            if (errMessage.includes("[401]") && resolveProviderForModelId(model.id) === "opencode") {
+                const zenConfig = getCatalogModelConfig(model.id);
+                const zenModelName = zenConfig.displayName ?? model.id;
+                logger.error("request.error", {
+                    modelId: model.id,
+                    error: "zen_free_model_expired",
+                    errorMessage: errMessage,
+                });
+                throw new Error(l10nFormat("{0} is no longer available as a free model. Please use a different model.", zenModelName));
             }
 
             // Detect image content moderation rejection from the API
