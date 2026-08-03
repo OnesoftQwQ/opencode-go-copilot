@@ -18,7 +18,7 @@ import { createRetryConfig, executeWithRetry, convertToolsToOpenAI } from "./uti
 import { getCatalogProviderBaseUrl } from "./modelsDev";
 
 import { prepareLanguageModelChatInformation } from "./provideModel";
-import { getCatalogModelConfig, resolveProviderForModelId } from "./catalogModels";
+import { getCatalogModelConfig, resolveProviderForModelId, resolveVisionProxyModelId } from "./catalogModels";
 import { l10nFormat } from "./localize";
 import { countMessageTokens, textTokenLength } from "./provideToken";
 import { updateContextStatusBar, recordUsage, updateCumulativeTooltip, updateStatusBarWithApiPrompt } from "./statusBar";
@@ -600,7 +600,9 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
         }
 
         const config = vscode.workspace.getConfiguration();
-        const visionModelId = config.get<string>("opencodego.visionProxyModel", "qwen3.6-plus");
+        const visionModelId = await resolveVisionProxyModelId(
+            config.get<string>("opencodego.visionProxyModel", "qwen-plus-latest")
+        );
         const maxRounds = config.get<number>("opencodego.visionMaxRounds", 5);
 
         // Accumulate messages across rounds

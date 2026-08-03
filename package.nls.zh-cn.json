@@ -42,7 +42,7 @@
 	"config.modelPreset.label.desc": "预设档位的显示名称。",
 	"config.modelPreset.temperature.desc": "温度值 (0.0 - 2.0)。",
 	"config.modelPreset.top_p.desc": "top_p 值 (0.0 - 1.0)。",
-	"config.visionProxyModel.desc": "用于 ask_image 工具的视觉模型 ID。当所选模型不支持视觉时，该模型用于回答图片相关问题。",
+	"config.visionProxyModel.desc": "用于 ask_image 工具的视觉模型 ID。当所选模型不支持视觉时，该模型用于回答图片相关问题。特殊值 \"qwen-plus-latest\"（默认）会自动选择 models.dev 目录中最新版本的 qwen*-plus 模型。",
 	"config.visionProxyThinking.desc": "在视觉代理模型回答图片查询时启用思考/推理功能。",
 	"config.enableThirdPartyTokenIndicator.desc": "启用高级 Token 指示器。Copilot 原生 Token 指示器始终保持开启。开启后，扩展还会在 VS Code 状态栏中显示高级Token计数器。默认: 开启。",
 	"config.delay.desc": "连续 API 请求之间的延迟时间（毫秒），用于避免触发频率限制。设为 0 表示不延迟。默认值: 0。",

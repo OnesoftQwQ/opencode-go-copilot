@@ -42,7 +42,7 @@
 	"config.modelPreset.label.desc": "Display name of the preset.",
 	"config.modelPreset.temperature.desc": "Temperature value (0.0 - 2.0).",
 	"config.modelPreset.top_p.desc": "top_p value (0.0 - 1.0).",
-	"config.visionProxyModel.desc": "Vision model ID used by the ask_image tool to answer questions about attached images when the selected model does not support vision.",
+	"config.visionProxyModel.desc": "Vision model ID used by the ask_image tool to answer questions about attached images when the selected model does not support vision. The special value \"qwen-plus-latest\" (default) automatically picks the newest qwen*-plus model from the models.dev catalog.",
 	"config.visionProxyThinking.desc": "Enable thinking/reasoning in the vision proxy model when answering image queries.",
 	"config.enableThirdPartyTokenIndicator.desc": "Enable the Advanced Token indicator in the status bar. The native Copilot token indicator always shows. When this is enabled, the extension also shows an advanced token counter in the VS Code status bar. Default: true.",
 	"config.delay.desc": "Delay in milliseconds between consecutive API requests to avoid rate limiting. Set to 0 for no delay. Default: 0.",

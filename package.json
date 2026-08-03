@@ -354,7 +354,7 @@
 				},
 				"opencodego.visionProxyModel": {
 					"type": "string",
-					"default": "qwen3.6-plus",
+					"default": "qwen-plus-latest",
 					"description": "%config.visionProxyModel.desc%"
 				},
 				"opencodego.visionProxyThinking": {

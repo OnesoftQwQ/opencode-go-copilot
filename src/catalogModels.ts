@@ -18,8 +18,10 @@ import { l10n } from "./localize";
 import { MODEL_OVERRIDES, type ModelMetaOverride } from "./modelOverrides";
 import {
     deduceApiModeFromFamily,
+    ensureModelsDevLoaded,
     getCatalogProviderBaseUrl,
     getCatalogProviderModelEntry,
+    getCatalogProviderModelIds,
     inferDefaultReasoningEffort,
     inferReasoningEfforts,
     inferThinkingBudget,
@@ -204,6 +206,55 @@ function buildReasoningEnum(meta: ModelMeta): {
         enumDescriptions: enumValues.map(getDesc),
         defaultEffort,
     };
+}
+
+/**
+ * Special vision proxy model ID that resolves to the newest qwen*-plus model.
+ */
+export const VISION_PROXY_LATEST_ALIAS = "qwen-plus-latest";
+
+/**
+ * Compare two model versions numerically (e.g. "3.10" > "3.9").
+ */
+function compareVersions(a: string, b: string): number {
+    const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
+    const pb = b.split(".").map((n) => parseInt(n, 10) || 0);
+    const len = Math.max(pa.length, pb.length);
+    for (let i = 0; i < len; i++) {
+        const va = pa[i] ?? 0;
+        const vb = pb[i] ?? 0;
+        if (va !== vb) return va - vb;
+    }
+    return 0;
+}
+
+/**
+ * Resolve the vision proxy model ID.
+ *
+ * The special value "qwen-plus-latest" (the default) resolves to the newest
+ * qwen*-plus model served by the opencode-go provider in the catalog
+ * (e.g. qwen3.8-plus over qwen3.7-plus). Any other value is returned unchanged.
+ * Falls back to the alias itself when the catalog has no qwen*-plus model.
+ */
+export async function resolveVisionProxyModelId(configuredId: string): Promise<string> {
+    if (configuredId !== VISION_PROXY_LATEST_ALIAS) {
+        return configuredId;
+    }
+    try {
+        await ensureModelsDevLoaded();
+        const ids = getCatalogProviderModelIds("opencode-go");
+        const plusModels = ids
+            .filter((id) => /^qwen[\d.]*-plus$/.test(id))
+            .filter((id) => !isModelDeprecated("opencode-go", id))
+            .sort((a, b) => {
+                const va = (a.match(/^qwen([\d.]+)-plus$/) ?? [])[1] ?? "";
+                const vb = (b.match(/^qwen([\d.]+)-plus$/) ?? [])[1] ?? "";
+                return compareVersions(vb, va);
+            });
+        return plusModels[0] ?? VISION_PROXY_LATEST_ALIAS;
+    } catch {
+        return VISION_PROXY_LATEST_ALIAS;
+    }
 }
 
 /**
