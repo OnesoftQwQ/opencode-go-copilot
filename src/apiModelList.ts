@@ -84,11 +84,10 @@ export async function getApiModelIds(apiKey: string | undefined): Promise<Set<st
     }
 
     try {
-        // TODO: Consider filtering out unknown model ids based on the models.dev
-        // As of 30/7/2026, hy3-preview falsely listed as a valid go model
-        // But calling it results in failure, and it is not listed in models.dev catalog
-        // Models.dev is also maintained by the same org behind opencode
-        // Can consider as more "reliable" source of truth for valid model ids?
+        // TODO: Consider filtering model IDs against the models.dev catalog.
+        // As of 2026-07-30, hy3-preview is wrongly listed as a valid Go model
+        // (calls fail, and it is absent from the catalog), so the catalog
+        // could serve as a source of truth for valid model IDs.
         const ids = await fetchApiModelList(apiKey);
         cachedModelIds = ids;
         cacheTimestamp = now;
