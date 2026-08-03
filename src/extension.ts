@@ -6,6 +6,7 @@ import { l10n, l10nFormat } from "./localize";
 import type { ModelPreset } from "./types";
 import { abortCommitGeneration, generateCommitMsg } from "./gitCommit/commitMessageGenerator";
 import { TokenizerManager } from "./tokenizer/tokenizerManager";
+import { prepareLanguageModelChatInformation, resetAutoDiscoveryState } from "./provideModel";
 
 // ---- Walkthrough / Welcome constants ----
 
@@ -58,6 +59,21 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // manually trigger model list update command
+    context.subscriptions.push(
+        vscode.commands.registerCommand("opencodego.updateModelList", async () => {
+            try {
+                // dummy silent option, not used
+                resetAutoDiscoveryState();
+                await prepareLanguageModelChatInformation({ silent: true }, new vscode.CancellationTokenSource().token, context.secrets);
+                vscode.window.showInformationMessage(l10n("OpenCode Go model list updated successfully."));
+            } catch (error) {
+                logger.error("models.update.failed", { error: String(error) });
+                vscode.window.showErrorMessage(l10n("Failed to update OpenCode Go model list. See output for details."));
+            }
+        })
+    );
+
     // Command to open the OpenCode Go website to get an API key
     context.subscriptions.push(
         vscode.commands.registerCommand("opencodego.getApiKey", () => {
@@ -79,7 +95,7 @@ export function activate(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand("opencodego.abortGitCommitMessage", () => {
             abortCommitGeneration();
-        })
+        }),
     );
 
     // Register the setModelPreset command: user can select a preset via QuickPick
@@ -195,6 +211,22 @@ export function activate(context: vscode.ExtensionContext) {
             }
         })
     );
+
+    // Warm up model discovery on every activation (non-blocking, fire-and-forget).
+    // VS Code may fire several activation events at startup; the short refresh
+    // interval in prepareLanguageModelChatInformation (default 1 minute) dedupes
+    // concurrent calls so the API is not spammed. The models.dev catalog is
+    // fetched before the model list. On failure it degrades silently to the
+    // built-in model list.
+    void prepareLanguageModelChatInformation(
+        { silent: true },
+        new vscode.CancellationTokenSource().token,
+        context.secrets
+    ).catch((error) => {
+        logger.error("models.warmup.failed", {
+            error: error instanceof Error ? error.message : String(error),
+        });
+    });
 
     // Show welcome walkthrough on first install (when no API key is configured)
     showWelcomeIfNeeded(context);

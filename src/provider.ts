@@ -15,10 +15,10 @@ import * as path from "path";
 import type { ModelPreset, OpenCodeGoModelItem } from "./types";
 
 import { createRetryConfig, executeWithRetry, convertToolsToOpenAI } from "./utils";
+import { getCatalogProviderBaseUrl } from "./modelsDev";
 
-import { prepareLanguageModelChatInformation, getAutoDiscoveredModelConfig } from "./provideModel";
-import { getBuiltInModelConfig } from "./models";
-import { getZenFreeModelConfig } from "./zen/zenModels";
+import { prepareLanguageModelChatInformation } from "./provideModel";
+import { getCatalogModelConfig, resolveProviderForModelId, resolveVisionProxyModelId } from "./catalogModels";
 import { l10nFormat } from "./localize";
 import { countMessageTokens, textTokenLength } from "./provideToken";
 import { updateContextStatusBar, recordUsage, updateCumulativeTooltip, updateStatusBarWithApiPrompt } from "./statusBar";
@@ -29,6 +29,8 @@ import { CommonApi, type StreamUsage } from "./commonApi";
 import { callVisionModel, callVisionModelMulti } from "./vision/imageProxy";
 import { ASK_IMAGE_TOOL_NAME, ASK_IMAGE_TOOL_DEF, ASK_WITH_MULTI_IMAGE_TOOL_NAME, ASK_WITH_MULTI_IMAGE_TOOL_DEF } from "./vision/types";
 import type { InterceptedToolCall, StoredImage } from "./vision/types";
+import { createVisionToolHistoryPart } from "./vision/historyPart";
+import type { VisionToolHistoryEntry } from "./vision/historyCodec";
 import { logger } from "./logger";
 import { l10n } from "./localize";
 
@@ -168,15 +170,10 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
         let dispatchFetch: typeof fetch;
 
         try {
-            // Get built-in model config (with fallback to Zen free model config, then auto-discovered)
+            // Resolve model config from the unified catalog layer (Go or Zen by ID suffix).
             const config = vscode.workspace.getConfiguration();
-            let um: OpenCodeGoModelItem | undefined = getBuiltInModelConfig(model.id);
-            if (!um) {
-                um = getZenFreeModelConfig(model.id);
-            }
-            if (!um) {
-                um = getAutoDiscoveredModelConfig(model.id);
-            }
+            // Shallow copy to avoid mutating the shared resolved config.
+            let um: OpenCodeGoModelItem | undefined = { ...getCatalogModelConfig(model.id) };
 
             // Apply reasoning effort from model configuration to determine thinking mode
             // - "disabled" → turn off thinking (unless model has thinkingMode="always")
@@ -233,7 +230,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
             // Determine API mode from model config (default: openai)
             const apiMode = um?.apiMode || "openai";
-            const baseUrl = um?.baseUrl || "https://opencode.ai/zen/go/v1/";
+            const baseUrl = um?.baseUrl || getCatalogProviderBaseUrl("opencode-go", "https://opencode.ai/zen/go/v1/");
 
             logger.info("request.start", {
                 modelId: model.id,
@@ -280,10 +277,22 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 throw new Error(l10n("OpenCode Go API key not found"));
             }
 
-            // Send chat request
+            // Send chat request — validate base URL (reject plain HTTP for remote addresses)
             const BASE_URL = baseUrl;
             if (!BASE_URL || !BASE_URL.startsWith("http")) {
                 throw new Error(l10n("Invalid base URL configuration."));
+            }
+            {
+                const url = new URL(BASE_URL);
+                if (url.protocol === "http:") {
+                    const host = url.hostname.toLowerCase();
+                    const isLocal = host === "localhost" || host === "127.0.0.1" || host === "::1"
+                        || host.startsWith("192.168.") || host.startsWith("10.") || host === "0.0.0.0"
+                        || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+                    if (!isLocal) {
+                        throw new Error(l10n("Plain HTTP is only allowed for localhost or private network addresses. Use HTTPS for remote endpoints."));
+                    }
+                }
             }
 
             // Get retry config
@@ -491,8 +500,8 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 !isTimeout &&
                 !isUserCancelled &&
                 (errMessage.includes("terminated") ||
-                 errMessage.includes("aborted") ||
-                 (err instanceof Error && err.name === "AbortError"));
+                    errMessage.includes("aborted") ||
+                    (err instanceof Error && err.name === "AbortError"));
 
             // If user cancelled, just re-throw the original error without wrapping
             if (isUserCancelled) {
@@ -514,8 +523,9 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
             // Detect Zen free model expiration: a 401 from a Zen free model
             // means the free promotion has ended (error text may vary - don't match on it)
-            if (errMessage.includes("[401]") && getZenFreeModelConfig(model.id)) {
-                const zenModelName = getZenFreeModelConfig(model.id)?.displayName ?? model.id;
+            if (errMessage.includes("[401]") && resolveProviderForModelId(model.id) === "opencode") {
+                const zenConfig = getCatalogModelConfig(model.id);
+                const zenModelName = zenConfig.displayName ?? model.id;
                 logger.error("request.error", {
                     modelId: model.id,
                     error: "zen_free_model_expired",
@@ -590,7 +600,9 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
         }
 
         const config = vscode.workspace.getConfiguration();
-        const visionModelId = config.get<string>("opencodego.visionProxyModel", "qwen3.6-plus");
+        const visionModelId = await resolveVisionProxyModelId(
+            config.get<string>("opencodego.visionProxyModel", "qwen-plus-latest")
+        );
         const maxRounds = config.get<number>("opencodego.visionMaxRounds", 5);
 
         // Accumulate messages across rounds
@@ -694,6 +706,24 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             params.trackingProgress.report(
                 new vscode.LanguageModelThinkingPart("", textBlockId) as unknown as LanguageModelResponsePart
             );
+
+            // Persist the completed internal tool exchange in the response
+            // stream. VS Code can carry this DataPart into the next request;
+            // the API converters then rebuild the standard tool messages.
+            const previousReasoning = params.apiMode === "openai"
+                ? ((api as any)._capturedReasoningContent as string | undefined)
+                : undefined;
+            const historyEntry: VisionToolHistoryEntry = {
+                id: intercepted.id,
+                name: intercepted.name as VisionToolHistoryEntry["name"],
+                args: intercepted.args,
+                result: description,
+                ...(previousReasoning !== undefined ? { reasoningContent: previousReasoning } : {}),
+            };
+            params.trackingProgress.report(
+                createVisionToolHistoryPart(historyEntry) as unknown as LanguageModelResponsePart
+            );
+
             if (params.token.isCancellationRequested) {
                 logger.info("vision.skipped-round", { round, reason: "user_cancelled" });
                 break;
@@ -718,85 +748,87 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             }
 
             try {
-            if (params.apiMode === "anthropic") {
-                // Anthropic format: tool_use + tool_result
-                currentMessages.push({
-                    role: "assistant" as const,
-                    content: [
-                        { type: "tool_use" as const, id: intercepted.id, name: intercepted.name, input: intercepted.args },
-                    ],
-                });
-                currentMessages.push({
-                    role: "user" as const,
-                    content: [
-                        { type: "tool_result" as const, tool_use_id: intercepted.id, content: description },
-                    ],
-                });
-
-                const body: Record<string, unknown> = {
-                    model: params.um?.id ?? params.model.id,
-                    messages: currentMessages,
-                    stream: true,
-                };
-                if (params.um?.max_completion_tokens !== undefined) {
-                    body.max_tokens = params.um.max_completion_tokens;
-                } else if (params.um?.max_tokens !== undefined) {
-                    body.max_tokens = params.um.max_tokens;
-                }
-                if (params.um?.temperature !== undefined && params.um.temperature !== null) {
-                    if (params.um.supportsTemperature !== false) {
-                        body.temperature = params.um.temperature;
-                    }
-                }
-                const systemContent = (params.api as any)._systemContent as string | undefined;
-                if (systemContent) {
-                    body.system = systemContent;
-                }
-                if (params.um?.enable_thinking === true) {
-                    if (params.um?.reasoning_effort === 'adaptive') {
-                        body.thinking = { type: "adaptive" };
-                    } else {
-                        body.thinking = { type: "enabled", budget_tokens: 8192 };
-                    }
-                }
-
-                // Inject tools (VS Code + ask_image + ask_with_multi_image)
-                const anthropicToolList: Array<{ name: string; description?: string; input_schema?: object }> = [];
-                const toolConfig = convertToolsToOpenAI(params.options);
-                if (toolConfig.tools) {
-                    for (const tool of toolConfig.tools) {
-                        anthropicToolList.push({
-                            name: tool.function.name,
-                            description: tool.function.description,
-                            input_schema: tool.function.parameters,
-                        });
-                    }
-                }
-                if (hasLocalImages) {
-                    const singleDef = ASK_IMAGE_TOOL_DEF as unknown as { function: { name: string; description: string; parameters: object } };
-                    anthropicToolList.push({
-                        name: singleDef.function.name,
-                        description: singleDef.function.description,
-                        input_schema: singleDef.function.parameters,
+                if (params.apiMode === "anthropic") {
+                    // Anthropic format: tool_use + tool_result
+                    currentMessages.push({
+                        role: "assistant" as const,
+                        content: [
+                            { type: "tool_use" as const, id: intercepted.id, name: intercepted.name, input: intercepted.args },
+                        ],
                     });
-                    if (((api as any)._localImages as any[])?.length >= 2) {
-                        const multiDef = ASK_WITH_MULTI_IMAGE_TOOL_DEF as unknown as { function: { name: string; description: string; parameters: object } };
-                        anthropicToolList.push({
-                            name: multiDef.function.name,
-                            description: multiDef.function.description,
-                            input_schema: multiDef.function.parameters,
-                        });
-                    }
-                }
-                if (anthropicToolList.length > 0) {
-                    body.tools = anthropicToolList;
-                }
-                // Allow the model to freely call ask_image again in this round
-                if (hasLocalImages) {
-                    body.tool_choice = { type: "auto" };
-                }
+                    currentMessages.push({
+                        role: "user" as const,
+                        content: [
+                            { type: "tool_result" as const, tool_use_id: intercepted.id, content: description },
+                        ],
+                    });
 
-                const normalizedUrl = params.baseUrl.replace(/\/+$/, "");
+                    const body: Record<string, unknown> = {
+                        model: params.um?.id ?? params.model.id,
+                        messages: currentMessages,
+                        stream: true,
+                    };
+                    if (params.um?.max_completion_tokens !== undefined) {
+                        body.max_tokens = params.um.max_completion_tokens;
+                    } else if (params.um?.max_tokens !== undefined) {
+                        body.max_tokens = params.um.max_tokens;
+                    }
+                    if (params.um?.temperature !== undefined && params.um.temperature !== null) {
+                        if (params.um.supportsTemperature !== false) {
+                            body.temperature = params.um.temperature;
+                        }
+                    }
+                    const systemContent = (params.api as any)._systemContent as string | undefined;
+                    if (systemContent) {
+                        body.system = systemContent;
+                    }
+                    if (params.um?.enable_thinking === true) {
+                        if (params.um?.reasoning_effort === 'adaptive') {
+                            body.thinking = { type: "adaptive" };
+                        } else {
+                            body.thinking = { type: "enabled", budget_tokens: 8192 };
+                        }
+                    } else {
+                        body.thinking = { type: "disabled" as const };
+                    }
+
+                    // Inject tools (VS Code + ask_image + ask_with_multi_image)
+                    const anthropicToolList: Array<{ name: string; description?: string; input_schema?: object }> = [];
+                    const toolConfig = convertToolsToOpenAI(params.options);
+                    if (toolConfig.tools) {
+                        for (const tool of toolConfig.tools) {
+                            anthropicToolList.push({
+                                name: tool.function.name,
+                                description: tool.function.description,
+                                input_schema: tool.function.parameters,
+                            });
+                        }
+                    }
+                    if (hasLocalImages) {
+                        const singleDef = ASK_IMAGE_TOOL_DEF as unknown as { function: { name: string; description: string; parameters: object } };
+                        anthropicToolList.push({
+                            name: singleDef.function.name,
+                            description: singleDef.function.description,
+                            input_schema: singleDef.function.parameters,
+                        });
+                        if (((api as any)._localImages as any[])?.length >= 2) {
+                            const multiDef = ASK_WITH_MULTI_IMAGE_TOOL_DEF as unknown as { function: { name: string; description: string; parameters: object } };
+                            anthropicToolList.push({
+                                name: multiDef.function.name,
+                                description: multiDef.function.description,
+                                input_schema: multiDef.function.parameters,
+                            });
+                        }
+                    }
+                    if (anthropicToolList.length > 0) {
+                        body.tools = anthropicToolList;
+                    }
+                    // Allow the model to freely call ask_image again in this round
+                    if (hasLocalImages) {
+                        body.tool_choice = { type: "auto" };
+                    }
+
+                    const normalizedUrl = params.baseUrl.replace(/\/+$/, "");
                     const url = normalizedUrl.endsWith("/v1")
                         ? `${normalizedUrl}/messages`
                         : `${normalizedUrl}/v1/messages`;
@@ -824,7 +856,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     // DeepSeek thinking mode requires the original reasoning_content to be echoed back
                     // verbatim on every assistant message that follows a tool call — hardcoded strings
                     // or empty values cause the model to break (infinite tool loops or 400 errors).
-                    const prevReasoning = (api as any)._capturedReasoningContent ?? "";
+                    const prevReasoning = previousReasoning ?? "";
                     (api as any)._capturedReasoningContent = "";
                     currentMessages.push({
                         role: "assistant" as const,

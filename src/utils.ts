@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import type { OpenCodeGoModelItem, RetryConfig } from "./types";
 import type { StoredImage } from "./vision/types";
 import { OpenAIFunctionToolDef } from "./openai/openaiTypes";
+import { CancellationToken } from "vscode";
 
 const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_INTERVAL_MS = 1000;
@@ -348,4 +349,21 @@ export function tryParseJSONObject(
     } catch {
         return { ok: false };
     }
+}
+
+
+export function delay(ms: number, token?: CancellationToken): Promise<void> {
+    return new Promise((resolve) => {
+        if (token?.isCancellationRequested) {
+            return resolve();
+        }
+        const timer = setTimeout(() => {
+            disposable?.dispose();
+            resolve();
+        }, ms);
+        const disposable = token?.onCancellationRequested(() => {
+            clearTimeout(timer);
+            resolve();
+        });
+    });
 }

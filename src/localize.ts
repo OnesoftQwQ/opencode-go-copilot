@@ -17,6 +17,8 @@ const zhCN: Record<string, string> = {
 	// provider.ts
 	"OpenCode Go API key not found": "未找到 OpenCode Go API 密钥",
 	"Invalid base URL configuration.": "无效的 Base URL 配置。",
+	"Plain HTTP is only allowed for localhost or private network addresses. Use HTTPS for remote endpoints.":
+		"纯 HTTP 仅允许用于本地或私有网络地址，远程端点请使用 HTTPS。",
 
 	// statusBar cache tooltip
 	"Cache": "缓存",
@@ -45,19 +47,24 @@ const zhCN: Record<string, string> = {
 	"Low": "低",
 	"Medium": "中",
 	"High": "高",
-	"Maximum": "极高",
+	"Extra High": "超高",
+	"Maximum": "最高",
 
 	// reasoning effort descriptions (keys are English fallback text)
 	"Do not enable thinking": "不启用思考",
 	"Automatically decide when to think": "自动决定何时思考",
 	"Enable thinking": "启用思考",
-	"Reduce thinking, faster response": "减少思考，响应更快",
+	"Reduce thinking, faster response": "减少思考，更快响应",
 	"Balance thinking and speed": "平衡思考与速度",
-	"Deeper thinking, slower response": "更深入的思考，但速度较慢",
-	"Maximum thinking depth, slowest response": "最大思考深度，速度最慢",
+	"Deeper thinking, slower response": "更深入思考，响应较慢",
+	"Very deep thinking, slower response": "非常深入的思考，响应很慢",
+	"Maximum thinking depth, slowest response": "最大思考深度，响应最慢",
 
 	// reasoning effort title (key is English fallback text)
 	"Reasoning Effort": "推理强度",
+
+	// deprecated model marker (shown when opencodego.showDeprecatedModels is enabled)
+	"[Depr] ": "[已弃用] ",
 
 	// vision proxy
 	"Querying vision model: \"{0}\"": "正在根据图片提问：{0}",
