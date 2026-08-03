@@ -207,15 +207,24 @@ function buildReasoningEnum(meta: ModelMeta): {
 }
 
 /**
+ * Check whether a model is marked as deprecated in the catalog.
+ * Deprecated models are hidden from the model picker unless the user opts in.
+ */
+export function isModelDeprecated(providerId: ProviderId, modelId: string): boolean {
+    return resolveModelMeta(providerId, modelId).status === "deprecated";
+}
+
+/**
  * Build a LanguageModelChatInformation entry (model picker) for a model.
  */
 export function buildCatalogModelInfo(providerId: ProviderId, modelId: string): LanguageModelChatInformation {
     const meta = resolveModelMeta(providerId, modelId);
     const label = PROVIDER_LABELS[providerId];
-    const isDeprecated = meta.status === "deprecated";
+    // Deprecated models keep a visible marker when shown (opt-in setting)
+    const deprecatedPrefix = meta.status === "deprecated" ? l10n("[Depr] ") : "";
     // Zen free models: append " Free" only when the catalog name doesn't already carry it
     const nameSuffix = label.nameSuffix && !/\bfree\b/i.test(meta.displayName) ? label.nameSuffix : "";
-    const name = `${isDeprecated ? `${l10n("[Depr] ")}` : ""}${meta.displayName}${nameSuffix}`;
+    const name = `${deprecatedPrefix}${meta.displayName}${nameSuffix}`;
     const { enumValues, enumItemLabels, enumDescriptions, defaultEffort } = buildReasoningEnum(meta);
 
     return {

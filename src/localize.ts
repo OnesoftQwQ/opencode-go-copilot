@@ -63,7 +63,7 @@ const zhCN: Record<string, string> = {
 	// reasoning effort title (key is English fallback text)
 	"Reasoning Effort": "推理强度",
 
-	// deprecated model marker
+	// deprecated model marker (shown when opencodego.showDeprecatedModels is enabled)
 	"[Depr] ": "[已弃用] ",
 
 	// vision proxy

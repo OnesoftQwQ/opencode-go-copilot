@@ -283,6 +283,11 @@
 					"default": true,
 					"description": "%config.enableAutoModelDiscovery.desc%"
 				},
+				"opencodego.showDeprecatedModels": {
+					"type": "boolean",
+					"default": false,
+					"description": "%config.showDeprecatedModels.desc%"
+				},
 				"opencodego.modelsDevUpdateInterval": {
 					"type": "number",
 					"default": 60000,

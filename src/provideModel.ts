@@ -4,7 +4,7 @@ import { CancellationToken, LanguageModelChatInformation, PrepareLanguageModelCh
 import { logger } from "./logger";
 import { getApiModelIds, clearApiModelCache } from "./apiModelList";
 import { ensureModelsDevLoaded, clearModelsDevCache, getCatalogProviderModelIds } from "./modelsDev";
-import { buildCatalogModelInfo } from "./catalogModels";
+import { buildCatalogModelInfo, isModelDeprecated } from "./catalogModels";
 import { delay } from "./utils";
 
 const GO_PROVIDER_ID = "opencode-go";
@@ -50,7 +50,11 @@ async function runCatalogPass(secrets: vscode.SecretStorage): Promise<LanguageMo
         }
     }
 
-    const infos = availableIds.map((id) => buildCatalogModelInfo(GO_PROVIDER_ID, id));
+    // Drop deprecated models from the picker unless the user opts in to see them
+    const showDeprecated = vscode.workspace.getConfiguration().get<boolean>("opencodego.showDeprecatedModels", false);
+    const infos = availableIds
+        .filter((id) => showDeprecated || !isModelDeprecated(GO_PROVIDER_ID, id))
+        .map((id) => buildCatalogModelInfo(GO_PROVIDER_ID, id));
 
     logger.info("models.discovery", {
         action: "catalog_loaded",
@@ -98,7 +102,10 @@ async function fetchZenFreeModelsCached(
 
     try {
         await ensureModelsDevLoaded();
-        const zenIds = getCatalogProviderModelIds(ZEN_PROVIDER_ID).filter((id) => id.endsWith("-free"));
+        const showDeprecated = vscode.workspace.getConfiguration().get<boolean>("opencodego.showDeprecatedModels", false);
+        const zenIds = getCatalogProviderModelIds(ZEN_PROVIDER_ID)
+            .filter((id) => id.endsWith("-free"))
+            .filter((id) => showDeprecated || !isModelDeprecated(ZEN_PROVIDER_ID, id));
         const zenInfos = zenIds.map((id) => buildCatalogModelInfo(ZEN_PROVIDER_ID, id));
         cachedZenInfos = zenInfos;
         lastZenUpdate = Date.now();
