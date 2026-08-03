@@ -47,7 +47,8 @@ const zhCN: Record<string, string> = {
 	"Low": "低",
 	"Medium": "中",
 	"High": "高",
-	"Maximum": "极高",
+	"Extra High": "极高",
+	"Maximum": "最高",
 
 	// reasoning effort descriptions (keys are English fallback text)
 	"Do not enable thinking": "不启用思考",
@@ -56,6 +57,7 @@ const zhCN: Record<string, string> = {
 	"Reduce thinking, faster response": "减少思考，响应更快",
 	"Balance thinking and speed": "平衡思考与速度",
 	"Deeper thinking, slower response": "更深入的思考，但速度较慢",
+	"Very deep thinking, slower response": "非常深入的思考，速度较慢",
 	"Maximum thinking depth, slowest response": "最大思考深度，速度最慢",
 
 	// reasoning effort title (key is English fallback text)
