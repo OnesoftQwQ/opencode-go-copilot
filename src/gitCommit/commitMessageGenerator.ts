@@ -245,8 +245,7 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
         if (!baseUrl || !baseUrl.startsWith("http")) {
             throw new Error(l10n("Invalid base URL configuration."));
         }
-        const httpAllowInsecure = config.get<boolean>("opencodego.httpAllowInsecure", false);
-        if (!httpAllowInsecure) {
+        {
             const url = new URL(baseUrl);
             if (url.protocol === "http:") {
                 const host = url.hostname.toLowerCase();

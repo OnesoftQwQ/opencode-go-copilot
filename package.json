@@ -367,11 +367,6 @@
 					"default": true,
 					"description": "%config.enableThirdPartyTokenIndicator.desc%"
 				},
-				"opencodego.httpAllowInsecure": {
-					"type": "boolean",
-					"default": false,
-					"description": "%opencodego.config.httpAllowInsecure%"
-				},
 				"opencodego.visionMaxRounds": {
 					"type": "number",
 					"default": 5,
