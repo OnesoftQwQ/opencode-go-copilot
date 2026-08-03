@@ -352,9 +352,20 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
         if (um?.presence_penalty !== undefined) { rb.presence_penalty = um.presence_penalty; }
         if (um?.repetition_penalty !== undefined) { rb.repetition_penalty = um.repetition_penalty; }
 
-        // Extra body parameters
+        // Extra body parameters (filter reserved keys with warning)
+        const OPENAI_RESERVED_EXTRA_KEYS = new Set([
+            "model", "messages", "stream", "temperature", "top_p",
+            "max_tokens", "max_completion_tokens", "tools", "tool_choice", "stop",
+            "reasoning_effort", "thinking", "top_k", "min_p",
+            "frequency_penalty", "presence_penalty", "repetition_penalty",
+            "stream_options", "reasoning",
+        ]);
         if (um?.extra && typeof um.extra === "object") {
             for (const [key, value] of Object.entries(um.extra)) {
+                if (OPENAI_RESERVED_EXTRA_KEYS.has(key)) {
+                    logger.warn("extra.conflict", { key, file: "openaiApi" });
+                    continue;
+                }
                 if (value !== undefined) {
                     rb[key] = value;
                 }

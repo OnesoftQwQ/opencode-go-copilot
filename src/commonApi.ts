@@ -10,9 +10,10 @@ import {
 } from "vscode";
 import { OpenCodeGoModelItem } from "./types";
 import { tryParseJSONObject } from "./utils";
+import { VersionManager } from "./versionManager";
 import type { InterceptedToolCall, StoredImage } from "./vision/types";
 import { ASK_IMAGE_TOOL_NAME, ASK_WITH_MULTI_IMAGE_TOOL_NAME } from "./vision/types";
-
+import { logger } from "./logger";
 /**
  * Token usage information extracted from streaming response usage chunk.
  */
@@ -434,13 +435,21 @@ export abstract class CommonApi<TMessage, TRequestBody> {
         apiMode: string,
         customHeaders?: Record<string, string>
     ): Record<string, string> {
+        // Internal override for testing or contingency (e.g. if the API ever gates access by User-Agent again).
+        const customUserAgent = process.env.OPENCODEGO_USER_AGENT ?? "";
+        const userAgent = customUserAgent.trim() || VersionManager.getUserAgent();
+
         const headers: Record<string, string> = {
             "Content-Type": "application/json",
-            "User-Agent": "ai-sdk/openai-compatible/2.0.41 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.11",
+            "User-Agent": userAgent,
             "Accept": "*/*",
             "Accept-Encoding": "gzip, deflate, br, zstd",
         };
-
+        logger.debug("prepareHeaders", {
+            apiMode: apiMode,
+            headersUsed: headers,
+            customHeadersProvided: customHeaders ? Object.keys(customHeaders) : [],
+        });
         // Provider-specific header formats
         if (apiMode === "anthropic") {
             headers["x-api-key"] = apiKey;

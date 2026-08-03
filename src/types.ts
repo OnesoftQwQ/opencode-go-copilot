@@ -56,6 +56,14 @@ export interface OpenCodeGoModelItem {
     supportsTemperature?: boolean;
     /** Custom HTTP headers */
     headers?: Record<string, string>;
+    /** Cost information for this model */
+    cost?: {
+        cache_read: number;
+        input: number;
+        output: number;
+    };
+    /** Additional fields may be present in provider-specific entries */
+    [key: string]: unknown;
 
 }
 

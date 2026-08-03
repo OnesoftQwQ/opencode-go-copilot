@@ -24,31 +24,32 @@
 
 ### 1.2 核心能力
 
-| 能力 | 说明 |
-|------|------|
-| **Chat 模型提供商** | 实现 `LanguageModelChatProvider` 接口，向 VS Code 注册为 `opencodego` 厂商 |
-| **多模型支持** | 内置 17 个模型定义，覆盖 6 大模型系列，统一通过推理强度选择器切换思考模式。可选开启 OpenCode Zen 免费模型（8 个）。支持自动模型发现：开启后从 API 获取模型列表，自动过滤不可用模型并发现新增模型 |
-| **自动模型发现** | 通过 `opencodego.enableAutoModelDiscovery` 配置（默认开启）。启动时从 `/zen/go/v1/models` 获取当前可用模型 ID 列表，过滤内置模型列表（不可用模型自动隐藏）。新增模型从 `models.dev` 数据库获取元数据（上下文长度、视觉能力、工具调用、推理能力等）并自动添加，`thinkingMode` 从 `reasoning` 字段推断（支持推理→switchable，不支持→always）。API 不可用时静默回退到全量内置列表。内存缓存（5 分钟 TTL） |
-| **OpenCode Zen 免费模型** | 通过设置开关启用，从 Zen API 获取模型列表并过滤出 6 个免费模型（Big Pickle、DeepSeek V4 Flash、MiniMax M3、MiniMax M2.5、Ring 2.6 1T、Nemotron 3 Super），以 `OpenCode Zen` 标识追加到模型选择器。支持内存缓存（5 分钟 TTL），API 不可用时静默降级 |
-| **双 API 模式** | 同时支持 **OpenAI 兼容格式** (`/chat/completions`) 和 **Anthropic 格式** (`/v1/messages`) |
-| **流式推理** | 支持 SSE (Server-Sent Events) 流式响应，实时输出文本和工具调用 |
-| **Thinking/推理** | 支持模型的推理过程展示 ("thinking" 状态)，包括 XML think 块解析 |
-| **工具调用 (Tool Calling)** | 支持 VS Code 的 LanguageModelToolCallPart 机制 |
-| **图片代理 (Tool-based)** | 为不支持视觉的模型注入 `ask_image` 工具，模型可自主选择调用视觉模型（默认 Qwen3.6-Plus）回答关于图片的具体问题，支持多轮 API 请求完成"调用工具→提问→获取答案→继续回答"的完整流程。与旧版 `describe_image` 不同，`ask_image` 允许模型针对图片提出具体问题（如"按钮是什么颜色？"），视觉模型会针对性回答。每次内部视觉调用完成后还会输出专用 MIME 的 `LanguageModelDataPart`，下一轮从该记录重建标准 tool call + tool result，保持跨轮上下文。视觉模型 ID、查询提示词和思考模式均可通过设置配置；视觉代理会在同一个 thinking 块中显示“正在根据图片提问：[问题]”并实时追加视觉模型流式输出 |
-| **Token 计数** | 使用 `o200k_base` tiktoken 分词器精确统计 token 用量 |
-| **状态栏** | 实时显示当前会话 token 使用量、累计用量、缓存命中率 |
-| **原生 Token 指示器** | 始终启用，向 Copilot Chat 原生 Token 指示器报告 token 用量。通过发送 MIME 类型为 `usage` 的 `LanguageModelDataPart`（TextEncoder 编码 JSON）实现，无需自建状态栏。依赖 VS Code/Copilot Chat 1.116+ 对外部模型 `usage` data part 的识别 |
-| **高级 Token 指示器** | 可通过 `opencodego.enableThirdPartyTokenIndicator` 配置（默认开启）控制 VS Code 状态栏中的高级Token计数器。关闭后仅显示原生指示器 |
-| **Git 提交消息生成** | 一键生成 Conventional Commit 格式的 Git 提交消息，支持 `auto` 语言模式自动从历史提交检测语言 |
-| **多仓库支持** | 支持多根工作区 (multi-root) 中多个 Git 仓库的提交消息生成 |
-| **模型预设** | 支持通过命令面板快速切换 temperature/top_p 预设（🎯 Precise/⚖️ Balanced/🔥 Creative），也支持手动自定义输入 |
-| **国际化** | 内置简体中文 (zh-cn) 中英文双语界面 |
-| **重试机制** | 可配置的指数退避重试策略，应对网络抖动和限流 (429) |
-| **请求延迟** | 可配置的请求间隔延迟，避免触发 API 限流 |
-| **超时控制** | 可配置的请求超时时间（默认 10 分钟） |
-| **立即取消** | 取消请求时通过 `reader.cancel()` 立即中断流式读取，停止后台接收 |
-| **视觉代理配置** | 支持通过设置 `opencodego.visionProxyModel`、`opencodego.visionProxyThinking` 配置图片代理所使用的视觉模型和思考模式。`opencodego.visionProxyThinking` 默认关闭，关闭时内部请求通过 `modelOptions.thinking={ type: false }` / `reasoning_effort="disabled"` 禁用视觉模型思考，最终 OpenAI 兼容请求体发送 `thinking: { type: false }` |
-| **安装欢迎页 (Walkthrough)** | 首次安装且未配置 API Key 时自动打开引导向导，指引用户设置 API Key 和打开语言模型管理器。包含 3 个步骤：设置 API Key、显示模型、高级设置。通过 `onStartupFinished` 激活事件确保在 VS Code 启动后立即检测 |
+| 能力                         | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Chat 模型提供商**          | 实现 `LanguageModelChatProvider` 接口，向 VS Code 注册为 `opencodego` 厂商                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **多模型支持**               | 内置 17 个模型定义，覆盖 6 大模型系列，统一通过推理强度选择器切换思考模式。可选开启 OpenCode Zen 免费模型（动态发现，通过 `-free` 后缀过滤）。支持自动模型发现：开启后从 API 获取模型列表，自动过滤不可用模型并发现新增模型                                                                                                                                                                                                                                                                                                                                                             |
+| **自动模型发现**             | 通过 `opencodego.enableAutoModelDiscovery` 配置（默认开启）。每次扩展激活时（非阻塞预热）从 `/zen/go/v1/models` 获取当前可用模型 ID 列表，过滤内置模型列表（不可用模型自动隐藏）。新增模型从 `models.dev` 数据库获取元数据（上下文长度、视觉能力、工具调用、推理能力等）并自动添加，`thinkingMode` 从 `reasoning` 字段推断（支持推理→switchable，不支持→always）。API 不可用时静默回退到全量内置列表。先拉取 models.dev 目录再拉取模型列表。内存缓存（1 分钟 TTL，兼作启动并发激活去重）                                                                                                |
+| **OpenCode Zen 免费模型**    | 通过设置开关启用，从 Zen API 获取模型列表并过滤出 `-free` 后缀的免费模型，以 `OpenCode Zen` 标识追加到模型选择器。元数据从 `ZEN_MODEL_OVERRIDES` > models.dev > 保守默认值合并。支持内存缓存（1 分钟 TTL），API 不可用时返回空（无降级硬编码列表）                                                                                                                                                                                                                                                                                                                                      |
+| **双 API 模式**              | 同时支持 **OpenAI 兼容格式** (`/chat/completions`) 和 **Anthropic 格式** (`/v1/messages`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **流式推理**                 | 支持 SSE (Server-Sent Events) 流式响应，实时输出文本和工具调用                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **Thinking/推理**            | 支持模型的推理过程展示 ("thinking" 状态)，包括 XML think 块解析                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **工具调用 (Tool Calling)**  | 支持 VS Code 的 LanguageModelToolCallPart 机制                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **图片代理 (Tool-based)**    | 为不支持视觉的模型注入 `ask_image` 工具，模型可自主选择调用视觉模型（默认 Qwen3.6-Plus）回答关于图片的具体问题，支持多轮 API 请求完成"调用工具→提问→获取答案→继续回答"的完整流程。与旧版 `describe_image` 不同，`ask_image` 允许模型针对图片提出具体问题（如"按钮是什么颜色？"），视觉模型会针对性回答。每次内部视觉调用完成后还会输出专用 MIME 的 `LanguageModelDataPart`，下一轮从该记录重建标准 tool call + tool result，保持跨轮上下文。视觉模型 ID、查询提示词和思考模式均可通过设置配置；视觉代理会在同一个 thinking 块中显示“正在根据图片提问：[问题]”并实时追加视觉模型流式输出 |
+| **Token 计数**               | 使用 `o200k_base` tiktoken 分词器精确统计 token 用量                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **状态栏**                   | 实时显示当前会话 token 使用量、累计用量、缓存命中率                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **原生 Token 指示器**        | 始终启用，向 Copilot Chat 原生 Token 指示器报告 token 用量。通过发送 MIME 类型为 `usage` 的 `LanguageModelDataPart`（TextEncoder 编码 JSON）实现，无需自建状态栏。依赖 VS Code/Copilot Chat 1.116+ 对外部模型 `usage` data part 的识别                                                                                                                                                                                                                                                                                                                                                  |
+| **高级 Token 指示器**        | 可通过 `opencodego.enableThirdPartyTokenIndicator` 配置（默认开启）控制 VS Code 状态栏中的高级Token计数器。关闭后仅显示原生指示器                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| **Git 提交消息生成**         | 一键生成 Conventional Commit 格式的 Git 提交消息，支持 `auto` 语言模式自动从历史提交检测语言                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| **多仓库支持**               | 支持多根工作区 (multi-root) 中多个 Git 仓库的提交消息生成                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **模型预设**                 | 支持通过命令面板快速切换 temperature/top_p 预设（🎯 Precise/⚖️ Balanced/🔥 Creative），也支持手动自定义输入                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| **国际化**                   | 内置简体中文 (zh-cn) 中英文双语界面                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **重试机制**                 | 可配置的指数退避重试策略，应对网络抖动和限流 (429)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **请求延迟**                 | 可配置的请求间隔延迟，避免触发 API 限流                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **超时控制**                 | 可配置的请求超时时间（默认 10 分钟）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **HTTP 安全检查**            | 通过 `opencodego.httpAllowInsecure` 配置（默认 false）控制；开启后跳过 Base URL 协议安全检查，允许将 HTTP 用于本地/私有网络地址之外的请求                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **立即取消**                 | 取消请求时通过 `reader.cancel()` 立即中断流式读取，停止后台接收                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **视觉代理配置**             | 支持通过设置 `opencodego.visionProxyModel`、`opencodego.visionProxyThinking` 配置图片代理所使用的视觉模型和思考模式。`opencodego.visionProxyThinking` 默认关闭，关闭时内部请求通过 `modelOptions.thinking={ type: false }` / `reasoning_effort="disabled"` 禁用视觉模型思考，最终 OpenAI 兼容请求体发送 `thinking: { type: false }`                                                                                                                                                                                                                                                     |
+| **安装欢迎页 (Walkthrough)** | 首次安装且未配置 API Key 时自动打开引导向导，指引用户设置 API Key 和打开语言模型管理器。包含 3 个步骤：设置 API Key、显示模型、高级设置。通过 `onStartupFinished` 激活事件确保在 VS Code 启动后立即检测                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ### 1.3 模型清单
 
@@ -56,10 +57,10 @@
 
 #### 内置模型
 
-| 系列 | 模型 ID | 视觉 | 推理强度选择器 | API 格式 |
-|------|---------|------|----------------|----------|
-| GLM | `glm-5.2`, `glm-5.1`, `glm-5` | ❌ | `禁用思考` / `高` / `最大` (5.2)² / `思考`（5.1/5 不支持思考切换） | OpenAI |
-| Kimi | `kimi-k3`¹, `kimi-k2.5`, `kimi-k2.6`, `kimi-k2.7-code`¹ | ✅ | `禁用思考` / `思考`（K3）；`思考`（K2.x，不支持思考切换） | OpenAI |
+| 系列 | 模型 ID                                                 | 视觉 | 推理强度选择器                                                     | API 格式 |
+| ---- | ------------------------------------------------------- | ---- | ------------------------------------------------------------------ | -------- |
+| GLM  | `glm-5.2`, `glm-5.1`, `glm-5`                           | ❌    | `禁用思考` / `高` / `最大` (5.2)² / `思考`（5.1/5 不支持思考切换） | OpenAI   |
+| Kimi | `kimi-k3`¹, `kimi-k2.5`, `kimi-k2.6`, `kimi-k2.7-code`¹ | ✅    | `禁用思考` / `思考`（K3）；`思考`（K2.x，不支持思考切换）          | OpenAI   |
 
 > ¹ `kimi-k3` 和 `kimi-k2.7-code` 不支持设置 Temperature/Top-p 参数。
 > ² GLM-5.2 支持通过 reasoning_effort 设置 thinking 强度 (high/max)，GLM-5.1/GLM-5 不支持 thinking 切换。
@@ -71,16 +72,9 @@
 
 #### OpenCode Zen 免费模型（可选）
 
-通过设置 `opencodego.enableZenFreeModels`（默认关闭）启用，从 Zen API 获取模型列表并与硬编码 ID 过滤后加入模型选择器。
+通过设置 `opencodego.enableZenFreeModels`（默认关闭）启用，从 Zen API 获取模型列表并过滤出 `-free` 后缀的免费模型，以 `OpenCode Zen` 标识追加到模型选择器。
 
-| 显示名 | 模型 ID | 视觉 | 推理强度选择器 | API 格式 | 备注 |
-|--------|---------|------|----------------|----------|------|
-| Zen/Big Pickle Free | `big-pickle` | ❌ | `思考`（不支持思考切换） | OpenAI | 限时免费 |
-| Zen/DeepSeek V4 Flash Free | `deepseek-v4-flash-free` | ❌ | `禁用思考` / `高` / `极高` | OpenAI | 限时免费 |
-| Zen/MiniMax M3 Free | `minimax-m3-free` | ✅ | `禁用思考` / `自适应` | OpenAI | 限时免费；1M 上下文，仅支持 `adaptive` / `disabled` 思考模式 |
-| Zen/MiniMax M2.5 Free | `minimax-m2.5-free` | ❌ | `禁用思考` / `思考` | OpenAI | 限时免费 |
-| Zen/Ring 2.6 1T Free | `ring-2.6-1t-free` | ❌ | `禁用思考` / `思考` | OpenAI | 限时免费 |
-| Zen/Nemotron 3 Super Free | `nemotron-3-super-free` | ❌ | `禁用思考` / `思考` | OpenAI | 限时免费 |
+> Zen 免费模型动态发现，模型列表取决于 API 可用性。元数据合并策略：`ZEN_MODEL_OVERRIDES` > models.dev > 保守默认值。常见发现的模型包括但不限于：`big-pickle`、`deepseek-v4-flash-free`、`minimax-m3-free`、`minimax-m2.5-free`、`ring-2.6-1t-free`、`nemotron-3-super-free` 等。
 
 在模型选择器中，内置模型归入 `OpenCode Go` 分组（`family="OpenCodeGo"`），Zen 免费模型归入 `OpenCode Zen` 分组（`family="OpenCode Zen"`）以作区分。
 
@@ -142,6 +136,7 @@ activate(context)
   ├── initStatusBar()                       ← 创建状态栏条目
   ├── new OpenCodeGoChatModelProvider()      ← 创建 Provider 实例
   ├── vscode.lm.registerLanguageModelChatProvider("opencodego", provider)
+  ├── 预热模型发现 (非阻塞 fire-and-forget)  ← 每次激活刷新模型列表（先 models.dev 后模型列表，1 分钟 TTL 去重并发激活）
   ├── 注册命令:
   │   ├── opencodego.setApiKey                ← 设置 API Key
   │   ├── opencodego.getApiKey                ← 打开 OpenCode AI 官网获取 Key
@@ -418,35 +413,35 @@ src/
 
 ### 3.2 文件详细说明
 
-| 文件 | 行数 | 职责 |
-|------|------|------|
-| `extension.ts` | ~210 | 扩展激活/停用，注册 Provider 和 6 条命令，首次安装欢迎页引导 |
-| `provider.ts` | ~700 | 实现 `LanguageModelChatProvider`，处理聊天请求全流程及图片代理多轮循环处理 |
-| `models.ts` | ~230 | 17 个内置模型定义，模型配置查询（所有模型声明 `imageInput: true`） |
-| `types.ts` | ~95 | `OpenCodeGoModelItem`, `ModelPreset`, `ModelsResponse`, `RetryConfig` 等类型 |
-| `apiModelList.ts` | ~80 | API 模型列表获取：从 `/zen/go/v1/models` 拉取可用模型 ID，5 分钟缓存，静默降级 |
-| `modelsDev.ts` | ~130 | models.dev 元数据拉取与查询：从 `models.dev/models.json` 下载并索引模型规格，支持短 ID 匹配，1 小时缓存 |
-| `commonApi.ts` | ~462 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截） |
-| `provideModel.ts` | ~130 | 模型信息提供函数（含自动发现）：过滤内置模型、从 API 和 models.dev 自动发现新增模型 |
-| `provideToken.ts` | ~100 | Token 用量计算 |
-| `utils.ts` | ~285 | 工具函数 (重试、角色映射、工具转换等) |
-| `statusBar.ts` | ~140 | 状态栏创建、更新、累计计数器 |
-| `logger.ts` | ~55 | 日志输出 (LogOutputChannel) |
-| `localize.ts` | ~109 | 中英文国际化 |
-| `versionManager.ts` | ~35 | 扩展版本信息 |
-| `openai/openaiApi.ts` | ~613 | OpenAI 格式 API 实现 (消息转换/请求构建/流式处理/图片代理) |
-| `openai/openaiTypes.ts` | ~75 | OpenAI 类型定义 |
-| `anthropic/anthropicApi.ts` | ~535 | Anthropic 格式 API 实现 (消息转换/请求构建/流式处理/图片代理) |
-| `anthropic/anthropicTypes.ts` | ~130 | Anthropic 类型定义 |
-| `gitCommit/commitMessageGenerator.ts` | ~295 | Git 提交消息生成逻辑 |
-| `gitCommit/gitUtils.ts` | ~260 | Git 命令封装 |
-| `tokenizer/tokenizerManager.ts` | ~115 | o200k_base 分词器管理 (含 LRU 缓存) |
-| `tokenizer/imageUtils.ts` | ~130 | 图片尺寸解析 (PNG/GIF/JPEG/WebP) |
-| `vision/types.ts` | ~53 | Vision proxy 类型定义（`StoredImage`, `InterceptedToolCall`, `ASK_IMAGE_TOOL_DEF`, `ASK_IMAGE_TOOL_NAME`, `ASK_WITH_MULTI_IMAGE_TOOL_DEF`, `ASK_WITH_MULTI_IMAGE_TOOL_NAME`, `DEFAULT_VISION_PROMPT`） |
-| `vision/historyCodec.ts` | ~150 | 视觉工具历史 DataPart 的 MIME、数据校验/编解码，以及 OpenAI/Anthropic 标准 tool call + tool result 消息重建；由 `scripts/test-vision-history.mjs` 做编解码和双 API 转换器顺序闭环测试 |
-| `vision/historyPart.ts` | ~28 | 创建和解析 `application/vnd.opencodego.vision-tool-history+json` DataPart；测试脚本使用 VS Code 最小运行时桩验证下一轮消息转换 |
-| `vision/imageProxy.ts` | ~95 | 图片代理核心：调用视觉模型描述图片（`callVisionModel`/`callVisionModelMulti`），支持 thinking 模式配置和文本流式转发 |
-| `zen/zenModels.ts` | ~256 | Zen 免费模型定义、API 拉取、缓存管理、配置查询（所有模型声明 `imageInput: true`） |
+| 文件                                  | 行数 | 职责                                                                                                                                                                                                   |
+| ------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `extension.ts`                        | ~210 | 扩展激活/停用，注册 Provider 和 6 条命令，首次安装欢迎页引导                                                                                                                                           |
+| `provider.ts`                         | ~700 | 实现 `LanguageModelChatProvider`，处理聊天请求全流程及图片代理多轮循环处理                                                                                                                             |
+| `models.ts`                           | ~230 | 17 个内置模型定义，模型配置查询（所有模型声明 `imageInput: true`）                                                                                                                                     |
+| `types.ts`                            | ~95  | `OpenCodeGoModelItem`, `ModelPreset`, `ModelsResponse`, `RetryConfig` 等类型                                                                                                                           |
+| `apiModelList.ts`                     | ~80  | API 模型列表获取：从 `/zen/go/v1/models` 拉取可用模型 ID，1 分钟缓存，静默降级                                                                                                                         |
+| `modelsDev.ts`                        | ~130 | models.dev 元数据拉取与查询：从 `models.dev/models.json` 下载并索引模型规格，支持短 ID 匹配，1 分钟缓存                                                                                                |
+| `commonApi.ts`                        | ~467 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截、User-Agent 配置读取）                                                                                                             |
+| `provideModel.ts`                     | ~266 | 模型信息提供函数（含自动发现、`deduceApiMode()` 从 models.dev 推断 apiMode）：过滤内置模型、从 API 和 models.dev 自动发现新增模型                                                                      |
+| `provideToken.ts`                     | ~100 | Token 用量计算                                                                                                                                                                                         |
+| `utils.ts`                            | ~285 | 工具函数 (重试、角色映射、工具转换等)                                                                                                                                                                  |
+| `statusBar.ts`                        | ~140 | 状态栏创建、更新、累计计数器                                                                                                                                                                           |
+| `logger.ts`                           | ~55  | 日志输出 (LogOutputChannel)                                                                                                                                                                            |
+| `localize.ts`                         | ~109 | 中英文国际化                                                                                                                                                                                           |
+| `versionManager.ts`                   | ~35  | 扩展版本信息（使用正确扩展 ID `OnesoftQwQ.opencode-go-copilot-provider`）                                                                                                                              |
+| `openai/openaiApi.ts`                 | ~613 | OpenAI 格式 API 实现 (消息转换/请求构建/流式处理/图片代理)                                                                                                                                             |
+| `openai/openaiTypes.ts`               | ~75  | OpenAI 类型定义                                                                                                                                                                                        |
+| `anthropic/anthropicApi.ts`           | ~535 | Anthropic 格式 API 实现 (消息转换/请求构建/流式处理/图片代理)                                                                                                                                          |
+| `anthropic/anthropicTypes.ts`         | ~130 | Anthropic 类型定义                                                                                                                                                                                     |
+| `gitCommit/commitMessageGenerator.ts` | ~295 | Git 提交消息生成逻辑                                                                                                                                                                                   |
+| `gitCommit/gitUtils.ts`               | ~260 | Git 命令封装                                                                                                                                                                                           |
+| `tokenizer/tokenizerManager.ts`       | ~115 | o200k_base 分词器管理 (含 LRU 缓存)                                                                                                                                                                    |
+| `tokenizer/imageUtils.ts`             | ~130 | 图片尺寸解析 (PNG/GIF/JPEG/WebP)                                                                                                                                                                       |
+| `vision/types.ts`                     | ~53  | Vision proxy 类型定义（`StoredImage`, `InterceptedToolCall`, `ASK_IMAGE_TOOL_DEF`, `ASK_IMAGE_TOOL_NAME`, `ASK_WITH_MULTI_IMAGE_TOOL_DEF`, `ASK_WITH_MULTI_IMAGE_TOOL_NAME`, `DEFAULT_VISION_PROMPT`） |
+| `vision/historyCodec.ts`              | ~150 | 视觉工具历史 DataPart 的 MIME、数据校验/编解码，以及 OpenAI/Anthropic 标准 tool call + tool result 消息重建；由 `scripts/test-vision-history.mjs` 做编解码和双 API 转换器顺序闭环测试                  |
+| `vision/historyPart.ts`               | ~28  | 创建和解析 `application/vnd.opencodego.vision-tool-history+json` DataPart；测试脚本使用 VS Code 最小运行时桩验证下一轮消息转换                                                                         |
+| `vision/imageProxy.ts`                | ~95  | 图片代理核心：调用视觉模型描述图片（`callVisionModel`/`callVisionModelMulti`），支持 thinking 模式配置和文本流式转发                                                                                   |
+| `zen/zenModels.ts`                    | ~282 | Zen 免费模型动态发现（通过 `-free` 后缀过滤）、`ZEN_MODEL_OVERRIDES` 最小覆盖映射、`deduceApiModeFromFamily()` 辅助函数、缓存管理、配置查询（所有模型声明 `imageInput: true`，无硬编码 ID 列表）       |
 
 ---
 
@@ -455,7 +450,7 @@ src/
 ### 4.1 `src/extension.ts`
 
 #### `activate(context: vscode.ExtensionContext): void`
-扩展激活入口。初始化日志、分词器、状态栏；注册 `LanguageModelChatProvider`；注册六条命令（设置 API Key、获取 API Key 网址、打开扩展设置、生成 Git 提交消息、中止生成、设置模型预设）；首次安装时调用 `showWelcomeIfNeeded()` 显示欢迎页引导。
+扩展激活入口。初始化日志、分词器、状态栏；注册 `LanguageModelChatProvider`；注册六条命令（设置 API Key、获取 API Key 网址、打开扩展设置、生成 Git 提交消息、中止生成、设置模型预设）；激活时非阻塞预热模型发现（fire-and-forget 调用 `prepareLanguageModelChatInformation()`，每次激活刷新模型列表，先拉取 models.dev 目录再拉取模型列表，失败仅记录日志）；首次安装时调用 `showWelcomeIfNeeded()` 显示欢迎页引导。
 
 #### `showWelcomeIfNeeded(context: vscode.ExtensionContext): Promise<void>`
 检查是否已显示过欢迎页（通过 `globalState` 的 `WELCOME_SHOWN_KEY` 标记）。如果已标记或已有 API Key，直接返回；否则通过 `workbench.action.openWalkthrough` 命令打开 Walkthrough 页面并标记为已显示。静默处理异常，不阻塞扩展激活。
@@ -470,8 +465,8 @@ src/
 #### `class OpenCodeGoChatModelProvider implements LanguageModelChatProvider`
 核心 Provider 类。
 
-| 属性 | 类型 | 说明 |
-|------|------|------|
+| 属性               | 类型             | 说明                           |
+| ------------------ | ---------------- | ------------------------------ |
 | `_lastRequestTime` | `number \| null` | 上次请求完成时间，用于延迟计算 |
 
 #### `constructor(secrets: vscode.SecretStorage, statusBarItem: vscode.StatusBarItem)`
@@ -487,7 +482,7 @@ src/
 计算文本或消息的 Token 数量。委托给 `countMessageTokens()`。
 
 #### `provideLanguageModelChatResponse(model, messages, options, progress, token): Promise<void>`
-核心方法：处理聊天请求，流式返回响应。包括模型配置获取（内置模型 → Zen 模型回退 → 自动发现回退）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理、API 路由、流式解析、图片代理拦截处理和错误处理。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。
+核心方法：处理聊天请求，流式返回响应。包括模型配置获取（内置模型 → Zen 模型回退 → 自动发现回退）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理、API 路由、流式解析、图片代理拦截处理和错误处理。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。内置模型配置通过 `{ ...um }` 浅拷贝后再修改 thinking/temperature，防止并发会话间互相泄漏设置。
 
 #### `private async _handleInterceptedToolCall(params): Promise<void>`
 处理图片代理拦截。循环处理最多 `opencodego.visionMaxRounds` 轮（默认 5）。每轮检测 API 实例的 `interceptedToolCall`，发出 thinking 块显示“正在根据图片提问：[问题]”，关闭 thinking 块后视觉模型输出以普通文本流式显示，并立即输出一个 `application/vnd.opencodego.vision-tool-history+json` DataPart 保存调用 ID、参数、视觉结果和 OpenAI 模式所需的 `reasoning_content`。单图调用 `callVisionModel()`，多图调用 `callVisionModelMulti()`，构建本轮 API 请求（追加 assistant tool_call + tool result），注入 VS Code 原生工具 + ask_image（+ ask_with_multi_image 当 >=2 图时）供模型继续使用，保留 temperature/reasoning_effort 等原始参数，DeepSeek 兼容注入 `reasoning_content`。模型不再调用 ask_image/ask_with_multi_image 时退出循环。
@@ -503,6 +498,9 @@ src/
 #### `private async ensureApiKey(): Promise<string | undefined>`
 确保 API Key 存在于 SecretStorage 中，缺失时弹出输入框提示用户输入。
 
+#### Base URL HTTP 安全检查
+在发送请求前验证 base URL：拒绝非 HTTP 协议；针对 `http:` 协议仅允许 localhost、127.0.0.1、::1、192.168.\*、10.\*、0.0.0.0 等本地/私有网络地址，远程端点强制使用 HTTPS。可通过 `opencodego.httpAllowInsecure` 配置（默认 false）跳过整个 HTTP 协议安全检查。
+
 ---
 
 ### 4.3 `src/models.ts`
@@ -510,20 +508,20 @@ src/
 #### `interface BuiltInModelDef`
 内置模型定义接口。
 
-| 属性 | 类型 | 说明 |
-|------|------|------|
-| `baseId` | `string` | API 请求中使用的模型 ID |
-| `displayName` | `string` | 用户友好的显示名称 |
-| `vision` | `boolean` | 是否支持图片输入（所有模型 `imageInput` 能力声明为 `true`，非视觉模型通过代理处理） |
-| `thinkingMode` | `"switchable" \| "always" \| "adaptive"` | switchable=可选择思考开关, always=思考始终启用, adaptive=仅禁用/自动 |
-| `defaultReasoningEffort` | `string` (可选) | 默认推理力度 |
-| `supportedReasoningEfforts` | `string[]` (可选) | 支持的推理力度选项 |
-| `includeReasoningInRequest` | `boolean` (可选) | 是否在 assistant 消息中包含 reasoning_content |
-| `supportsTemperature` | `boolean` (可选) | 是否支持设置 temperature/top_p，默认 true |
-| `contextLength` | `number` (可选) | 默认上下文长度 |
-| `maxTokens` | `number` (可选) | 默认最大输出 Token |
-| `extra` | `Record<string, unknown>` (可选) | 额外的请求体参数 |
-| `apiMode` | `"openai" \| "anthropic"` (可选) | API 格式模式 |
+| 属性                        | 类型                                     | 说明                                                                                |
+| --------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------- |
+| `baseId`                    | `string`                                 | API 请求中使用的模型 ID                                                             |
+| `displayName`               | `string`                                 | 用户友好的显示名称                                                                  |
+| `vision`                    | `boolean`                                | 是否支持图片输入（所有模型 `imageInput` 能力声明为 `true`，非视觉模型通过代理处理） |
+| `thinkingMode`              | `"switchable" \| "always" \| "adaptive"` | switchable=可选择思考开关, always=思考始终启用, adaptive=仅禁用/自动                |
+| `defaultReasoningEffort`    | `string` (可选)                          | 默认推理力度                                                                        |
+| `supportedReasoningEfforts` | `string[]` (可选)                        | 支持的推理力度选项                                                                  |
+| `includeReasoningInRequest` | `boolean` (可选)                         | 是否在 assistant 消息中包含 reasoning_content                                       |
+| `supportsTemperature`       | `boolean` (可选)                         | 是否支持设置 temperature/top_p，默认 true                                           |
+| `contextLength`             | `number` (可选)                          | 默认上下文长度                                                                      |
+| `maxTokens`                 | `number` (可选)                          | 默认最大输出 Token                                                                  |
+| `extra`                     | `Record<string, unknown>` (可选)         | 额外的请求体参数                                                                    |
+| `apiMode`                   | `"openai" \| "anthropic"` (可选)         | API 格式模式                                                                        |
 
 #### `const BUILT_IN_MODELS: BuiltInModelDef[]`
 17 个内置模型定义常量数组。
@@ -544,36 +542,36 @@ src/
 #### `interface OpenCodeGoModelItem`
 完整模型配置接口。
 
-| 属性 | 类型 | 说明 |
-|------|------|------|
-| `id` | `string` | 模型 ID |
-| `owned_by` | `string` | 提供商 |
-| `configId` | `string` (可选) | 配置 ID（保留兼容） |
-| `displayName` | `string` (可选) | 显示名称 |
-| `baseUrl` | `string` (可选) | 自定义 Base URL |
-| `context_length` | `number` (可选) | 上下文长度 |
-| `vision` | `boolean` (可选) | 是否支持视觉 |
-| `max_completion_tokens` | `number` (可选) | 最大输出 Token (新标准) |
-| `reasoning_effort` | `string` (可选) | 推理力度 |
-| `enable_thinking` | `boolean` (可选) | 是否启用 thinking |
-| `thinking_budget` | `number` (可选) | Thinking 预算 Token |
-| `temperature` | `number \| null` (可选) | 温度参数 |
-| `top_p` | `number \| null` (可选) | Top-p 采样 |
-| `top_k` | `number` (可选) | Top-k 采样 |
-| `min_p` | `number` (可选) | Min-p 采样 |
-| `frequency_penalty` | `number` (可选) | 频率惩罚 |
-| `presence_penalty` | `number` (可选) | 存在惩罚 |
-| `repetition_penalty` | `number` (可选) | 重复惩罚 |
-| `reasoning` | `object` (可选) | OpenRouter 推理配置 |
-| `extra` | `Record<string, unknown>` (可选) | 额外请求体参数 |
-| `family` | `string` (可选) | 模型系列 |
-| `include_reasoning_in_request` | `boolean` (可选) | 是否在请求中包含推理内容 |
-| `thinkingMode` | `"switchable" \| "always"` (可选) | 思考模式类型 |
-| `supportsTemperature` | `boolean` (可选) | 是否支持设置 temperature/top_p，默认 true |
-| `useForCommitGeneration` | `boolean` (可选) | 是否用于提交消息生成 |
-| `delay` | `number` (可选) | 模型专属请求延迟 |
-| `apiMode` | `string` (可选) | API 模式 |
-| `headers` | `Record<string, string>` (可选) | 自定义 HTTP 头 |
+| 属性                           | 类型                              | 说明                                      |
+| ------------------------------ | --------------------------------- | ----------------------------------------- |
+| `id`                           | `string`                          | 模型 ID                                   |
+| `owned_by`                     | `string`                          | 提供商                                    |
+| `configId`                     | `string` (可选)                   | 配置 ID（保留兼容）                       |
+| `displayName`                  | `string` (可选)                   | 显示名称                                  |
+| `baseUrl`                      | `string` (可选)                   | 自定义 Base URL                           |
+| `context_length`               | `number` (可选)                   | 上下文长度                                |
+| `vision`                       | `boolean` (可选)                  | 是否支持视觉                              |
+| `max_completion_tokens`        | `number` (可选)                   | 最大输出 Token (新标准)                   |
+| `reasoning_effort`             | `string` (可选)                   | 推理力度                                  |
+| `enable_thinking`              | `boolean` (可选)                  | 是否启用 thinking                         |
+| `thinking_budget`              | `number` (可选)                   | Thinking 预算 Token                       |
+| `temperature`                  | `number \| null` (可选)           | 温度参数                                  |
+| `top_p`                        | `number \| null` (可选)           | Top-p 采样                                |
+| `top_k`                        | `number` (可选)                   | Top-k 采样                                |
+| `min_p`                        | `number` (可选)                   | Min-p 采样                                |
+| `frequency_penalty`            | `number` (可选)                   | 频率惩罚                                  |
+| `presence_penalty`             | `number` (可选)                   | 存在惩罚                                  |
+| `repetition_penalty`           | `number` (可选)                   | 重复惩罚                                  |
+| `reasoning`                    | `object` (可选)                   | OpenRouter 推理配置                       |
+| `extra`                        | `Record<string, unknown>` (可选)  | 额外请求体参数                            |
+| `family`                       | `string` (可选)                   | 模型系列                                  |
+| `include_reasoning_in_request` | `boolean` (可选)                  | 是否在请求中包含推理内容                  |
+| `thinkingMode`                 | `"switchable" \| "always"` (可选) | 思考模式类型                              |
+| `supportsTemperature`          | `boolean` (可选)                  | 是否支持设置 temperature/top_p，默认 true |
+| `useForCommitGeneration`       | `boolean` (可选)                  | 是否用于提交消息生成                      |
+| `delay`                        | `number` (可选)                   | 模型专属请求延迟                          |
+| `apiMode`                      | `string` (可选)                   | API 模式                                  |
+| `headers`                      | `Record<string, string>` (可选)   | 自定义 HTTP 头                            |
 
 #### `interface ModelsResponse`
 `{ object: string; data: ModelItem[] }` — 模型列表 API 响应。
@@ -597,25 +595,25 @@ src/
 #### `abstract class CommonApi<TMessage, TRequestBody>`
 API 实现的抽象基类。
 
-| 属性 | 类型 | 说明 |
-|------|------|------|
-| `_toolCallBuffers` | `Map<number, {id?, name?, args}>` | 工具调用参数缓冲区 |
-| `_completedToolCallIndices` | `Set<number>` | 已完成发射的工具调用索引 |
-| `_hasEmittedAssistantText` | `boolean` | 是否已发射过助手文本 |
-| `_hasEmittedText` | `boolean` | 是否已发射过文本 |
-| `_hasEmittedThinking` | `boolean` | 是否已发射过推理内容 |
-| `_emittedBeginToolCallsHint` | `boolean` | 是否已发射工具调用前导空格 |
-| `_xmlThinkActive` | `boolean` | XML think 块解析中 |
-| `_xmlThinkDetectionAttempted` | `boolean` | 是否尝试过 XML think 检测 |
-| `_currentThinkingId` | `string \| null` | 当前推理内容 ID |
-| `_thinkingBuffer` | `string` | 推理内容缓冲区 |
-| `_thinkingFlushTimer` | `NodeJS.Timeout \| null` | 推理刷新定时器 |
-| `_systemContent` | `string \| undefined` | 系统提示内容 |
-| `_modelId` | `string` | 模型 ID |
-| `_onUsage` | `((usage: StreamUsage) => void) \| undefined` | 用量回调 |
-| `interceptedToolCall` | `InterceptedToolCall \| null` | 被拦截的 ask_image 工具调用 |
-| `_localImages` | `StoredImage[]` | 实例局部图片数据，请求结束随 GC 回收 |
-| `_originalApiMessages` | `any[] \| null` | 转换后的原始 API 消息，用于构建多轮请求 |
+| 属性                          | 类型                                          | 说明                                    |
+| ----------------------------- | --------------------------------------------- | --------------------------------------- |
+| `_toolCallBuffers`            | `Map<number, {id?, name?, args}>`             | 工具调用参数缓冲区                      |
+| `_completedToolCallIndices`   | `Set<number>`                                 | 已完成发射的工具调用索引                |
+| `_hasEmittedAssistantText`    | `boolean`                                     | 是否已发射过助手文本                    |
+| `_hasEmittedText`             | `boolean`                                     | 是否已发射过文本                        |
+| `_hasEmittedThinking`         | `boolean`                                     | 是否已发射过推理内容                    |
+| `_emittedBeginToolCallsHint`  | `boolean`                                     | 是否已发射工具调用前导空格              |
+| `_xmlThinkActive`             | `boolean`                                     | XML think 块解析中                      |
+| `_xmlThinkDetectionAttempted` | `boolean`                                     | 是否尝试过 XML think 检测               |
+| `_currentThinkingId`          | `string \| null`                              | 当前推理内容 ID                         |
+| `_thinkingBuffer`             | `string`                                      | 推理内容缓冲区                          |
+| `_thinkingFlushTimer`         | `NodeJS.Timeout \| null`                      | 推理刷新定时器                          |
+| `_systemContent`              | `string \| undefined`                         | 系统提示内容                            |
+| `_modelId`                    | `string`                                      | 模型 ID                                 |
+| `_onUsage`                    | `((usage: StreamUsage) => void) \| undefined` | 用量回调                                |
+| `interceptedToolCall`         | `InterceptedToolCall \| null`                 | 被拦截的 ask_image 工具调用             |
+| `_localImages`                | `StoredImage[]`                               | 实例局部图片数据，请求结束随 GC 回收    |
+| `_originalApiMessages`        | `any[] \| null`                               | 转换后的原始 API 消息，用于构建多轮请求 |
 
 #### `abstract convertMessages(messages, modelConfig): TMessage[]`
 将 VS Code 聊天消息转换为特定 API 格式的消息数组。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据。
@@ -660,17 +658,20 @@ API 实现的抽象基类。
 处理普通文本内容，发射到进度报告器。
 
 #### `static prepareHeaders(apiKey, apiMode, customHeaders?): Record<string, string>`
-准备 HTTP 请求头。Anthropic 模式使用 `x-api-key`，OpenAI 模式使用 `Bearer` 令牌。
+准备 HTTP 请求头。读取 `OPENCODEGO_USER_AGENT` 环境变量覆盖 User-Agent（回退到 `VersionManager.getUserAgent()`；内部测试/应急用，非用户设置项）。Anthropic 模式使用 `x-api-key`，OpenAI 模式使用 `Bearer` 令牌。
 
 ---
 
 ### 4.6 `src/apiModelList.ts`
 
 #### `getApiModelIds(apiKey): Promise<Set<string>>`
-从 `/zen/go/v1/models` 拉取可用模型 ID 列表并返回 Set。使用内存缓存（5 分钟 TTL），API 不可用时返回空 Set 或上次缓存。导出 `isApiFetchSuccessful()` 检查上次请求是否成功。
+从 `/zen/go/v1/models` 拉取可用模型 ID 列表并返回 Set。使用内存缓存（1 分钟 TTL），API 不可用时返回空 Set 或上次缓存。内部 `fetchApiModelList()` 使用 10 秒 `AbortSignal.timeout(10000)`，超时后记录警告并抛出普通 `Error`（非 AbortError）以保留调用方缓存。导出 `isApiFetchSuccessful()` 检查上次请求是否成功。
 
 #### `isApiFetchSuccessful(): boolean`
 返回最近一次 API 模型列表拉取是否成功。用于模型提供者决定是否应用 API 过滤。
+
+#### `clearApiModelCache(): void`
+清除缓存的 API 模型 ID 列表和 `lastFetchSuccess` 状态。由 `resetAutoDiscoveryState()` 在强制刷新时调用，确保后续调用重新拉取最新模型列表。
 
 ---
 
@@ -680,20 +681,32 @@ API 实现的抽象基类。
 `{ id, name?, family?, reasoning?, tool_call?, structured_output?, temperature?, attachment?, modalities?, limit? }` — models.dev 数据库中单个模型条目的接口。
 
 #### `ensureModelsDevLoaded(): Promise<void>`
-从 `https://models.dev/models.json` 下载完整模型目录并构建内存索引（完整 ID → 条目 + 短 ID → 条目）。1 小时缓存 TTL，失败时静默保留旧缓存。首次无缓存时初始化为空 Map。
+从 `https://models.dev/catalog.json` 下载完整模型目录并构建内存索引（完整 ID → 条目 + 短 ID → 条目）。内部 `fetchCatalog()` 使用 10 秒 `AbortSignal.timeout(10000)`，超时后记录警告并抛出普通 `Error`（非 AbortError）以保留现有缓存。1 分钟缓存 TTL（短 TTL 兼作 VS Code 启动时多个并发 `activate()` 调用的去重窗口，同时保证每次激活/刷新均重新拉取目录）。失败时静默保留旧缓存。首次无缓存时初始化为空 Map。`lastLoadFailed` 标志追踪上次加载是否失败：失败后至少等待 1 分钟再重试，避免空 Map 长期阻塞后续重试。
 
 #### `lookupModelDevEntry(apiModelId): ModelsDevEntry | undefined`
 按 API 模型 ID 查找 models.dev 元数据。匹配策略：1) 完整 models.dev ID 精确匹配，2) 短 ID（斜杠后最后一段）匹配，3) 后缀匹配。
+
+#### `clearModelsDevCache(): void`
+清除缓存的 models.dev 目录数据（重置 `metadataMap`、`shortIdMap`、`providersMap`、`cacheTimestamp` 和 `lastLoadFailed`）。由 `resetAutoDiscoveryState()` 在强制刷新时调用，确保下次查询重新拉取最新目录。
+
+#### `deduceApiModeFromFamily(modelId, entry?)`
+根据模型 ID 和可选的 models.dev 条目推断 API 格式（`"openai"` 或 `"anthropic"`）。使用 family 启发式判断：Claude/Anthropic 系列、Qwen 3.6/3.7 系列（匹配 `/qwen[\s-]*3\.[67]/i`）、Gemma 系列 → Anthropic；其余 → OpenAI。被 `storeAutoDiscoveredConfig()` 调用于确定自动发现模型的 apiMode。
 
 ---
 
 ### 4.10 `src/provideModel.ts`
 
 #### `prepareLanguageModelChatInformation(options, _token, _secrets): Promise<LanguageModelChatInformation[]>`
-获取模型信息列表。默认使用硬编码的内置模型列表（委托 `getBuiltInModelInfos()`）。当配置 `opencodego.enableAutoModelDiscovery` 开启时（默认），从 API 获取可用模型 ID 列表，过滤内置模型（仅保留 API 中存在的模型），并从 models.dev 自动发现新增模型（默认 `thinkingMode="always"`）。API 不可用时静默回退到全量内置列表。当配置 `opencodego.enableZenFreeModels` 开启时，额外调用 `getZenFreeModelInfos()` 获取 Zen 免费模型并追加到列表末尾。
+获取模型信息列表。默认使用硬编码的内置模型列表（委托 `getBuiltInModelInfos()`）。当配置 `opencodego.enableAutoModelDiscovery` 开启时（默认），从 API 获取可用模型 ID 列表，过滤内置模型（仅保留 API 中存在的模型），并从 models.dev 自动发现新增模型（默认 `thinkingMode="always"`）。自动发现前调用 `_autoDiscoveredConfigs.clear()` 清空旧条目。API 不可用时静默回退到全量内置列表。当配置 `opencodego.enableZenFreeModels` 开启时，额外调用 `getZenFreeModelInfos()` 获取 Zen 免费模型并追加到列表末尾。刷新频率由 `opencodego.modelsDevUpdateInterval` 控制（默认 1 分钟）：该值充当限速器，去重 VS Code 启动时多个并发 `activate()` 调用产生的刷新，同时保证每次激活与超过间隔的模型选择器打开都会刷新。发现管线先调用 `ensureModelsDevLoaded()` 拉取 models.dev 目录，再调用 `getApiModelIds()` 拉取 API 模型列表。扩展每次激活时由 `extension.ts` 非阻塞调用本函数预热刷新。
+
+#### `deduceApiMode(modelId, entry?)`
+根据模型 ID 和可选的 models.dev 条目推断 API 格式（`"openai"` 或 `"anthropic"`）。使用 family 启发式判断：Claude/Anthropic 系列、Qwen 3.6/3.7 系列、Gemma 系列 → Anthropic；其余 → OpenAI。被 `storeAutoDiscoveredConfig()` 调用于确定自动发现模型的 apiMode。
 
 #### `getAutoDiscoveredModelConfig(modelId): OpenCodeGoModelItem | undefined`
-返回之前自动发现的模型配置。由 `provider.ts` 在 `getBuiltInModelConfig()` 和 `getZenFreeModelConfig()` 都返回 undefined 时作为第三回退调用。
+返回之前自动发现的模型配置（返回 `{ ...config }` 浅拷贝，防止调用方突变共享缓存）。由 `provider.ts` 在 `getBuiltInModelConfig()` 和 `getZenFreeModelConfig()` 都返回 undefined 时作为第三回调调用。
+
+#### `resetAutoDiscoveryState(): void`
+重置自动发现和 Zen 免费模型的所有缓存状态。清除 `cachedDiscoveredInfos`、`cachedZenInfos`、`_autoDiscoveredConfigs` 等内部状态，并调用 `clearApiModelCache()`、`clearZenModelCache()` 和 `clearModelsDevCache()` 一并清空 API 模型列表、Zen 模型缓存和 models.dev 目录缓存。由 `opencodego.updateModelList` 命令在强制刷新时调用。
 
 ---
 
@@ -858,15 +871,15 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 
 #### `class Logger`
 
-| 方法 | 说明 |
-|------|------|
-| `init()` | 创建 VS Code `LogOutputChannel("OpenCodeGo")` |
-| `debug(tag, data)` | 输出 DEBUG 级别日志 |
-| `info(tag, data)` | 输出 INFO 级别日志 |
-| `warn(tag, data)` | 输出 WARN 级别日志 |
-| `error(tag, data)` | 输出 ERROR 级别日志 |
+| 方法                       | 说明                                           |
+| -------------------------- | ---------------------------------------------- |
+| `init()`                   | 创建 VS Code `LogOutputChannel("OpenCodeGo")`  |
+| `debug(tag, data)`         | 输出 DEBUG 级别日志                            |
+| `info(tag, data)`          | 输出 INFO 级别日志                             |
+| `warn(tag, data)`          | 输出 WARN 级别日志                             |
+| `error(tag, data)`         | 输出 ERROR 级别日志                            |
 | `sanitizeHeaders(headers)` | 脱敏敏感 HTTP 头 (Authorization, x-api-key 等) |
-| `dispose()` | 清理输出通道 |
+| `dispose()`                | 清理输出通道                                   |
 
 #### `export const logger = new Logger()`
 单例导出。
@@ -881,17 +894,20 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 #### `l10nFormat(template, ...args): string`
 格式化本地化字符串，替换 `{0}`, `{1}` 等占位符。
 
+新增本地化键：
+- `"Plain HTTP is only allowed for localhost or private network addresses. Use HTTPS for remote endpoints."` — Base URL 安全验证错误提示
+
 ---
 
 ### 4.12 `src/versionManager.ts`
 
 #### `class VersionManager`
 
-| 静态方法 | 说明 |
-|----------|------|
-| `getVersion(): string` | 获取扩展版本号（从 `package.json` 读取） |
-| `getUserAgent(): string` | 构建 User-Agent 字符串 |
-| `getClientInfo(): { name, version, author }` | 获取客户端信息 |
+| 静态方法                                     | 说明                                                                                                                                          |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getVersion(): string`                       | 获取扩展版本号（从 `package.json` 读取，使用正确扩展 ID `OnesoftQwQ.opencode-go-copilot-provider` 而非旧值 `my-company.opencode-go-copilot`） |
+| `getUserAgent(): string`                     | 构建 User-Agent 字符串（被 `CommonApi.prepareHeaders()` 用作回退 User-Agent）                                                                 |
+| `getClientInfo(): { name, version, author }` | 获取客户端信息                                                                                                                                |
 
 ---
 
@@ -940,7 +956,7 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 将 VS Code 消息转换为 OpenAI 格式。支持文本、图片、工具调用、工具结果、推理内容的消息转换。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据。同时递归扫描 `LanguageModelToolResultPart.content` 中的图片一并存入（确保通过工具返回的图片也能被 `ask_image` 代理识别）。
 
 #### `prepareRequestBody(rb, um?, options?): Record<string, unknown>`
-构建 OpenAI 请求体。设置 temperature、top_p、max_tokens、reasoning_effort（adaptive 模式时跳过）、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和关闭用 `{ type: false }`）、stop、tools、tool_choice 以及各种惩罚参数和 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。
+构建 OpenAI 请求体。设置 temperature、top_p、max_tokens、reasoning_effort（adaptive 模式时跳过）、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和关闭用 `{ type: false }`）、stop、tools、tool_choice 以及各种惩罚参数和 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。Extra 参数合并前过滤保留键（`model`, `messages`, `stream`, `temperature`, `top_p`, `max_tokens`, `max_completion_tokens`, `tools`, `tool_choice`, `stop`, `reasoning_effort`, `thinking`, `top_k`, `min_p`, `frequency_penalty`, `presence_penalty`, `repetition_penalty`, `stream_options`, `reasoning` 等），冲突时 `logger.warn()` 记录。
 
 #### `processStreamingResponse(responseBody, progress, token): Promise<void>`
 处理 OpenAI SSE 流式响应。逐行解析 `data:` 前缀的 SSE 事件，处理 `[DONE]` 标记，解析 usage 用量信息，委托 `processDelta()`。注册取消回调：`token.onCancellationRequested` 时调用 `reader.cancel()` 立即中断流式读取。在 `finally` 块中 dispose 该回调，防止多次调用 `processStreamingResponse` 时回调累积。
@@ -1004,7 +1020,7 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 将 VS Code 消息转换为 Anthropic 格式。系统消息提取到 `_systemContent`。支持文本、图片、工具使用、工具结果、推理内容。使用 `content` 块数组格式。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据。同时递归扫描 `AnthropicToolResultBlock.content` 中的图片一并存入（确保通过工具返回的图片也能被 `ask_image` 代理识别）。
 
 #### `prepareRequestBody(rb, um?, options?): AnthropicRequestBody`
-构建 Anthropic 请求体。设置 max_tokens、system、temperature、top_p、top_k、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和 `{ type: "disabled" }`）、tools（转换为 Anthropic 格式）、tool_choice（auto/any/none）以及 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。
+构建 Anthropic 请求体。设置 max_tokens、system、temperature、top_p、top_k、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和 `{ type: "disabled" }`）、tools（转换为 Anthropic 格式）、tool_choice（auto/any/none）以及 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。Extra 参数合并前过滤保留键（`model`, `messages`, `stream` 等），冲突时 `logger.warn()` 记录。
 
 #### `processStreamingResponse(responseBody, progress, token): Promise<void>`
 处理 Anthropic SSE 流式响应。逐行解析 `data:` 前缀的 SSE 事件，委托 `processAnthropicChunk()`。注册取消回调：`token.onCancellationRequested` 时调用 `reader.cancel()` 立即中断流式读取。在 `finally` 块中 dispose 该回调，防止多次调用 `processStreamingResponse` 时回调累积。
@@ -1051,7 +1067,7 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 确保 API Key 存在。
 
 #### `performCommitMsgGeneration(secrets, gitDiff, inputBox, repoPath?): Promise<void>`
-核心生成逻辑。构建 prompt（含自定义提示词、最近提交风格、用户输入、diff 内容），支持 `auto` 语言模式（由模型根据历史 commit 风格自动推断），创建 API 实例，流式输出提交消息到 InputBox。支持通过配置 `opencodego.commitIncludeCommitDiff` 控制风格参考中是否包含历史提交的实际代码变更（默认关闭）。支持通过配置 `opencodego.commitAttachContextFiles`（默认开启）控制是否将仓库根目录的 `AGENTS.md` 和 `README.md` 内容附加到 prompt 中作为额外上下文。
+核心生成逻辑。构建 prompt（含自定义提示词、最近提交风格、用户输入、diff 内容），支持 `auto` 语言模式（由模型根据历史 commit 风格自动推断），创建 API 实例，流式输出提交消息到 InputBox。支持通过配置 `opencodego.commitIncludeCommitDiff` 控制风格参考中是否包含历史提交的实际代码变更（默认关闭）。支持通过配置 `opencodego.commitAttachContextFiles`（默认开启）控制是否将仓库根目录的 `AGENTS.md` 和 `README.md` 内容附加到 prompt 中作为额外上下文。在选择模型配置后浅拷贝（`{ ...config }`）再修改 `enable_thinking` 和 `max_completion_tokens`，防止对共享的自动发现配置缓存的突变。
 
 #### `abortCommitGeneration(): void`
 中止提交消息生成。
@@ -1100,27 +1116,27 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 #### `class TokenCache`
 简单 LRU 缓存。
 
-| 属性/方法 | 说明 |
-|-----------|------|
-| `cache` | `Map<string, number>` — 缓存存储 |
-| `maxSize` | 最大条目数 (5000) |
-| `maxSizeBytes` | 最大字节数 (5MB) |
-| `currentSize` | 当前大小 |
-| `get(key)` | 获取缓存值，更新最近使用 |
+| 属性/方法         | 说明                                     |
+| ----------------- | ---------------------------------------- |
+| `cache`           | `Map<string, number>` — 缓存存储         |
+| `maxSize`         | 最大条目数 (5000)                        |
+| `maxSizeBytes`    | 最大字节数 (5MB)                         |
+| `currentSize`     | 当前大小                                 |
+| `get(key)`        | 获取缓存值，更新最近使用                 |
 | `set(key, value)` | 设缓存值，超出限制时驱逐最久未使用的条目 |
 
 #### `class TokenizerManager`
 
-| 静态方法 | 说明 |
-|----------|------|
+| 静态方法                    | 说明                   |
+| --------------------------- | ---------------------- |
 | `initialize(extensionPath)` | 设置扩展路径并获取单例 |
-| `setExtensionPath(path)` | 设置扩展路径 |
-| `getInstance()` | 获取单例实例 |
+| `setExtensionPath(path)`    | 设置扩展路径           |
+| `getInstance()`             | 获取单例实例           |
 
-| 实例方法 | 说明 |
-|----------|------|
-| `getTokenizer()` | 获取或创建 tiktoken 分词器实例（o200k_base） |
-| `countTokens(text)` | 使用缓存和分词器计算文本 Token 数 |
+| 实例方法            | 说明                                         |
+| ------------------- | -------------------------------------------- |
+| `getTokenizer()`    | 获取或创建 tiktoken 分词器实例（o200k_base） |
+| `countTokens(text)` | 使用缓存和分词器计算文本 Token 数            |
 
 #### `export const tokenizerManager = TokenizerManager.getInstance()`
 导出的单例实例。
@@ -1151,17 +1167,14 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 
 ### 4.21 `src/zen/zenModels.ts`
 
-#### `const ZEN_FREE_MODEL_IDS: readonly string[]`
-5 个硬编码的 Zen 免费模型 ID 数组：`big-pickle`、`deepseek-v4-flash-free`、`minimax-m2.5-free`、`ring-2.6-1t-free`、`nemotron-3-super-free`。
-
-#### `const ZEN_FREE_MODEL_METADATA`
-免费模型元数据映射，包含 `displayName`、`contextLength`、`vision`、`maxTokens` 字段。
+#### `const ZEN_MODEL_OVERRIDES`
+最小覆盖映射，为特定 Zen 免费模型提供非默认元数据值（如 `deepseek-v4-flash-free` 的 thinking 强度选项、`minimax-m3-free` 的 vision 和 apiMode 等）。合并优先级：`ZEN_MODEL_OVERRIDES` > models.dev > 保守默认值。
 
 #### `const ZEN_BASE_URL`
 Zen API 基础 URL：`https://opencode.ai/zen/v1/`。
 
 #### `const CACHE_TTL_MS`
-内存缓存 TTL：5 分钟。
+内存缓存 TTL：1 分钟（短 TTL 兼作启动并发激活去重）。
 
 #### `let cachedModelIds: string[] | null`
 模块级缓存：存储最近一次从 Zen API 获取并过滤后的模型 ID 列表。
@@ -1169,22 +1182,30 @@ Zen API 基础 URL：`https://opencode.ai/zen/v1/`。
 #### `let cacheTimestamp: number`
 缓存时间戳，用于判断缓存是否过期。
 
+#### `function deduceApiModeFromFamily(modelId, entry?)`
+根据模型 ID 和可选的 models.dev 条目推断 API 格式。复制 `provideModel.ts` 中 `deduceApiMode` 相同逻辑。使用 family 启发式判断：Claude/Anthropic 系列、Qwen 3.6/3.7 系列、Gemma 系列 → Anthropic；其余 → OpenAI。
+
 #### `async function fetchZenModelList(apiKey): Promise<string[]>`
-从 `https://opencode.ai/zen/v1/models` 拉取完整的模型 ID 列表。API 遵循 OpenAI `/v1/models` 格式，返回 `{ object: "list", data: [{ id, object, created, owned_by }] }`。
+从 `https://opencode.ai/zen/v1/models` 拉取完整的模型 ID 列表。API 遵循 OpenAI `/v1/models` 格式，返回 `{ object: "list", data: [{ id, object, created, owned_by }] }`。使用 `AbortController` 实现 10 秒超时（`setTimeout` + `controller.abort()`），超时后记录警告并抛出 `AbortError` 供调用方处理缓存回退。
 
 #### `function buildModelInfos(modelIds): LanguageModelChatInformation[]`
-根据模型 ID 列表构建 VS Code 模型信息数组。只包含在 `ZEN_FREE_MODEL_METADATA` 中有对应元数据的模型。每个模型注册为 `isUserSelectable: true`，带 `detail="OpenCode Zen"` 和基础版推理强度选择器（`禁用思考` / `思考`）。
+根据模型 ID 列表构建 VS Code 模型信息数组。对每个模型合并元数据：`ZEN_MODEL_OVERRIDES` > models.dev > 保守默认值（`thinkingMode="switchable"`、`contextLength=128000`、`maxTokens=4096`、`vision=false`）。switchable 模型包含 `disabled` 选项，always 模型不包含。
 
 #### `async function getZenFreeModelInfos(secrets): Promise<LanguageModelChatInformation[]>`
 获取 Zen 免费模型列表。流程：
-1. 检查缓存（5 分钟 TTL），有效则直接返回
-2. 获取 API Key，存在则调用 `fetchZenModelList()` 与 `ZEN_FREE_MODEL_IDS` 做交集过滤
-3. 拉取成功 → 更新缓存 → 返回过滤后的模型
-4. 拉取失败 → 使用过期缓存或全量硬编码列表（乐观降级）
-5. 无 API Key → 使用过期缓存或全量硬编码列表
+1. 检查缓存（1 分钟 TTL），有效则直接返回
+2. 获取 API Key，存在则调用 `fetchZenModelList()` 过滤出 `id.endsWith("-free")` 的模型
+3. 拉取成功 → 更新缓存 → 加载 models.dev 元数据 → 返回过滤后的模型
+4. 拉取失败 → 使用过期缓存（如有）
+5. 无 API Key 或无缓存 → 返回空数组（无降级硬编码列表）
 
 #### `function getZenFreeModelConfig(modelId): OpenCodeGoModelItem | undefined`
-按模型 ID 查找 Zen 免费模型配置。返回 `baseUrl: "https://opencode.ai/zen/v1/"`、`apiMode: "openai"`、`thinkingMode: "switchable"` 的模型配置对象。内置模型找不到时由 `provider.ts` 作为回退调用。
+按模型 ID 查找 Zen 免费模型配置。要求 `modelId.endsWith("-free")`，否则返回 undefined。元数据合并：`ZEN_MODEL_OVERRIDES` > models.dev > 保守默认值。使用 `deduceApiModeFromFamily()` 推断 apiMode。将 `ZEN_MODEL_OVERRIDES` 中的 `defaultReasoningEffort` 传播到返回配置的 `reasoning_effort` 字段。内置模型找不到时由 `provider.ts` 作为回退调用。
+
+#### `clearZenModelCache(): void`
+清除缓存的 Zen 模型 ID 列表、时间戳和基础 URL。由 `resetAutoDiscoveryState()` 在强制刷新时调用，确保 Zen 免费模型列表在下次查询时重新从 API 拉取。
+
+---
 
 ---
 
@@ -1213,26 +1234,26 @@ npm run build
 
 ### 5.2 编译配置 (tsconfig.json)
 
-| 选项 | 值 |
-|------|-----|
-| `module` | `Node16` |
-| `target` | `ES2024` |
-| `lib` | `["ES2024", "dom"]` |
-| `strict` | `true` |
-| `outDir` | `out` |
-| `rootDir` | `src` |
+| 选项      | 值                  |
+| --------- | ------------------- |
+| `module`  | `Node16`            |
+| `target`  | `ES2024`            |
+| `lib`     | `["ES2024", "dom"]` |
+| `strict`  | `true`              |
+| `outDir`  | `out`               |
+| `rootDir` | `src`               |
 
 ### 5.3 依赖
 
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| `@microsoft/tiktokenizer` | ^1.0.10 | o200k_base 分词器 |
-| `@eslint/js` | 9.39.4 | ESLint JavaScript 推荐规则 |
-| `@types/node` | ^22 | Node.js 类型定义 |
-| `@types/vscode` | ^1.116.0 | VS Code 类型定义 |
-| `eslint` | 9.39.4 | 代码检查工具 |
-| `typescript` | ^5.9.2 | TypeScript 编译器 |
-| `typescript-eslint` | 8.60.1 | TypeScript ESLint 配置与解析器 |
+| 依赖                      | 版本     | 用途                           |
+| ------------------------- | -------- | ------------------------------ |
+| `@microsoft/tiktokenizer` | ^1.0.10  | o200k_base 分词器              |
+| `@eslint/js`              | 9.39.4   | ESLint JavaScript 推荐规则     |
+| `@types/node`             | ^22      | Node.js 类型定义               |
+| `@types/vscode`           | ^1.116.0 | VS Code 类型定义               |
+| `eslint`                  | 9.39.4   | 代码检查工具                   |
+| `typescript`              | ^5.9.2   | TypeScript 编译器              |
+| `typescript-eslint`       | 8.60.1   | TypeScript ESLint 配置与解析器 |
 
 ---
 
@@ -1289,8 +1310,8 @@ type 取值：`feat` | `fix` | `refactor` | `docs` | `chore` | `improve` 等。
 
 ### Files Changed
 
-| File | Change |
-|------|--------|
+| File          | Change               |
+| ------------- | -------------------- |
 | `<file path>` | <一句话说明改了什么> |
 | `<file path>` | <一句话说明改了什么> |
 ```
@@ -1359,16 +1380,16 @@ type 取值：`feat` | `fix` | `refactor` | `docs` | `chore` | `improve` 等。
 
 ### 6.6 命名约定
 
-| 类别 | 约定 | 示例 |
-|------|------|------|
-| 类 | PascalCase | `OpenCodeGoChatModelProvider` |
-| 接口 | PascalCase | `BuiltInModelDef`, `OpenCodeGoModelItem` |
-| 类型 | PascalCase | `OpenAIChatRole`, `ParsedModelId` |
-| 函数 | camelCase | `getBuiltInModelConfig`, `countMessageTokens` |
-| 变量 | camelCase | `requestTimeoutMs`, `apiKey` |
-| 常量 | UPPER_SNAKE_CASE | `BASE_TOKENS_PER_MESSAGE`, `DEFAULT_CONTEXT_LENGTH` |
-| 私有属性 | `_` 前缀 | `_lastRequestTime`, `_toolCallBuffers` |
-| 文件 | camelCase | `provider.ts`, `commitMessageGenerator.ts` |
+| 类别     | 约定             | 示例                                                |
+| -------- | ---------------- | --------------------------------------------------- |
+| 类       | PascalCase       | `OpenCodeGoChatModelProvider`                       |
+| 接口     | PascalCase       | `BuiltInModelDef`, `OpenCodeGoModelItem`            |
+| 类型     | PascalCase       | `OpenAIChatRole`, `ParsedModelId`                   |
+| 函数     | camelCase        | `getBuiltInModelConfig`, `countMessageTokens`       |
+| 变量     | camelCase        | `requestTimeoutMs`, `apiKey`                        |
+| 常量     | UPPER_SNAKE_CASE | `BASE_TOKENS_PER_MESSAGE`, `DEFAULT_CONTEXT_LENGTH` |
+| 私有属性 | `_` 前缀         | `_lastRequestTime`, `_toolCallBuffers`              |
+| 文件     | camelCase        | `provider.ts`, `commitMessageGenerator.ts`          |
 
 ### 6.7 VS Code API 使用约束
 

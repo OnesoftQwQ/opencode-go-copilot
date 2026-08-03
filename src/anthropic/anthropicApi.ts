@@ -342,10 +342,18 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 			}
 		}
 
-		// Process extra configuration parameters
+		// Process extra configuration parameters (filter reserved keys with warning)
+		const ANTHROPIC_RESERVED_EXTRA_KEYS = new Set([
+			"model", "messages", "stream", "max_tokens", "system",
+			"temperature", "top_p", "top_k", "tools", "tool_choice",
+			"thinking", "stop_sequences",
+		]);
 		if (um?.extra && typeof um.extra === "object") {
-			// Add all extra parameters directly to the request body
 			for (const [key, value] of Object.entries(um.extra)) {
+				if (ANTHROPIC_RESERVED_EXTRA_KEYS.has(key)) {
+					logger.warn("extra.conflict", { key, file: "anthropicApi" });
+					continue;
+				}
 				if (value !== undefined) {
 					(rb as unknown as Record<string, unknown>)[key] = value;
 				}

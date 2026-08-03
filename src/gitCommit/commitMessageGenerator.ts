@@ -5,6 +5,9 @@ import { getGitDiff, getRecentCommits } from "./gitUtils";
 import { OpenaiApi } from "../openai/openaiApi";
 import { AnthropicApi } from "../anthropic/anthropicApi";
 import { getBuiltInModelConfig } from "../models";
+import { getZenFreeModelConfig } from "../zen/zenModels";
+import { getAutoDiscoveredModelConfig } from "../provideModel";
+import { getCatalogProviderBaseUrl } from "../modelsDev";
 import { logger } from "../logger";
 import { l10n } from "../localize";
 import type { OpenCodeGoModelItem } from "../types";
@@ -222,10 +225,15 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
         // Use model from config or default to deepseek-v4-flash
         const commitModelId = config.get<string>("opencodego.commitModel", "deepseek-v4-flash");
         // Fetch full model config (apiMode, max_completion_tokens, extra, etc.)
-        const selectedModel: OpenCodeGoModelItem = getBuiltInModelConfig(commitModelId) ?? { id: commitModelId, owned_by: "opencode" };
+        // Shallow copy to avoid mutating the shared cached config (e.g. auto-discovered models).
+        const selectedModel: OpenCodeGoModelItem = {
+            ...(getBuiltInModelConfig(commitModelId)
+                ?? await getZenFreeModelConfig(commitModelId)
+                ?? getAutoDiscoveredModelConfig(commitModelId)
+                ?? { id: commitModelId, owned_by: "opencode" })
+        };
         // Commit messages are simple tasks — disable thinking to speed up generation.
         selectedModel.enable_thinking = false;
-        selectedModel.reasoning_effort = "high";
         // Cap max_completion_tokens to avoid proxy 500 errors with oversized values
         if (selectedModel.max_completion_tokens && selectedModel.max_completion_tokens > 8192) {
             selectedModel.max_completion_tokens = 8192;
@@ -238,9 +246,23 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
             throw new Error(l10n("OpenCode Go API key not found"));
         }
 
-        const baseUrl = selectedModel.baseUrl || "https://opencode.ai/zen/go/v1/";
+        const baseUrl = selectedModel.baseUrl || getCatalogProviderBaseUrl("opencode-go", "https://opencode.ai/zen/go/v1/");
         if (!baseUrl || !baseUrl.startsWith("http")) {
             throw new Error(l10n("Invalid base URL configuration."));
+        }
+        const httpAllowInsecure = config.get<boolean>("opencodego.httpAllowInsecure", false);
+        if (!httpAllowInsecure) {
+            const url = new URL(baseUrl);
+            if (url.protocol === "http:") {
+                const host = url.hostname.toLowerCase();
+                const isLocal = host === "localhost" || host === "127.0.0.1" || host === "::1"
+                    || host.startsWith("192.168.") || host.startsWith("10.")
+                    || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+                    || host === "0.0.0.0";
+                if (!isLocal) {
+                    throw new Error(l10n("Plain HTTP is only allowed for localhost or private network addresses. Use HTTPS for remote endpoints."));
+                }
+            }
         }
 
         // Apply language instruction: auto mode lets the model infer from style reference
@@ -252,8 +274,7 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
         const messages = [{ role: "user", content: prompt }];
 
         // Use the appropriate API based on model config
-        const commitModelConfig = getBuiltInModelConfig(commitModelId);
-        const apiMode = commitModelConfig?.apiMode || "openai";
+        const apiMode = selectedModel.apiMode || "openai";
 
         const apiInstance = apiMode === "anthropic"
             ? new AnthropicApi(modelId)

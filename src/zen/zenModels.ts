@@ -2,78 +2,60 @@ import * as vscode from "vscode";
 import type { LanguageModelChatInformation } from "vscode";
 import type { OpenCodeGoModelItem } from "../types";
 import { l10n } from "../localize";
+import { logger } from "../logger";
+import {
+    ensureModelsDevLoaded,
+    lookupModelDevEntry,
+    deduceApiModeFromFamily,
+    getCatalogProviderBaseUrl,
+    getCatalogProviderModelEntry,
+    inferThinkingMode,
+    inferReasoningEfforts,
+    inferDefaultReasoningEffort,
+    inferVision,
+    type ModelsDevEntry,
+} from "../modelsDev";
 
-// ── Hardcoded Zen free model IDs (from OpenCode Zen official documentation) ──
-export const ZEN_FREE_MODEL_IDS: readonly string[] = [
-    "big-pickle",
-    "deepseek-v4-flash-free",
-    "minimax-m3-free",
-    "minimax-m2.5-free",
-    "mimo-v2.5-free",
-    "ring-2.6-1t-free",
-    "nemotron-3-super-free",
-    "qwen3.6-plus-free",
-];
+const ZEN_PROVIDER_ID = "opencode";
+const ZEN_FALLBACK_BASE_URL = "https://opencode.ai/zen/v1/";
 
 /**
- * Metadata for each Zen free model.
- * Context lengths are conservative estimates; actual limits depend on Zen provider.
- * thinkingMode: "always" = thinking always on (no switch), "switchable" = user can toggle.
- * supportedReasoningEfforts: optional multi-level efforts (e.g. ["high", "max"]) for switchable models.
- * defaultReasoningEffort: default effort when thinking is enabled.
+ * Minimal overrides for Zen free models that the catalog may not fully cover.
+ * Only use for edge cases where the catalog data is incorrect or incomplete.
  */
-const ZEN_FREE_MODEL_METADATA: Record<
-    string,
-    { displayName: string; contextLength: number; vision: boolean; maxTokens: number; thinkingMode: "switchable" | "always" | "adaptive"; supportedReasoningEfforts?: string[]; defaultReasoningEffort?: string; apiMode?: "openai" | "anthropic" }
-> = {
-    "big-pickle": {
-        displayName: "Zen/Big Pickle Free",
-        contextLength: 128000,
-        vision: false,
-        maxTokens: 4096,
-        thinkingMode: "always",
-    },
-    "deepseek-v4-flash-free": {
-        displayName: "Zen/DeepSeek V4 Flash Free",
-        contextLength: 1000000,
-        vision: false,
-        maxTokens: 32768,
-        thinkingMode: "switchable",
-        supportedReasoningEfforts: ["high", "max"],
-        defaultReasoningEffort: "max",
-    },
-    "minimax-m3-free": {
-        displayName: "Zen/MiniMax M3 Free",
-        contextLength: 1000000,
-        vision: true,
-        maxTokens: 32768,
-        thinkingMode: "adaptive",
-        defaultReasoningEffort: "adaptive",
-        apiMode: "anthropic",
-    },
-    "mimo-v2.5-free": {
-        displayName: "Zen/MiMo V2.5 Free",
-        contextLength: 1000000,
-        vision: true,
-        maxTokens: 32768,
-        thinkingMode: "switchable",
-    },
-    "nemotron-3-super-free": {
-        displayName: "Zen/Nemotron 3 Super Free",
-        contextLength: 1000000,
-        vision: false,
-        maxTokens: 4096,
-        thinkingMode: "switchable",
-    }
-};
+const ZEN_MODEL_OVERRIDES: Record<string, Partial<{
+    displayName: string;
+    contextLength: number;
+    vision: boolean;
+    maxTokens: number;
+    thinkingMode: "switchable" | "always" | "adaptive";
+    supportedReasoningEfforts?: string[];
+    defaultReasoningEffort?: string;
+    apiMode?: "openai" | "anthropic";
+    cost?: { cache_read: number; input: number; output: number };
+}>> = {};
 
 const EXTENSION_LABEL_ZEN = "OpenCode Zen";
-const ZEN_BASE_URL = "https://opencode.ai/zen/v1/";
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 60 * 1000; // 1 minute — short TTL dedupes concurrent startup activations
 
 // ── Module-level cache for Zen model list ──
 let cachedModelIds: string[] | null = null;
 let cacheTimestamp = 0;
+let cachedBaseUrl: string | null = null;
+
+/**
+ * Resolve the Zen API base URL from the catalog, with fallback.
+ */
+async function resolveZenBaseUrl(): Promise<string> {
+    if (cachedBaseUrl) return cachedBaseUrl;
+    try {
+        await ensureModelsDevLoaded();
+        cachedBaseUrl = getCatalogProviderBaseUrl(ZEN_PROVIDER_ID, ZEN_FALLBACK_BASE_URL);
+    } catch {
+        cachedBaseUrl = ZEN_FALLBACK_BASE_URL;
+    }
+    return cachedBaseUrl;
+}
 
 /**
  * Fetch the full model list from OpenCode Zen API.
@@ -81,80 +63,112 @@ let cacheTimestamp = 0;
  *   { object: "list", data: [{ id: string, object: string, created: number, owned_by: string }, ...] }
  */
 async function fetchZenModelList(apiKey: string): Promise<string[]> {
-    const url = `${ZEN_BASE_URL.replace(/\/+$/, "")}/models`;
-    const response = await fetch(url, {
-        headers: {
-            Authorization: `Bearer ${apiKey}`,
-        },
-    });
+    const baseUrl = await resolveZenBaseUrl();
+    const url = `${baseUrl.replace(/\/+$/, "")}/models`;
+    const TIMEOUT_MS = 10000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+        const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (!response.ok) {
+            throw new Error(`Zen API error: [${response.status}] ${response.statusText}`);
+        }
+        const body = (await response.json()) as { data?: Array<{ id: string }> };
+        return (body.data ?? []).map((m) => m.id);
+    } catch (err: unknown) {
+        clearTimeout(timeoutId);
+        if (err instanceof DOMException && err.name === "AbortError") {
+            logger.warn("zen.fetch.timeout", { url });
+        }
+        throw err;
+    }
+}
 
-    if (!response.ok) {
-        throw new Error(`Zen API error: [${response.status}] ${response.statusText}`);
+/**
+ * Merge model metadata with precedence: overrides > catalog provider entry > global catalog entry > defaults.
+ */
+function resolveZenMetadata(modelId: string) {
+    const override = ZEN_MODEL_OVERRIDES[modelId];
+    const providerEntry = getCatalogProviderModelEntry(ZEN_PROVIDER_ID, modelId);
+    const globalEntry = lookupModelDevEntry(modelId);
+
+    // Prefer provider-specific entry, fall back to global entry
+    const entry = providerEntry ?? globalEntry;
+    const isDeprecated = entry?.status === "deprecated";
+    const rawName = override?.displayName ?? entry?.name ?? modelId;
+    const displayName = `[Zen] ${isDeprecated ? "[Depr] " : ""}${rawName}`;
+    const status = entry?.status;
+    const contextLength = override?.contextLength ?? entry?.limit?.context ?? 128000;
+    const maxTokens = override?.maxTokens ?? entry?.limit?.output ?? 4096;
+    const vision = override?.vision ?? (entry ? inferVision(entry) : false);
+    const thinkingMode = override?.thinkingMode ?? (entry ? inferThinkingMode(entry) : "switchable");
+    const supportedReasoningEfforts = override?.supportedReasoningEfforts ?? (entry ? inferReasoningEfforts(entry) : undefined);
+    const defaultReasoningEffort = override?.defaultReasoningEffort ?? (entry ? inferDefaultReasoningEffort(entry) : "enabled");
+    const apiMode = override?.apiMode ?? (entry ? deduceApiModeFromFamily(modelId, entry) : "openai");
+
+    const cost = override?.cost ?? entry?.cost ?? { cache_read: 0, input: 0, output: 0 };
+    return { displayName, contextLength, maxTokens, vision, thinkingMode, supportedReasoningEfforts, defaultReasoningEffort, apiMode, status, cost };
+}
+
+/**
+ * Build enumeration values/items/descriptions for the reasoning effort selector.
+ */
+function buildReasoningEnum(thinkingMode: string, supportedReasoningEfforts: string[] | undefined) {
+    const hasEfforts = supportedReasoningEfforts && supportedReasoningEfforts.length > 0;
+    let enumValues: string[];
+    if (hasEfforts) {
+        if (thinkingMode === "switchable") {
+            enumValues = ["disabled", ...supportedReasoningEfforts];
+        } else if (thinkingMode === "adaptive") {
+            enumValues = ["disabled", "adaptive"];
+        } else {
+            enumValues = [...supportedReasoningEfforts];
+        }
+    } else {
+        if (thinkingMode === "switchable") {
+            enumValues = ["disabled", "enabled"];
+        } else if (thinkingMode === "adaptive") {
+            enumValues = ["disabled", "adaptive"];
+        } else {
+            enumValues = ["enabled"];
+        }
     }
 
-    const body = (await response.json()) as { data?: Array<{ id: string }> };
-    return (body.data ?? []).map((m) => m.id);
+    const labelMap: Record<string, string> = {
+        disabled: l10n("Disabled"),
+        adaptive: l10n("Adaptive"),
+        enabled: l10n("Thinking"),
+        high: l10n("High"),
+        max: l10n("Maximum"),
+    };
+    const descMap: Record<string, string> = {
+        disabled: l10n("Do not enable thinking"),
+        adaptive: l10n("Automatically decide when to think"),
+        enabled: l10n("Enable thinking"),
+        high: l10n("Deeper thinking, slower response"),
+        max: l10n("Maximum thinking depth, slowest response"),
+    };
+
+    const enumItemLabels = enumValues.map((e) => labelMap[e] ?? e);
+    const enumDescriptions = enumValues.map((e) => descMap[e] ?? e);
+
+    return { enumValues, enumItemLabels, enumDescriptions };
 }
 
 /**
  * Build LanguageModelChatInformation array from a list of model IDs.
- * Only models present in ZEN_FREE_MODEL_METADATA are included.
- * - switchable models: include "disabled" option so user can turn off thinking
- * - always models: no "disabled" option, thinking always on
+ * Metadata is resolved from the catalog with override fallback.
  */
 function buildModelInfos(modelIds: string[]): LanguageModelChatInformation[] {
     const infos: LanguageModelChatInformation[] = [];
 
     for (const modelId of modelIds) {
-        const meta = ZEN_FREE_MODEL_METADATA[modelId];
-        if (!meta) {
-            continue;
-        }
-
-        // Build reasoning effort enum based on thinking mode
-        // - "switchable" + hasEfforts: disabled / [effort levels]
-        // - "switchable" + no efforts: disabled / enabled
-        // - "adaptive"               : disabled / adaptive
-        // - "always"    + hasEfforts: [effort levels]
-        // - "always"    + no efforts: enabled
-        const hasEfforts = meta.supportedReasoningEfforts && meta.supportedReasoningEfforts.length > 0;
-        let enumValues: string[];
-        if (hasEfforts) {
-            if (meta.thinkingMode === "switchable") {
-                enumValues = ["disabled", ...meta.supportedReasoningEfforts!];
-            } else {
-                enumValues = [...meta.supportedReasoningEfforts!];
-            }
-        } else {
-            if (meta.thinkingMode === "switchable") {
-                enumValues = ["disabled", "enabled"];
-            } else if (meta.thinkingMode === "adaptive") {
-                enumValues = ["disabled", "adaptive"];
-            } else {
-                enumValues = ["enabled"];
-            }
-        }
-        const enumItemLabels = enumValues.map((e) => {
-            switch (e) {
-                case 'disabled': return l10n("Disabled");
-                case 'adaptive': return l10n("Adaptive");
-                case 'enabled': return l10n("Thinking");
-                case 'high': return l10n("High");
-                case 'max': return l10n("Maximum");
-                default: return e;
-            }
-        });
-        const enumDescriptions = enumValues.map((e) => {
-            switch (e) {
-                case 'disabled': return l10n("Do not enable thinking");
-                case 'adaptive': return l10n("Automatically decide when to think");
-                case 'enabled': return l10n("Enable thinking");
-                case 'high': return l10n("Deeper thinking, slower response");
-                case 'max': return l10n("Maximum thinking depth, slowest response");
-                default: return e;
-            }
-        });
-        const defaultEffort = meta.defaultReasoningEffort ?? "enabled";
+        const meta = resolveZenMetadata(modelId);
+        const { enumValues, enumItemLabels, enumDescriptions } = buildReasoningEnum(meta.thinkingMode, meta.supportedReasoningEfforts);
 
         infos.push({
             id: modelId,
@@ -180,7 +194,7 @@ function buildModelInfos(modelIds: string[]): LanguageModelChatInformation[] {
                         enum: enumValues,
                         enumItemLabels: enumItemLabels,
                         enumDescriptions: enumDescriptions,
-                        default: defaultEffort,
+                        default: meta.defaultReasoningEffort,
                         group: "navigation",
                     },
                 },
@@ -196,8 +210,9 @@ function buildModelInfos(modelIds: string[]): LanguageModelChatInformation[] {
  *
  * Flow:
  * 1. Try to fetch the model list from Zen API (with 5 min cache)
- * 2. Intersect with hardcoded free model IDs
- * 3. If API is unreachable or no API key, return the full hardcoded list (optimistic)
+ * 2. Filter to only models with IDs ending in "-free"
+ * 3. Load catalog metadata for enhanced model info
+ * 4. If API is unreachable, use stale cache; if no cache, return empty
  *
  * @param secrets SecretStorage instance for reading the API key.
  */
@@ -206,6 +221,7 @@ export async function getZenFreeModelInfos(secrets: vscode.SecretStorage): Promi
 
     // Use cached result if still fresh
     if (cachedModelIds !== null && now - cacheTimestamp < CACHE_TTL_MS) {
+        await ensureModelsDevLoaded();
         return buildModelInfos(cachedModelIds);
     }
 
@@ -215,56 +231,72 @@ export async function getZenFreeModelInfos(secrets: vscode.SecretStorage): Promi
     if (apiKey) {
         try {
             const allModelIds = await fetchZenModelList(apiKey);
-            // Intersect with hardcoded free model IDs
-            const availableFreeModels = allModelIds.filter((id) => ZEN_FREE_MODEL_IDS.includes(id));
+            // Filter to free models (IDs ending with "-free")
+            const availableFreeModels = allModelIds.filter((id) => id.endsWith("-free"));
 
             // Update cache
             cachedModelIds = availableFreeModels;
             cacheTimestamp = now;
 
+            await ensureModelsDevLoaded();
             return buildModelInfos(availableFreeModels);
         } catch (error) {
             console.error("[OpenCodeGo] Failed to fetch Zen model list:", error);
-            // Fall through to use stale cache or full hardcoded list
+            // Fall through to use stale cache
         }
     }
 
     // Use stale cache if available
     if (cachedModelIds !== null) {
+        await ensureModelsDevLoaded();
         return buildModelInfos(cachedModelIds);
     }
 
-    // Optimistic: return all hardcoded free models
-    cachedModelIds = [...ZEN_FREE_MODEL_IDS];
-    cacheTimestamp = now;
-    return buildModelInfos(cachedModelIds);
+    // No cache and API failed — return empty (Zen models require API reachability)
+    return [];
+}
+
+/**
+ * Clear the cached Zen model list and base URL.
+ * Used during forced refresh to ensure fresh data is fetched.
+ */
+export function clearZenModelCache(): void {
+    cachedModelIds = null;
+    cacheTimestamp = 0;
+    cachedBaseUrl = null;
 }
 
 /**
  * Get model configuration for a Zen free model.
- * Returns undefined if the model ID is not a known Zen free model.
+ * Returns undefined if the model ID does not end with "-free".
+ * Metadata resolved from: overrides > catalog provider entry > global catalog entry > defaults.
  */
-export function getZenFreeModelConfig(modelId: string): OpenCodeGoModelItem | undefined {
-    if (!ZEN_FREE_MODEL_IDS.includes(modelId)) {
+export async function getZenFreeModelConfig(modelId: string): Promise<OpenCodeGoModelItem | undefined> {
+    if (!modelId.endsWith("-free")) {
         return undefined;
     }
 
-    const meta = ZEN_FREE_MODEL_METADATA[modelId];
-    if (!meta) {
-        return undefined;
-    }
+    await ensureModelsDevLoaded();
+    const baseUrl = await resolveZenBaseUrl();
+    const meta = resolveZenMetadata(modelId);
 
-    return {
+    const config: OpenCodeGoModelItem = {
         id: modelId,
         owned_by: "opencode",
         displayName: meta.displayName,
-        baseUrl: ZEN_BASE_URL,
+        baseUrl: baseUrl,
         vision: meta.vision,
         context_length: meta.contextLength,
         max_completion_tokens: meta.maxTokens,
-        apiMode: meta.apiMode ?? "openai",
+        apiMode: meta.apiMode,
         enable_thinking: true,
         include_reasoning_in_request: true,
         thinkingMode: meta.thinkingMode,
     };
+
+    if (meta.defaultReasoningEffort) {
+        config.reasoning_effort = meta.defaultReasoningEffort;
+    }
+
+    return config;
 }

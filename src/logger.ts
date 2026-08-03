@@ -48,6 +48,7 @@ class Logger {
     dispose(): void {
         this._outputChannel?.dispose();
     }
+
 }
 
 export const logger = new Logger();

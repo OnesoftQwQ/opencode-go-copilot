@@ -8,7 +8,7 @@ export class VersionManager {
      */
     static getVersion(): string {
         if (this._version === null) {
-            const extension = vscode.extensions.getExtension("my-company.opencode-go-copilot");
+            const extension = vscode.extensions.getExtension("OnesoftQwQ.opencode-go-copilot-provider");
             this._version = extension?.packageJSON?.version ?? "unknown";
         }
         return this._version!;

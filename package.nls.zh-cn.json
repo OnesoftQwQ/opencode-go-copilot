@@ -1,15 +1,13 @@
 {
 	"providerDisplayName": "OpenCode Go",
 	"commandCategory": "OpenCodeGo",
-
 	"command.setApiKey": "设置 OpenCode Go API 密钥",
 	"command.getApiKey": "获取 OpenCode Go API 密钥",
 	"command.openSettings": "打开 OpenCode Go 设置",
 	"command.generateCommit": "使用 OpenCodeGo 生成提交消息",
 	"command.abortCommit": "使用 OpenCodeGo 生成提交消息 - 停止",
-
+	"command.updateModelList": "更新 OpenCode Go 模型列表 (强制)",
 	"config.title": "OpenCode Go Copilot",
-
 	"config.commitLanguage.desc": "生成的 Git 提交消息使用的语言。设为 \"auto\" 时将根据历史提交自动检测语言（无历史时默认英语）。",
 	"config.commitLanguage.auto.desc": "根据历史提交自动检测语言（无历史时默认英语）",
 	"config.commitLanguage.enum.English.desc": "生成英语提交消息",
@@ -32,24 +30,29 @@
 	"config.recentCommitsCount.desc": "生成提交消息时参考的近期提交数量，用于学习仓库提交风格。设为 0 可禁用。默认: 10。",
 	"config.commitIncludeCommitDiff.desc": "启用后，风格参考中包含历史提交的实际代码变更（diff），帮助模型生成更符合项目提交风格的消息。默认: 关闭。",
 	"config.commitAttachContextFiles.desc": "启用后，生成提交消息时将仓库根目录的 AGENTS.md 和 README.md 内容附加上下文，帮助模型更好地理解项目。默认: 开启。",
-
 	"config.modelPreset.desc": "当前模型预设 ID。使用「设置模型预设」命令选择预设。设为「custom」可使用「opencodego.temperature」和「opencodego.top_p」手动输入的值。",
 	"config.temperature.desc": "模型温度 (0.0 - 2.0)。与「opencodego.top_p」配对使用。仅在「opencodego.modelPreset」设为「custom」时生效。",
 	"config.top_p.desc": "模型 top_p (0.0 - 1.0)。与「opencodego.temperature」配对使用。仅在「opencodego.modelPreset」设为「custom」时生效。",
 	"config.enableZenFreeModels.desc": "启用 OpenCode Zen 免费模型并将其添加到模型选择器中。开启后，扩展将从 Zen API 获取模型列表并显示免费模型（Big Pickle、DeepSeek V4 Flash、MiniMax M2.5、Ring 2.6 1T、Nemotron 3 Super）。Zen 免费模型暂不支持用于 Git 提交消息生成。更改此设置后需要重新加载 VS Code 才能生效。",
 	"config.enableAutoModelDiscovery.desc": "启用自动模型发现。开启后，扩展将从 API 获取模型列表，过滤模型选择器仅显示服务器上可用的模型。不在 API 列表中的模型将被隐藏。服务器上存在但内置列表中没有的新模型将自动添加并使用默认功能（始终开启思考）。关闭后可看到所有内置模型，不受 API 可用性影响。",
+	"config.modelsDevUpdateInterval.desc": "当「opencodego.enableAutoModelDiscovery」启用时，检查 API 模型更新的缓存 TTL（毫秒）。默认值: 60000（1分钟）。最小值: 30000（30秒）。",
 	"config.modelPresets.desc": "模型预设列表，可通过命令面板快速选择。每个预设包含温度（temperature）和 top_p 两个参数。你可以修改各预设的字段来自定义。",
 	"config.modelPreset.id.desc": "预设标识符（必须与 modelPreset 设置中的值一致）。",
 	"config.modelPreset.label.desc": "预设档位的显示名称。",
 	"config.modelPreset.temperature.desc": "温度值 (0.0 - 2.0)。",
 	"config.modelPreset.top_p.desc": "top_p 值 (0.0 - 1.0)。",
-
 	"config.visionProxyModel.desc": "用于 ask_image 工具的视觉模型 ID。当所选模型不支持视觉时，该模型用于回答图片相关问题。",
 	"config.visionProxyThinking.desc": "在视觉代理模型回答图片查询时启用思考/推理功能。",
 	"config.enableThirdPartyTokenIndicator.desc": "启用高级 Token 指示器。Copilot 原生 Token 指示器始终保持开启。开启后，扩展还会在 VS Code 状态栏中显示高级Token计数器。默认: 开启。",
-
+	"config.delay.desc": "连续 API 请求之间的延迟时间（毫秒），用于避免触发频率限制。设为 0 表示不延迟。默认值: 0。",
+	"config.visionMaxRounds.desc": "非视觉模型使用 `ask_image` 工具查询图片时的最大视觉代理轮数。限制每次请求的后续追问次数。默认值: 5。",
+	"opencodego.config.httpAllowInsecure": "允许明文 HTTP 连接到任意服务器（不安全）。禁用时，明文 HTTP 仅允许 localhost 和私有网络地址。",
+	"config.readFileLines.desc": "`read_file` 工具的默认读取行数。设为正值时，扩展会自动调整 `read_file` 工具调用的读取行数。设为 0 表示不调整。默认值: 0。",
+	"config.retry.enabled.desc": "启用失败 API 请求的自动重试（指数退避）。默认值: 开启。",
+	"config.retry.maxAttempts.desc": "失败 API 请求的最大重试次数。默认值: 3。",
+	"config.retry.intervalMs.desc": "首次重试前的初始延迟时间（毫秒）。每次重试后按指数递增。默认值: 1000。",
+	"config.retry.statusCodes.desc": "除默认状态码（429、500、502、503、504）之外，额外触发自动重试的 HTTP 状态码列表。默认值: []。",
 	"command.setModelPreset": "设置模型温度预设",
-
 	"walkthrough.title": "OpenCode Go for Copilot Chat",
 	"walkthrough.description": "在 Copilot Chat 中配置 OpenCode Go 模型。",
 	"walkthrough.setApiKey.title": "设置你的 OpenCode Go API 密钥",
