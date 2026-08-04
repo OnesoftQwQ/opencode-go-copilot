@@ -22,6 +22,7 @@
  */
 
 import * as vscode from "vscode";
+import { HARDCODED_MODEL_LISTS } from "./hardcodedModelList";
 import { logger } from "./logger";
 
 const CATALOG_URL = "https://models.dev/catalog.json";
@@ -134,6 +135,32 @@ function getMirrorConfig(): { url?: string; token?: string } {
     };
 }
 
+/** Source of the loaded catalog data. */
+export type CatalogSource = "official" | "mirror" | "hardcoded";
+
+interface FetchCatalogResult {
+    data: CatalogData;
+    source: CatalogSource;
+}
+
+/**
+ * Build a minimal catalog from the hardcoded model lists. Entries only carry
+ * id/name; all other metadata falls back to MODEL_OVERRIDES and the
+ * conservative defaults in catalogModels.ts. Provider `api` is left empty so
+ * callers use their built-in fallback base URLs.
+ */
+function buildHardcodedCatalog(): CatalogData {
+    const providers: Record<string, CatalogProvider> = {};
+    for (const [providerId, entries] of Object.entries(HARDCODED_MODEL_LISTS)) {
+        const models: Record<string, ModelsDevEntry> = {};
+        for (const entry of entries) {
+            models[entry.id] = { id: entry.id, name: entry.name ?? entry.id };
+        }
+        providers[providerId] = { id: providerId, name: providerId, api: "", models };
+    }
+    return { models: {}, providers };
+}
+
 /**
  * Fetch JSON with a timeout, converting abort into a plain error.
  */
@@ -157,12 +184,12 @@ async function fetchJson(url: string, timeoutMs: number, headers?: Record<string
 }
 
 /**
- * Fetch the catalog JSON. Tries the official models.dev URL first, then the
- * configured mirror (with platform/token headers); throws when both fail.
+ * Fetch the catalog JSON. Fallback chain: official models.dev URL → configured
+ * mirror (with platform/token headers) → hardcoded model lists.
  */
-async function fetchCatalog(): Promise<CatalogData> {
+async function fetchCatalog(): Promise<FetchCatalogResult> {
     try {
-        return await fetchJson(CATALOG_URL, OFFICIAL_TIMEOUT_MS);
+        return { data: await fetchJson(CATALOG_URL, OFFICIAL_TIMEOUT_MS), source: "official" };
     } catch (err) {
         logger.warn("modelsDev.fetch.officialFailed", {
             url: CATALOG_URL,
@@ -171,24 +198,27 @@ async function fetchCatalog(): Promise<CatalogData> {
     }
 
     const mirror = getMirrorConfig();
-    if (!mirror.url) {
-        throw new Error("catalog unavailable: official fetch failed and no mirror configured");
-    }
-    try {
-        const headers: Record<string, string> = { platform: MIRROR_PLATFORM_HEADER };
-        if (mirror.token) {
-            headers["x-mirror-token"] = mirror.token;
+    if (mirror.url) {
+        try {
+            const headers: Record<string, string> = { platform: MIRROR_PLATFORM_HEADER };
+            if (mirror.token) {
+                headers["x-mirror-token"] = mirror.token;
+            }
+            const data = await fetchJson(mirror.url, MIRROR_TIMEOUT_MS, headers);
+            logger.info("modelsDev.fetch.mirror", { url: mirror.url });
+            return { data, source: "mirror" };
+        } catch (err) {
+            logger.warn("modelsDev.fetch.mirrorFailed", {
+                url: mirror.url,
+                error: err instanceof Error ? err.message : String(err),
+            });
         }
-        const data = await fetchJson(mirror.url, MIRROR_TIMEOUT_MS, headers);
-        logger.info("modelsDev.fetch.mirror", { url: mirror.url });
-        return data;
-    } catch (err) {
-        logger.warn("modelsDev.fetch.mirrorFailed", {
-            url: mirror.url,
-            error: err instanceof Error ? err.message : String(err),
-        });
-        throw new Error("catalog unavailable: official and mirror both failed");
     }
+
+    logger.warn("modelsDev.fetch.hardcoded", {
+        providers: Object.keys(HARDCODED_MODEL_LISTS),
+    });
+    return { data: buildHardcodedCatalog(), source: "hardcoded" };
 }
 
 function rebuildIndex(data: CatalogData): void {
@@ -358,11 +388,20 @@ export async function ensureModelsDevLoaded(): Promise<void> {
     }
 
     try {
-        const data = await fetchCatalog();
+        const { data, source } = await fetchCatalog();
+        if (source === "hardcoded" && metadataMap !== null) {
+            // Keep the previously fetched catalog — it is fresher than the
+            // hardcoded list. Only the retry timing is updated.
+            cacheTimestamp = now;
+            lastLoadFailed = true;
+            return;
+        }
         rebuildIndex(data);
         cacheTimestamp = now;
-        lastLoadFailed = false;
+        lastLoadFailed = source !== "official";
     } catch {
+        // Both sources failed and the hardcoded list is unavailable; keep any
+        // existing data and retry later. Should not normally happen.
         if (metadataMap === null) {
             metadataMap = new Map();
             shortIdMap = new Map();
