@@ -294,6 +294,16 @@
 					"minimum": 30000,
 					"description": "%config.modelsDevUpdateInterval.desc%"
 				},
+				"opencodego.modelsDevMirrorUrl": {
+					"type": "string",
+					"default": "https://modelsdev-mirror.onesoft.top/catalog.json",
+					"markdownDescription": "%config.modelsDevMirrorUrl.desc%"
+				},
+				"opencodego.modelsDevMirrorToken": {
+					"type": "string",
+					"default": "",
+					"markdownDescription": "%config.modelsDevMirrorToken.desc%"
+				},
 				"opencodego.modelPresets": {
 					"type": "array",
 					"default": [

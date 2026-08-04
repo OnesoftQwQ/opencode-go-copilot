@@ -29,6 +29,7 @@
 | **Chat 模型提供商**          | 实现 `LanguageModelChatProvider` 接口，向 VS Code 注册为 `opencodego` 厂商                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | **多模型支持**               | 模型列表完全由 `models.dev` 目录驱动（`catalog.json` 的 `opencode-go` 服务商），覆盖 GLM、Kimi、DeepSeek、MiMo、MiniMax、Qwen 等全系列模型（含 gpt-5.6-luna、grok-4.5、hy3、qwen3.8-max 等新模型），统一通过推理强度选择器切换思考模式。可选开启 OpenCode Zen 免费模型（`opencode` 服务商，`-free` 后缀过滤）。元数据（上下文长度、视觉、思考模式、温度支持、API 端点等）全部自动获取，无需硬编码模型列表                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | **自动模型发现**             | 模型列表以 `models.dev` 目录为唯一数据源（1 分钟 TTL 缓存，兼作启动并发激活去重）。通过 `opencodego.enableAutoModelDiscovery` 配置（默认开启）控制是否从 `/zen/go/v1/models` 获取实际可用列表过滤模型选择器（不可用模型隐藏，API 不可用则显示目录全量）。服务商 URL、模型列表、参数（含 `reasoning_options` 思考强度）均从目录自动获取；API 不可用时目录不可用的降级为空列表，待下次拉取恢复                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **目录容灾回退**             | 目录获取采用三级回退链：官方 `models.dev`（10 秒超时）→ 镜像（`opencodego.modelsDevMirrorUrl`，默认 `https://modelsdev-mirror.onesoft.top/catalog.json`，30 秒超时，请求头携带 `platform: opencode-go-copilot` 及可选 `x-mirror-token`）→ 硬编码兜底目录快照。镜像/兜底命中时按 1 分钟间隔持续重试官方源，官方恢复后自动切回                                                                                                                                                                                                                                                                                                                                                                                                   |
 | **OpenCode Zen 免费模型**    | 通过设置开关启用，从 `models.dev` 目录的 `opencode` 服务商获取模型列表并过滤出 `-free` 后缀的免费模型，以 `OpenCode Zen` 标识追加到模型选择器。元数据合并链与 Go 模型完全统一：`MODEL_OVERRIDES` > 目录条目 > 保守默认值。支持内存缓存（1 分钟 TTL）                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | **双 API 模式**              | 同时支持 **OpenAI 兼容格式** (`/chat/completions`) 和 **Anthropic 格式** (`/v1/messages`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | **流式推理**                 | 支持 SSE (Server-Sent Events) 流式响应，实时输出文本和工具调用                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -65,6 +66,7 @@
 
 > Go 服务商当前收录模型包括但不限于：`glm-5/5.1/5.2`、`kimi-k3/k2.5/k2.6/k2.7-code`、`deepseek-v4-pro/flash`、`mimo-v2-pro/omni/v2.5-pro/v2.5`、`minimax-m3/m2.7/m2.5`、`qwen3.5/3.6/3.7-plus`、`qwen3.7-max`、`qwen3.8-max`、`gpt-5.6-luna`、`grok-4.5`、`hy3` 等。实际显示取决于目录收录与 API 可用性。
 > Zen 免费模型（`-free` 后缀）包括但不限于：`big-pickle`、`deepseek-v4-flash-free`、`minimax-m3-free`、`minimax-m2.5-free`、`ring-2.6-1t-free`、`nemotron-3-super-free` 等。
+> 兜底快照：`src/hardcodedModelList.ts` 内置 2026-08-04 的官方目录快照，含 opencode-go（24 个）与 opencode（85 个，其中 22 个 `-free` 免费模型）的**完整模型元数据**（limit、cost、reasoning_options、attachment、modalities 等），仅作官方目录与镜像均不可达时的最后防线。发布构建（`.github/workflows/release.yml`）会先运行 `scripts/update-hardcoded-catalog.mjs` 自动刷新该快照（拉取官方目录 → 提取两个服务商 → 重写文件），失败时保留旧快照不阻断构建；数据有变化时随版本号变更在同一 commit 推送。
 
 #### 思考强度自动推导（`reasoning_options`）
 
@@ -367,6 +369,7 @@ src/
 ├── logger.ts                             # 日志系统
 ├── modelOverrides.ts                     # 模型覆盖表（models.dev 无法表达的内容）
 ├── catalogModels.ts                      # 统一模型解析/构建层 (Go + Zen)
+├── hardcodedModelList.ts                 # 硬编码兜底目录快照（官方目录与镜像均不可达时的最后防线）
 ├── modelsDev.ts                          # models.dev 目录拉取与查询
 ├── provideModel.ts                       # 模型信息提供函数（目录驱动）
 ├── provider.ts                           # Chat 模型提供商 (核心主文件)
@@ -409,10 +412,11 @@ src/
 | `extension.ts`                        | ~210 | 扩展激活/停用，注册 Provider 和 6 条命令，首次安装欢迎页引导                                                                                                                                           |
 | `provider.ts`                         | ~900 | 实现 `LanguageModelChatProvider`，处理聊天请求全流程及图片代理多轮循环处理                                                                                                                             |
 | `catalogModels.ts`                    | ~230 | 统一模型解析/构建层：`ModelMeta` 合并链（`MODEL_OVERRIDES` > 目录条目 > 默认值）、`buildCatalogModelInfo()`、`getCatalogModelConfig()`、`resolveProviderForModelId()`（`-free` 后缀分流 Zen/Go）           |
+| `hardcodedModelList.ts`               | ~4880 | 硬编码兜底目录快照：opencode-go（24 个）与 opencode（85 个）模型的完整元数据（2026-08-04），官方目录与镜像均不可达时作为最后防线，与运行时 JSON 相同方式断言为 `HardcodedCatalogData`                             |
 | `modelOverrides.ts`                   | ~50  | 每模型覆盖表 `MODEL_OVERRIDES`（全部可选字段）+ `ModelMetaOverride` 类型；仅维护 models.dev 无法表达的内容（Anthropic apiMode、adaptive、`reasoning_split` 等）                                             |
 | `types.ts`                            | ~95  | `OpenCodeGoModelItem`, `ModelPreset`, `ModelsResponse`, `RetryConfig` 等类型                                                                                                                           |
 | `apiModelList.ts`                     | ~110 | API 模型列表获取：从 catalog 解析的 base URL 的 `/models` 端点拉取可用模型 ID，1 分钟缓存，静默降级                                                                                                    |
-| `modelsDev.ts`                        | ~360 | models.dev 目录拉取与查询：从 `catalog.json` 下载并索引全局模型与服务商，支持短 ID 匹配、provider 查询、`reasoning_options`/思考模式/视觉/预算推断，1 分钟缓存                                                                                                |
+| `modelsDev.ts`                        | ~440 | models.dev 目录拉取与查询：三级回退链（官方 → 镜像 → 硬编码列表），从 `catalog.json` 下载并索引全局模型与服务商，支持短 ID 匹配、provider 查询、`reasoning_options`/思考模式/视觉/预算推断，1 分钟缓存                                                                                                |
 | `commonApi.ts`                        | ~467 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截、User-Agent 配置读取）                                                                                                             |
 | `provideModel.ts`                     | ~180 | 模型信息提供函数：以 catalog 的 `opencode-go` provider 全量构建列表（可选按 API 列表过滤），Zen 免费模型从 `opencode` provider 过滤 `-free`；1 分钟间隔缓存与并发去重                                                                      |
 | `provideToken.ts`                     | ~100 | Token 用量计算                                                                                                                                                                                         |
@@ -665,7 +669,16 @@ API 实现的抽象基类。
 `{ id, name?, family?, reasoning?, tool_call?, structured_output?, temperature?, attachment?, modalities?, limit? }` — models.dev 数据库中单个模型条目的接口。
 
 #### `ensureModelsDevLoaded(): Promise<void>`
-从 `https://models.dev/catalog.json` 下载完整模型目录并构建内存索引（完整 ID → 条目 + 短 ID → 条目 + provider → 条目）。内部 `fetchCatalog()` 使用 10 秒 `AbortSignal.timeout(10000)`，超时后记录警告并抛出普通 `Error`（非 AbortError）以保留现有缓存。1 分钟缓存 TTL（短 TTL 兼作 VS Code 启动时多个并发 `activate()` 调用的去重窗口，同时保证每次激活/刷新均重新拉取目录）。失败时静默保留旧缓存。首次无缓存时初始化为空 Map。`lastLoadFailed` 标志追踪上次加载是否失败：失败后至少等待 1 分钟再重试，避免空 Map 长期阻塞后续重试。
+从 `https://models.dev/catalog.json` 下载完整模型目录并构建内存索引（完整 ID → 条目 + 短 ID → 条目 + provider → 条目）。内部 `fetchCatalog()` 采用三级回退链：官方源（10 秒超时）→ 镜像（`opencodego.modelsDevMirrorUrl`，30 秒超时，携带 `platform: opencode-go-copilot` 与可选 `x-mirror-token` 请求头）→ 硬编码兜底目录快照（`HARDCODED_CATALOG`，含完整模型元数据与真实 provider `api`）。1 分钟缓存 TTL（短 TTL 兼作 VS Code 启动时多个并发 `activate()` 调用的去重窗口，同时保证每次激活/刷新均重新拉取目录）。镜像/兜底命中时 `lastLoadFailed=true`，按 1 分钟间隔持续重试官方源，官方恢复后自动切回；兜底命中且内存已有旧目录数据时保留旧数据（比硬编码列表更新），仅更新重试时机。失败时静默保留旧缓存，首次无缓存时初始化为空 Map。
+
+#### `getMirrorConfig(): { url?: string; token?: string }`
+读取 `opencodego.modelsDevMirrorUrl` / `opencodego.modelsDevMirrorToken` 设置，规范化镜像 URL（以 `/` 结尾时自动补 `catalog.json`），未配置时返回空对象。
+
+#### `fetchJson(url, timeoutMs, headers?): Promise<{ data: CatalogData; bytes: number }>`
+带超时的 JSON 拉取：`AbortSignal.timeout` 超时后记录 `modelsDev.fetch.timeout` 警告并抛出普通 `Error`（非 AbortError）以保留调用方缓存。返回解析后的目录及原始字节数（供日志统计）。
+
+#### `logLoadSummary(source, start, data)`
+目录加载汇总日志 `modelsDev.load`：记录最终来源（official/mirror/hardcoded/failed）、整条回退链耗时、providers 数与 Go/Zen 模型数；官方源命中为 info，回退源与失败为 warn 以便在输出面板中一眼定位。
 
 #### `lookupModelDevEntry(apiModelId): ModelsDevEntry | undefined`
 按 API 模型 ID 查找 models.dev 全局目录元数据。匹配策略：1) 完整 models.dev ID 精确匹配，2) 短 ID（斜杠后最后一段）匹配，3) 后缀匹配。
@@ -1198,6 +1211,9 @@ npx tsc --noEmit
 # 持续监视模式
 npm run watch
 
+# 手动刷新硬编码目录快照（发布构建自动执行）
+node scripts/update-hardcoded-catalog.mjs
+
 # 打包 VSIX
 npm run build
 # 等效于: npx @vscode/vsce package -o extension.vsix
@@ -1390,7 +1406,10 @@ type 取值：`feat` | `fix` | `refactor` | `docs` | `chore` | `improve` 等。
 所有日志使用 `logger` 单例，标签格式为 `category.subcategory`：
 - `request.start/end` — 请求开始/结束
 - `request.error/timeout/delay` — 请求错误/超时/延迟
+- `extension.activate` — 扩展激活（含版本号）
 - `models.loaded` — 模型加载
+- `modelsDev.fetch.*` — 目录拉取明细：`fetch.official`/`fetch.mirror`（成功，含 durationMs/bytes）、`fetch.officialFailed`/`fetch.mirrorFailed`/`fetch.timeout`/`fetch.hardcoded`（失败或回退原因）
+- `modelsDev.load` — 目录加载汇总（source/durationMs/providers/goModels/zenModels；官方源为 info，镜像/硬编码/失败为 warn）
 - `commit.start/end/error` — 提交消息生成
 - `openai.stream.*` / `anthropic.stream.*` — 流式处理
 - `apiKey.missing` — API Key 缺失

@@ -17,13 +17,20 @@
  * Cached in memory for 1 minute. The short TTL keeps every extension
  * activation (and model-picker refresh) fetching a fresh catalog, while
  * still deduping the burst of concurrent activation calls VS Code fires
- * on startup. Silent degradation on failure.
+ * on startup. On failure the fetch falls back to a configurable mirror URL
+ * (opencodego.modelsDevMirrorUrl), then to a hardcoded catalog snapshot.
  */
 
+import * as vscode from "vscode";
+import { HARDCODED_CATALOG } from "./hardcodedModelList";
 import { logger } from "./logger";
 
 const CATALOG_URL = "https://models.dev/catalog.json";
 const CACHE_TTL_MS = 60 * 1000; // 1 minute — dedupes concurrent startup activations
+const OFFICIAL_TIMEOUT_MS = 10 * 1000;
+const MIRROR_TIMEOUT_MS = 30 * 1000;
+/** Value sent in the `platform` header to mirrors that require it. */
+const MIRROR_PLATFORM_HEADER = "opencode-go-copilot";
 
 // ── Types ──
 
@@ -115,24 +122,105 @@ let lastLoadFailed = false;
 // ── Internal helpers ──
 
 /**
- * Fetch the catalog JSON.
+ * Mirror configuration from the `opencodego` settings.
+ * Accepts the full catalog URL or a base URL ending with "/".
  */
-async function fetchCatalog(): Promise<CatalogData> {
+function getMirrorConfig(): { url?: string; token?: string } {
+    const cfg = vscode.workspace.getConfiguration("opencodego");
+    const rawUrl = cfg.get<string>("modelsDevMirrorUrl", "")?.trim();
+    if (!rawUrl) return {};
+    return {
+        url: rawUrl.endsWith("/") ? `${rawUrl}catalog.json` : rawUrl,
+        token: cfg.get<string>("modelsDevMirrorToken", "")?.trim() || undefined,
+    };
+}
+
+/** Source of the loaded catalog data. */
+export type CatalogSource = "official" | "mirror" | "hardcoded";
+
+interface FetchCatalogResult {
+    data: CatalogData;
+    source: CatalogSource;
+}
+
+/**
+ * Fetch JSON with a timeout, converting abort into a plain error.
+ * Returns the parsed catalog plus the raw payload size in bytes.
+ */
+async function fetchJson(
+    url: string,
+    timeoutMs: number,
+    headers?: Record<string, string>
+): Promise<{ data: CatalogData; bytes: number }> {
     try {
-        const response = await fetch(CATALOG_URL, {
-            signal: AbortSignal.timeout(10000),
+        const response = await fetch(url, {
+            signal: AbortSignal.timeout(timeoutMs),
+            headers,
         });
         if (!response.ok) {
             throw new Error(`catalog error: [${response.status}] ${response.statusText}`);
         }
-        return (await response.json()) as CatalogData;
+        const text = await response.text();
+        return { data: JSON.parse(text) as CatalogData, bytes: text.length };
     } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") {
-            logger.warn("modelsDev.fetch.timeout", { url: CATALOG_URL });
-            throw new Error(`Request timed out after 10000ms`);
+            logger.warn("modelsDev.fetch.timeout", { url, timeoutMs });
+            throw new Error(`Request timed out after ${timeoutMs}ms`);
         }
         throw err;
     }
+}
+
+/**
+ * Fetch the catalog JSON. Fallback chain: official models.dev URL → configured
+ * mirror (with platform/token headers) → hardcoded catalog snapshot.
+ */
+async function fetchCatalog(): Promise<FetchCatalogResult> {
+    const officialStart = Date.now();
+    try {
+        const { data, bytes } = await fetchJson(CATALOG_URL, OFFICIAL_TIMEOUT_MS);
+        logger.info("modelsDev.fetch.official", {
+            url: CATALOG_URL,
+            durationMs: Date.now() - officialStart,
+            bytes,
+        });
+        return { data, source: "official" };
+    } catch (err) {
+        logger.warn("modelsDev.fetch.officialFailed", {
+            url: CATALOG_URL,
+            durationMs: Date.now() - officialStart,
+            error: err instanceof Error ? err.message : String(err),
+        });
+    }
+
+    const mirror = getMirrorConfig();
+    if (mirror.url) {
+        const mirrorStart = Date.now();
+        try {
+            const headers: Record<string, string> = { platform: MIRROR_PLATFORM_HEADER };
+            if (mirror.token) {
+                headers["x-mirror-token"] = mirror.token;
+            }
+            const { data, bytes } = await fetchJson(mirror.url, MIRROR_TIMEOUT_MS, headers);
+            logger.info("modelsDev.fetch.mirror", {
+                url: mirror.url,
+                durationMs: Date.now() - mirrorStart,
+                bytes,
+            });
+            return { data, source: "mirror" };
+        } catch (err) {
+            logger.warn("modelsDev.fetch.mirrorFailed", {
+                url: mirror.url,
+                durationMs: Date.now() - mirrorStart,
+                error: err instanceof Error ? err.message : String(err),
+            });
+        }
+    }
+
+    logger.warn("modelsDev.fetch.hardcoded", {
+        providers: Object.keys(HARDCODED_CATALOG.providers),
+    });
+    return { data: HARDCODED_CATALOG, source: "hardcoded" };
 }
 
 function rebuildIndex(data: CatalogData): void {
@@ -285,6 +373,36 @@ export function inferThinkingBudget(entry: ModelsDevEntry): { min?: number; max?
 // ── Public API ──
 
 /**
+ * Log a one-line summary of a catalog load attempt: which source won, how
+ * long the whole fallback chain took, and how much data is indexed. When no
+ * fresh data was loaded (hardcoded fallback keeping existing cache, or total
+ * failure), counts are read from the in-memory index instead.
+ * Fallback sources (mirror/hardcoded) and total failure are logged as
+ * warnings so they stand out in the output channel.
+ */
+function logLoadSummary(source: CatalogSource | "failed", start: number, data: CatalogData | null): void {
+    const countProviderModels = (providerId: string): number => {
+        if (data?.providers?.[providerId]?.models) {
+            return Object.keys(data.providers[providerId].models).length;
+        }
+        const entry = providersMap?.get(providerId);
+        return entry?.models ? Object.keys(entry.models).length : 0;
+    };
+    const payload = {
+        source,
+        durationMs: Date.now() - start,
+        providers: data ? Object.keys(data.providers ?? {}).length : (providersMap?.size ?? 0),
+        goModels: countProviderModels("opencode-go"),
+        zenModels: countProviderModels("opencode"),
+    };
+    if (source === "official") {
+        logger.info("modelsDev.load", payload);
+    } else {
+        logger.warn("modelsDev.load", payload);
+    }
+}
+
+/**
  * Ensure the models.dev catalog is loaded and cached.
  * Silently degrades on failure — existing cache is preserved.
  */
@@ -301,12 +419,24 @@ export async function ensureModelsDevLoaded(): Promise<void> {
         return;
     }
 
+    const start = Date.now();
     try {
-        const data = await fetchCatalog();
+        const { data, source } = await fetchCatalog();
+        if (source === "hardcoded" && metadataMap !== null) {
+            // Keep the previously fetched catalog — it is fresher than the
+            // hardcoded list. Only the retry timing is updated.
+            cacheTimestamp = now;
+            lastLoadFailed = true;
+            logLoadSummary("hardcoded", start, null);
+            return;
+        }
         rebuildIndex(data);
         cacheTimestamp = now;
-        lastLoadFailed = false;
+        lastLoadFailed = source !== "official";
+        logLoadSummary(source, start, data);
     } catch {
+        // Both sources failed and the hardcoded list is unavailable; keep any
+        // existing data and retry later. Should not normally happen.
         if (metadataMap === null) {
             metadataMap = new Map();
             shortIdMap = new Map();
@@ -314,6 +444,7 @@ export async function ensureModelsDevLoaded(): Promise<void> {
         }
         cacheTimestamp = now;
         lastLoadFailed = true;
+        logLoadSummary("failed", start, null);
     }
 }
 
