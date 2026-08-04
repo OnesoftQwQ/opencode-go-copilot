@@ -17,13 +17,19 @@
  * Cached in memory for 1 minute. The short TTL keeps every extension
  * activation (and model-picker refresh) fetching a fresh catalog, while
  * still deduping the burst of concurrent activation calls VS Code fires
- * on startup. Silent degradation on failure.
+ * on startup. On failure the fetch falls back to a configurable mirror URL
+ * (opencodego.modelsDevMirrorUrl), then to a hardcoded model list.
  */
 
+import * as vscode from "vscode";
 import { logger } from "./logger";
 
 const CATALOG_URL = "https://models.dev/catalog.json";
 const CACHE_TTL_MS = 60 * 1000; // 1 minute — dedupes concurrent startup activations
+const OFFICIAL_TIMEOUT_MS = 10 * 1000;
+const MIRROR_TIMEOUT_MS = 30 * 1000;
+/** Value sent in the `platform` header to mirrors that require it. */
+const MIRROR_PLATFORM_HEADER = "opencode-go-copilot";
 
 // ── Types ──
 
@@ -115,12 +121,27 @@ let lastLoadFailed = false;
 // ── Internal helpers ──
 
 /**
- * Fetch the catalog JSON.
+ * Mirror configuration from the `opencodego` settings.
+ * Accepts the full catalog URL or a base URL ending with "/".
  */
-async function fetchCatalog(): Promise<CatalogData> {
+function getMirrorConfig(): { url?: string; token?: string } {
+    const cfg = vscode.workspace.getConfiguration("opencodego");
+    const rawUrl = cfg.get<string>("modelsDevMirrorUrl", "")?.trim();
+    if (!rawUrl) return {};
+    return {
+        url: rawUrl.endsWith("/") ? `${rawUrl}catalog.json` : rawUrl,
+        token: cfg.get<string>("modelsDevMirrorToken", "")?.trim() || undefined,
+    };
+}
+
+/**
+ * Fetch JSON with a timeout, converting abort into a plain error.
+ */
+async function fetchJson(url: string, timeoutMs: number, headers?: Record<string, string>): Promise<CatalogData> {
     try {
-        const response = await fetch(CATALOG_URL, {
-            signal: AbortSignal.timeout(10000),
+        const response = await fetch(url, {
+            signal: AbortSignal.timeout(timeoutMs),
+            headers,
         });
         if (!response.ok) {
             throw new Error(`catalog error: [${response.status}] ${response.statusText}`);
@@ -128,10 +149,45 @@ async function fetchCatalog(): Promise<CatalogData> {
         return (await response.json()) as CatalogData;
     } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") {
-            logger.warn("modelsDev.fetch.timeout", { url: CATALOG_URL });
-            throw new Error(`Request timed out after 10000ms`);
+            logger.warn("modelsDev.fetch.timeout", { url });
+            throw new Error(`Request timed out after ${timeoutMs}ms`);
         }
         throw err;
+    }
+}
+
+/**
+ * Fetch the catalog JSON. Tries the official models.dev URL first, then the
+ * configured mirror (with platform/token headers); throws when both fail.
+ */
+async function fetchCatalog(): Promise<CatalogData> {
+    try {
+        return await fetchJson(CATALOG_URL, OFFICIAL_TIMEOUT_MS);
+    } catch (err) {
+        logger.warn("modelsDev.fetch.officialFailed", {
+            url: CATALOG_URL,
+            error: err instanceof Error ? err.message : String(err),
+        });
+    }
+
+    const mirror = getMirrorConfig();
+    if (!mirror.url) {
+        throw new Error("catalog unavailable: official fetch failed and no mirror configured");
+    }
+    try {
+        const headers: Record<string, string> = { platform: MIRROR_PLATFORM_HEADER };
+        if (mirror.token) {
+            headers["x-mirror-token"] = mirror.token;
+        }
+        const data = await fetchJson(mirror.url, MIRROR_TIMEOUT_MS, headers);
+        logger.info("modelsDev.fetch.mirror", { url: mirror.url });
+        return data;
+    } catch (err) {
+        logger.warn("modelsDev.fetch.mirrorFailed", {
+            url: mirror.url,
+            error: err instanceof Error ? err.message : String(err),
+        });
+        throw new Error("catalog unavailable: official and mirror both failed");
     }
 }
 

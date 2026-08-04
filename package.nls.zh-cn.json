@@ -37,6 +37,8 @@
 	"config.enableAutoModelDiscovery.desc": "启用自动模型发现。开启后，扩展将从 API 获取实际模型列表，过滤模型选择器仅显示服务器上可用的模型。不在 API 列表中的模型将被隐藏。模型列表本身来自 models.dev 目录，并按周期自动刷新。关闭后将显示目录中的全部模型，不受 API 可用性影响。",
 	"config.showDeprecatedModels.desc": "在模型选择器中显示已弃用模型。关闭（默认）时，models.dev 目录中标记为已弃用的模型将被隐藏。",
 	"config.modelsDevUpdateInterval.desc": "当「opencodego.enableAutoModelDiscovery」启用时，检查 API 模型更新的缓存 TTL（毫秒）。默认值: 60000（1分钟）。最小值: 30000（30秒）。",
+	"config.modelsDevMirrorUrl.desc": "models.dev 目录的镜像地址，用于官方目录不可达时（如中国大陆网络环境）回退。官方 models.dev 获取失败时，扩展会改从该地址获取目录。可填写完整的目录 URL，或以 \"/\" 结尾的基础地址。留空则禁用镜像回退。",
+	"config.modelsDevMirrorToken.desc": "获取镜像目录时以 `x-mirror-token` 请求头发送的可选访问令牌。镜像不要求令牌时留空即可。",
 	"config.modelPresets.desc": "模型预设列表，可通过命令面板快速选择。每个预设包含温度（temperature）和 top_p 两个参数。你可以修改各预设的字段来自定义。",
 	"config.modelPreset.id.desc": "预设标识符（必须与 modelPreset 设置中的值一致）。",
 	"config.modelPreset.label.desc": "预设档位的显示名称。",

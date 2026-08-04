@@ -37,6 +37,8 @@
 	"config.enableAutoModelDiscovery.desc": "Enable automatic model discovery. When enabled, the extension fetches the actual model list from the API and filters the model picker to show only models available on the server. Models not in the API list are hidden. The model list itself comes from the models.dev catalog, which is refreshed periodically. Disable to show all catalog models regardless of API availability.",
 	"config.showDeprecatedModels.desc": "Show deprecated models in the model picker. When disabled (default), models marked as deprecated in the models.dev catalog are hidden.",
 	"config.modelsDevUpdateInterval.desc": "Cache TTL in milliseconds for checking model updates from the API when 'opencodego.enableAutoModelDiscovery' is enabled. Default: 60000 (1 minute). Minimum: 30000 (30 seconds).",
+	"config.modelsDevMirrorUrl.desc": "Mirror URL for the models.dev catalog, used when the official catalog is unreachable (for example in mainland China). The extension fetches this URL when the official models.dev fetch fails. Accepts the full catalog URL or a base URL ending with \"/\". Leave empty to disable the mirror fallback.",
+	"config.modelsDevMirrorToken.desc": "Optional access token sent as the `x-mirror-token` request header when fetching the mirror URL. Leave empty if the mirror does not require a token.",
 	"config.modelPresets.desc": "Model presets for quick selection via command palette. Each preset includes temperature and top_p. You can customize the presets.",
 	"config.modelPreset.id.desc": "Preset identifier (must match the value in modelPreset setting).",
 	"config.modelPreset.label.desc": "Display name of the preset.",
