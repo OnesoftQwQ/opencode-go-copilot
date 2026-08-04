@@ -674,8 +674,11 @@ API 实现的抽象基类。
 #### `getMirrorConfig(): { url?: string; token?: string }`
 读取 `opencodego.modelsDevMirrorUrl` / `opencodego.modelsDevMirrorToken` 设置，规范化镜像 URL（以 `/` 结尾时自动补 `catalog.json`），未配置时返回空对象。
 
-#### `fetchJson(url, timeoutMs, headers?): Promise<CatalogData>`
-带超时的 JSON 拉取：`AbortSignal.timeout` 超时后记录 `modelsDev.fetch.timeout` 警告并抛出普通 `Error`（非 AbortError）以保留调用方缓存。
+#### `fetchJson(url, timeoutMs, headers?): Promise<{ data: CatalogData; bytes: number }>`
+带超时的 JSON 拉取：`AbortSignal.timeout` 超时后记录 `modelsDev.fetch.timeout` 警告并抛出普通 `Error`（非 AbortError）以保留调用方缓存。返回解析后的目录及原始字节数（供日志统计）。
+
+#### `logLoadSummary(source, start, data)`
+目录加载汇总日志 `modelsDev.load`：记录最终来源（official/mirror/hardcoded/failed）、整条回退链耗时、providers 数与 Go/Zen 模型数；官方源命中为 info，回退源与失败为 warn 以便在输出面板中一眼定位。
 
 #### `lookupModelDevEntry(apiModelId): ModelsDevEntry | undefined`
 按 API 模型 ID 查找 models.dev 全局目录元数据。匹配策略：1) 完整 models.dev ID 精确匹配，2) 短 ID（斜杠后最后一段）匹配，3) 后缀匹配。
@@ -1403,7 +1406,10 @@ type 取值：`feat` | `fix` | `refactor` | `docs` | `chore` | `improve` 等。
 所有日志使用 `logger` 单例，标签格式为 `category.subcategory`：
 - `request.start/end` — 请求开始/结束
 - `request.error/timeout/delay` — 请求错误/超时/延迟
+- `extension.activate` — 扩展激活（含版本号）
 - `models.loaded` — 模型加载
+- `modelsDev.fetch.*` — 目录拉取明细：`fetch.official`/`fetch.mirror`（成功，含 durationMs/bytes）、`fetch.officialFailed`/`fetch.mirrorFailed`/`fetch.timeout`/`fetch.hardcoded`（失败或回退原因）
+- `modelsDev.load` — 目录加载汇总（source/durationMs/providers/goModels/zenModels；官方源为 info，镜像/硬编码/失败为 warn）
 - `commit.start/end/error` — 提交消息生成
 - `openai.stream.*` / `anthropic.stream.*` — 流式处理
 - `apiKey.missing` — API Key 缺失

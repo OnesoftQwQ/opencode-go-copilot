@@ -4,6 +4,7 @@ import { initStatusBar } from "./statusBar";
 import { logger } from "./logger";
 import { l10n, l10nFormat } from "./localize";
 import type { ModelPreset } from "./types";
+import { VersionManager } from "./versionManager";
 import { abortCommitGeneration, generateCommitMsg } from "./gitCommit/commitMessageGenerator";
 import { TokenizerManager } from "./tokenizer/tokenizerManager";
 import { prepareLanguageModelChatInformation, resetAutoDiscoveryState } from "./provideModel";
@@ -19,6 +20,7 @@ const WALKTHROUGH_ID = "OnesoftQwQ.opencode-go-copilot-provider#opencodeGoGettin
 export function activate(context: vscode.ExtensionContext) {
     // Initialize logger
     logger.init();
+    logger.info("extension.activate", { version: VersionManager.getVersion() });
 
     // Initialize TokenizerManager with extension path
     TokenizerManager.initialize(context.extensionPath);
