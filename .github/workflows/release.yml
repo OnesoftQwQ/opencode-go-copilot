@@ -61,7 +61,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json src/hardcodedModelList.ts
-          git diff --cached --quiet || git commit -m "chore: bump version to ${VER} [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: bump version to ${VER}, sync model list [skip ci]"
           BRANCH=$(git branch -r --contains "$GITHUB_SHA" | head -1 | sed 's|.*origin/||' | xargs)
           if [ -n "$BRANCH" ]; then
             git push origin "HEAD:refs/heads/$BRANCH"
