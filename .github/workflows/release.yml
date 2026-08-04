@@ -34,6 +34,10 @@ jobs:
       - name: Run postinstall script (copy tokenizer)
         run: node scripts/copy-tokenizer.js
 
+      # 构建前刷新硬编码目录快照；失败时保留仓库内旧快照，不阻断构建
+      - name: Refresh hardcoded catalog snapshot
+        run: node scripts/update-hardcoded-catalog.mjs
+
       # 确定版本号来源：手动输入 > tag > 无
       - name: Resolve version
         id: ver
@@ -56,7 +60,7 @@ jobs:
           npm version "$VER" --no-git-tag-version --allow-same-version
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json
+          git add package.json package-lock.json src/hardcodedModelList.ts
           git diff --cached --quiet || git commit -m "chore: bump version to ${VER} [skip ci]"
           BRANCH=$(git branch -r --contains "$GITHUB_SHA" | head -1 | sed 's|.*origin/||' | xargs)
           if [ -n "$BRANCH" ]; then
