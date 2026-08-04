@@ -18,11 +18,11 @@
  * activation (and model-picker refresh) fetching a fresh catalog, while
  * still deduping the burst of concurrent activation calls VS Code fires
  * on startup. On failure the fetch falls back to a configurable mirror URL
- * (opencodego.modelsDevMirrorUrl), then to a hardcoded model list.
+ * (opencodego.modelsDevMirrorUrl), then to a hardcoded catalog snapshot.
  */
 
 import * as vscode from "vscode";
-import { HARDCODED_MODEL_LISTS } from "./hardcodedModelList";
+import { HARDCODED_CATALOG } from "./hardcodedModelList";
 import { logger } from "./logger";
 
 const CATALOG_URL = "https://models.dev/catalog.json";
@@ -144,24 +144,6 @@ interface FetchCatalogResult {
 }
 
 /**
- * Build a minimal catalog from the hardcoded model lists. Entries only carry
- * id/name; all other metadata falls back to MODEL_OVERRIDES and the
- * conservative defaults in catalogModels.ts. Provider `api` is left empty so
- * callers use their built-in fallback base URLs.
- */
-function buildHardcodedCatalog(): CatalogData {
-    const providers: Record<string, CatalogProvider> = {};
-    for (const [providerId, entries] of Object.entries(HARDCODED_MODEL_LISTS)) {
-        const models: Record<string, ModelsDevEntry> = {};
-        for (const entry of entries) {
-            models[entry.id] = { id: entry.id, name: entry.name ?? entry.id };
-        }
-        providers[providerId] = { id: providerId, name: providerId, api: "", models };
-    }
-    return { models: {}, providers };
-}
-
-/**
  * Fetch JSON with a timeout, converting abort into a plain error.
  */
 async function fetchJson(url: string, timeoutMs: number, headers?: Record<string, string>): Promise<CatalogData> {
@@ -185,7 +167,7 @@ async function fetchJson(url: string, timeoutMs: number, headers?: Record<string
 
 /**
  * Fetch the catalog JSON. Fallback chain: official models.dev URL → configured
- * mirror (with platform/token headers) → hardcoded model lists.
+ * mirror (with platform/token headers) → hardcoded catalog snapshot.
  */
 async function fetchCatalog(): Promise<FetchCatalogResult> {
     try {
@@ -216,9 +198,9 @@ async function fetchCatalog(): Promise<FetchCatalogResult> {
     }
 
     logger.warn("modelsDev.fetch.hardcoded", {
-        providers: Object.keys(HARDCODED_MODEL_LISTS),
+        providers: Object.keys(HARDCODED_CATALOG.providers),
     });
-    return { data: buildHardcodedCatalog(), source: "hardcoded" };
+    return { data: HARDCODED_CATALOG, source: "hardcoded" };
 }
 
 function rebuildIndex(data: CatalogData): void {
