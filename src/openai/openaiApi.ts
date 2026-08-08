@@ -248,10 +248,12 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
                     assistantMessage.content = joinedText;
                 }
 
-                // Always set reasoning_content when includeReasoningInRequest is true
-                // and reasoning parts exist — even if empty string, DeepSeek requires
-                // round-tripping for context continuity across conversation turns.
-                if (modelConfig.includeReasoningInRequest && reasoningParts.length > 0) {
+                // Always set reasoning_content when includeReasoningInRequest is true and
+                // the message carries reasoning parts OR tool calls — DeepSeek requires the
+                // field to be passed back on every assistant message that follows a tool
+                // call, even when the model produced no reasoning in that turn (empty string
+                // satisfies the presence check; omitting the field triggers a 400).
+                if (modelConfig.includeReasoningInRequest && (reasoningParts.length > 0 || toolCalls.length > 0)) {
                     assistantMessage.reasoning_content = joinedThinking;
                 }
 
