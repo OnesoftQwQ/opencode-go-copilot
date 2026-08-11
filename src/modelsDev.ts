@@ -496,11 +496,11 @@ export function deduceApiModeFromFamily(modelId: string, entry?: ModelsDevEntry)
     }
     if (family.includes("gemma")) return "anthropic";
 
-    // Only use the SDK hint when the model family does not identify the
-    // public wire protocol. This prevents DeepSeek and other non-Anthropic
-    // families from being routed to `/messages` by an implementation detail
-    // in the catalog.
-    if (entry?.provider?.npm?.includes("anthropic")) return "anthropic";
+    // Only use the SDK hint when the catalog has no family information at
+    // all. A non-Anthropic family (for example `deepseek-flash`) already
+    // identifies this as an OpenAI-compatible model; letting the SDK hint
+    // override it would route the request to `/messages` incorrectly.
+    if (!family && entry?.provider?.npm?.includes("anthropic")) return "anthropic";
     return "openai";
 }
 

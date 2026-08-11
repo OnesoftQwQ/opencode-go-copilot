@@ -1417,5 +1417,5 @@ type 取值：`feat` | `fix` | `refactor` | `docs` | `chore` | `improve` 等。
 ### 6.11 模型协议判定维护说明
 
 - `models.dev` 中的 `provider.npm` 仅表示目录使用的 SDK 适配器，不一定代表公开 API 的请求协议。
-- 模型族特征（例如 Claude、Qwen 3.6/3.7、Gemma）优先决定 Anthropic/OpenAI 模式；SDK hint 仅作为无法从模型族判断时的回退。
+- 模型族特征（例如 Claude、Qwen 3.6/3.7、Gemma、DeepSeek）优先决定 Anthropic/OpenAI 模式；SDK hint 仅作为目录没有模型族信息时的回退。
 - DeepSeek V4 等模型必须继续通过 OpenAI-compatible endpoint 发送，避免误发到 Anthropic `/messages` endpoint 导致 400 错误。
