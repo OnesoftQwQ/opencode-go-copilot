@@ -92,7 +92,7 @@ try {
         { role: 1, content: [new TextPart("Now continue.")] },
     ];
 
-    const openaiMessages = new OpenaiApi("test").convertMessages(nextTurnMessages, {
+    const openaiMessages = await new OpenaiApi("test").convertMessages(nextTurnMessages, {
         includeReasoningInRequest: true,
         vision: false,
     });
@@ -110,7 +110,7 @@ try {
         { role: "assistant", content: "The previous answer." },
     ]);
 
-    const anthropicMessages = new AnthropicApi("test").convertMessages(nextTurnMessages, {
+    const anthropicMessages = await new AnthropicApi("test").convertMessages(nextTurnMessages, {
         includeReasoningInRequest: true,
         vision: false,
     });
