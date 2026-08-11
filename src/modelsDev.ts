@@ -483,12 +483,11 @@ export function hasModelDevEntry(apiModelId: string): boolean {
  * Deduce API mode (openai vs anthropic) from a model ID and optional catalog entry.
  * Uses family-based heuristics since the catalog does not directly expose apiMode.
  *
- * Also checks the `provider.npm` field: @ai-sdk/anthropic → anthropic.
+ * The `provider.npm` field is only a fallback hint. Some gateway catalog
+ * entries use an Anthropic SDK adapter internally even though the public
+ * endpoint for the model is OpenAI-compatible (for example DeepSeek V4).
  */
 export function deduceApiModeFromFamily(modelId: string, entry?: ModelsDevEntry): "openai" | "anthropic" {
-    // Check provider npm hint first
-    if (entry?.provider?.npm?.includes("anthropic")) return "anthropic";
-
     const family = entry?.family?.toLowerCase() ?? "";
     if (family.includes("claude") || family.includes("anthropic")) return "anthropic";
     if (family.includes("qwen")) {
@@ -496,6 +495,12 @@ export function deduceApiModeFromFamily(modelId: string, entry?: ModelsDevEntry)
         return "openai";
     }
     if (family.includes("gemma")) return "anthropic";
+
+    // Only use the SDK hint when the model family does not identify the
+    // public wire protocol. This prevents DeepSeek and other non-Anthropic
+    // families from being routed to `/messages` by an implementation detail
+    // in the catalog.
+    if (entry?.provider?.npm?.includes("anthropic")) return "anthropic";
     return "openai";
 }
 
