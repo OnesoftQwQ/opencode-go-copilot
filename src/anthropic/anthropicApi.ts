@@ -20,12 +20,12 @@ import type {
 	AnthropicStreamChunk,
 } from "./anthropicTypes";
 
-import { isImageMimeType, isToolResultPart, collectToolResultText, convertToolsToOpenAI, mapRole, storeDataUriImages, replaceDataUriImages, isResourceLinkMimeType, parseResourceLinkData, resolveResourceLinkToImage } from "../utils";
+import { isImageMimeType, isToolResultPart, convertToolsToOpenAI, mapRole, storeDataUriImages, replaceDataUriImages, isResourceLinkMimeType, parseResourceLinkData, resolveResourceLinkToImage } from "../utils";
 
 import { CommonApi } from "../commonApi";
 import { logger } from "../logger";
 import type { StoredImage } from "../vision/types";
-import { ASK_IMAGE_TOOL_NAME, ASK_IMAGE_TOOL_DEF, ASK_WITH_MULTI_IMAGE_TOOL_NAME, ASK_WITH_MULTI_IMAGE_TOOL_DEF } from "../vision/types";
+import { ASK_IMAGE_TOOL_DEF, ASK_WITH_MULTI_IMAGE_TOOL_DEF } from "../vision/types";
 import { parseVisionToolHistoryPart } from "../vision/historyPart";
 import { toAnthropicVisionToolMessages, type VisionToolHistoryEntry } from "../vision/historyCodec";
 
@@ -102,6 +102,25 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 				this._hasImages = true;
 			}
 		}
+
+		// Anthropic protocol requires all tool_result blocks answering one
+		// assistant tool_use message to be sent in a SINGLE user message.
+		// VS Code may deliver each tool result as a separate message, so
+		// buffer consecutive tool-result-only messages and flush them as
+		// one user message to avoid 400 "tool_use ids were found without
+		// tool_result blocks immediately after" errors.
+		const pendingToolResults: AnthropicToolResultBlock[] = [];
+		const flushPendingToolResults = (): void => {
+			if (pendingToolResults.length > 0) {
+				if (pendingToolResults.length > 1) {
+					logger.debug("anthropic.tool-results.merged", {
+						modelId: this._modelId,
+						mergedResults: pendingToolResults.length,
+					});
+				}
+				out.push({ role: "user", content: pendingToolResults.splice(0) });
+			}
+		};
 
 		for (const m of messages) {
 			const role = mapRole(m);
@@ -235,6 +254,22 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 				continue;
 			}
 
+			// Buffer tool-result-only user messages so consecutive results are
+			// merged into a single user message (Anthropic protocol requirement).
+			const isPureToolResultMessage =
+				role === "user" &&
+				toolResults.length > 0 &&
+				joinedText === "" &&
+				imageParts.length === 0 &&
+				visionToolHistory.length === 0;
+			if (isPureToolResultMessage) {
+				pendingToolResults.push(...toolResults);
+				continue;
+			}
+
+			// Flush buffered tool results before emitting any other message type
+			flushPendingToolResults();
+
 			// Build content blocks for user/assistant messages
 			const contentBlocks: AnthropicContentBlock[] = [];
 
@@ -305,6 +340,9 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 				});
 			}
 		}
+
+		// Flush any tool results still buffered at the end of the message list
+		flushPendingToolResults();
 
 		this._originalApiMessages = out as any[];
 		return out;
