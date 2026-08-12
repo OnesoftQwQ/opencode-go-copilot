@@ -244,7 +244,7 @@ function appendGoUsageTooltipLines(lines: string[]): void {
     }
 
     for (const [label, window] of present) {
-        lines.push(`${label} ${Math.round(window.percent)}%`);
+        lines.push(`${label}——${Math.round(window.percent)}%`);
     }
     if (usage.rolling?.resetsAt) {
         const reset = formatResetDuration(usage.rolling.resetsAt);
