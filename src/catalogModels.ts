@@ -71,11 +71,28 @@ export interface ModelMeta {
 }
 
 /**
+ * Zen free models that do not follow the "-free" suffix convention but are
+ * free on the OpenCode Zen provider (kept in sync with the models.dev
+ * catalog; big-pickle is a long-standing free model with a plain ID).
+ */
+const ZEN_FREE_EXTRA_IDS: ReadonlySet<string> = new Set(["big-pickle"]);
+
+/**
+ * Whether a model ID refers to an OpenCode Zen free model:
+ * the "-free" suffix convention, or an ID hard-coded as free (see
+ * ZEN_FREE_EXTRA_IDS). Everything else is treated as Go.
+ */
+export function isZenFreeModelId(modelId: string): boolean {
+    return modelId.endsWith("-free") || ZEN_FREE_EXTRA_IDS.has(modelId);
+}
+
+/**
  * Resolve the provider for a model ID.
- * Zen free models follow the "-free" suffix convention; everything else is Go.
+ * Zen free models follow the "-free" suffix convention (plus a small
+ * hard-coded set of free models with plain IDs); everything else is Go.
  */
 export function resolveProviderForModelId(modelId: string): ProviderId {
-    return modelId.endsWith("-free") ? "opencode" : "opencode-go";
+    return isZenFreeModelId(modelId) ? "opencode" : "opencode-go";
 }
 
 /**

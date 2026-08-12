@@ -4,7 +4,7 @@ import { CancellationToken, LanguageModelChatInformation, PrepareLanguageModelCh
 import { logger } from "./logger";
 import { getApiModelIds, clearApiModelCache } from "./apiModelList";
 import { ensureModelsDevLoaded, clearModelsDevCache, getCatalogProviderModelIds } from "./modelsDev";
-import { buildCatalogModelInfo, isModelDeprecated } from "./catalogModels";
+import { buildCatalogModelInfo, isModelDeprecated, isZenFreeModelId } from "./catalogModels";
 import { delay } from "./utils";
 
 const GO_PROVIDER_ID = "opencode-go";
@@ -87,7 +87,8 @@ export function resetAutoDiscoveryState(): void {
 
 /**
  * Fetch the OpenCode Zen free model list from the catalog with interval caching.
- * Only models with IDs ending in "-free" are included.
+ * Free models are the "-free" suffixed ones plus a small hard-coded set of
+ * plain-ID free models (e.g. big-pickle), see isZenFreeModelId.
  */
 async function fetchZenFreeModelsCached(
     token: CancellationToken,
@@ -104,7 +105,7 @@ async function fetchZenFreeModelsCached(
         await ensureModelsDevLoaded();
         const showDeprecated = vscode.workspace.getConfiguration().get<boolean>("opencodego.showDeprecatedModels", false);
         const zenIds = getCatalogProviderModelIds(ZEN_PROVIDER_ID)
-            .filter((id) => id.endsWith("-free"))
+            .filter((id) => isZenFreeModelId(id))
             .filter((id) => showDeprecated || !isModelDeprecated(ZEN_PROVIDER_ID, id));
         const zenInfos = zenIds.map((id) => buildCatalogModelInfo(ZEN_PROVIDER_ID, id));
         cachedZenInfos = zenInfos;
