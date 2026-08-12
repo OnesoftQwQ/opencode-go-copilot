@@ -3,6 +3,15 @@ import { LanguageModelChatInformation, LanguageModelChatRequestMessage, Language
 import { countMessageTokens, countToolTokens } from "./provideToken";
 import { l10n, l10nFormat } from "./localize";
 import type { StreamUsage } from "./commonApi";
+import {
+    formatAgo,
+    formatResetDuration,
+    getUsageFetchTimestamp,
+    getUsageSnapshot,
+    getGoUsageCached,
+    type GoUsageResult,
+    type GoUsageWindow,
+} from "./goUsage";
 
 // Cumulative token counters across the session (reset on VS Code restart)
 let cumulativeInputTokens = 0;
@@ -10,7 +19,71 @@ let cumulativeOutputTokens = 0;
 let cumulativeCacheHitTokens = 0;
 let cumulativeCacheMissTokens = 0;
 
-export function initStatusBar(context: vscode.ExtensionContext): vscode.StatusBarItem {
+// Go usage polling state (usage shown in the status bar tooltip)
+let usageSecrets: vscode.SecretStorage | undefined;
+let usageStatusBarItem: vscode.StatusBarItem | undefined;
+let usagePollTimer: NodeJS.Timeout | undefined;
+let usageRefreshInFlight = false;
+
+/**
+ * Whether the Go usage section is enabled in the status bar tooltip.
+ */
+function isUsageTooltipEnabled(): boolean {
+    return vscode.workspace.getConfiguration("opencodego").get<boolean>("showUsageInTooltip", true);
+}
+
+/**
+ * Usage refresh interval in milliseconds (clamped to 1-60 minutes).
+ */
+function getUsageRefreshIntervalMs(): number {
+    const minutes = vscode.workspace.getConfiguration("opencodego").get<number>("usageRefreshInterval", 5);
+    return Math.min(Math.max(minutes, 1), 60) * 60 * 1000;
+}
+
+/**
+ * Refresh the cached Go usage (fire-and-forget). No-ops without an API key
+ * or while a refresh is already in flight. On success the tooltip is
+ * re-rendered so the next hover shows fresh data.
+ */
+async function refreshGoUsage(): Promise<void> {
+    if (usageRefreshInFlight || !usageSecrets) {
+        return;
+    }
+    usageRefreshInFlight = true;
+    try {
+        const apiKey = await usageSecrets.get("opencodego.apiKey");
+        if (!apiKey) {
+            return;
+        }
+        const usage = await getGoUsageCached(apiKey);
+        if (usage && usageStatusBarItem) {
+            updateCumulativeTooltip(usageStatusBarItem);
+        }
+    } finally {
+        usageRefreshInFlight = false;
+    }
+}
+
+function stopUsagePolling(): void {
+    if (usagePollTimer) {
+        clearInterval(usagePollTimer);
+        usagePollTimer = undefined;
+    }
+}
+
+function startUsagePolling(): void {
+    stopUsagePolling();
+    if (!isUsageTooltipEnabled()) {
+        return;
+    }
+    // Kick off one immediate refresh (getGoUsageCached enforces its own TTL)
+    void refreshGoUsage();
+    usagePollTimer = setInterval(() => {
+        void refreshGoUsage();
+    }, getUsageRefreshIntervalMs());
+}
+
+export function initStatusBar(context: vscode.ExtensionContext, secrets: vscode.SecretStorage): vscode.StatusBarItem {
     // Reset cumulative counters on VS Code startup
     resetCumulativeCounters();
 
@@ -18,8 +91,25 @@ export function initStatusBar(context: vscode.ExtensionContext): vscode.StatusBa
     tokenCountStatusBarItem.name = l10n("Token Count");
     tokenCountStatusBarItem.text = `$(symbol-numeric) ${l10n("Ready")}`;
     tokenCountStatusBarItem.tooltip = l10n("Current model token usage");
+    // Clicking the status bar refreshes the Go usage immediately
+    tokenCountStatusBarItem.command = "opencodego.checkUsage";
     context.subscriptions.push(tokenCountStatusBarItem);
     tokenCountStatusBarItem.show();
+
+    // Go usage polling for the tooltip section
+    usageSecrets = secrets;
+    usageStatusBarItem = tokenCountStatusBarItem;
+    startUsagePolling();
+    context.subscriptions.push({ dispose: stopUsagePolling });
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration("opencodego.showUsageInTooltip") || e.affectsConfiguration("opencodego.usageRefreshInterval")) {
+                startUsagePolling();
+                updateCumulativeTooltip(tokenCountStatusBarItem);
+            }
+        })
+    );
+
     return tokenCountStatusBarItem;
 }
 
@@ -133,8 +223,48 @@ export function recordUsage(usage: StreamUsage): void {
 }
 
 /**
- * Update the status bar tooltip with cumulative input/output token counts
- * and DeepSeek cache info (if available).
+ * Append the OpenCode Go plan usage section to the tooltip lines.
+ * Shows nothing (no trailing blank line) when disabled or no data is cached.
+ */
+function appendGoUsageTooltipLines(lines: string[]): void {
+    if (!isUsageTooltipEnabled()) {
+        return;
+    }
+    const usage = getUsageSnapshot();
+    if (!usage) {
+        return;
+    }
+    const windows: Array<[string, GoUsageWindow | undefined]> = [
+        [l10n("5h window"), usage.rolling],
+        [l10n("Weekly"), usage.weekly],
+        [l10n("Monthly"), usage.monthly],
+    ];
+    const present = windows.filter((entry): entry is [string, GoUsageWindow] => entry[1] !== undefined);
+    if (present.length === 0) {
+        return;
+    }
+
+    lines.push("");
+    lines.push(l10n("OpenCode Go Usage"));
+    for (const [label, window] of present) {
+        const resetText = window.resetsAt
+            ? ` (${l10nFormat("resets in {0}", formatResetDuration(window.resetsAt))})`
+            : "";
+        lines.push(`${label}: ${Math.round(window.percent)}%${resetText}`);
+    }
+    if (usage.useBalance !== undefined) {
+        lines.push(l10nFormat("Balance fallback: {0}", usage.useBalance ? l10n("enabled") : l10n("disabled")));
+    }
+    const fetchedAt = getUsageFetchTimestamp();
+    if (fetchedAt !== undefined) {
+        lines.push(l10nFormat("Updated {0} ago", formatAgo(fetchedAt)));
+    }
+}
+
+/**
+ * Update the status bar tooltip with cumulative input/output token counts,
+ * DeepSeek cache info (if available) and OpenCode Go plan usage (if enabled
+ * and data is cached).
  */
 export function updateCumulativeTooltip(statusBarItem: vscode.StatusBarItem): void {
     const arrowUp = "\u2191";
@@ -156,5 +286,32 @@ export function updateCumulativeTooltip(statusBarItem: vscode.StatusBarItem): vo
     // Line 2: cumulative output
     lines.push(`${arrowDown} ${formatTokenCount(cumulativeOutputTokens)}`);
 
+    // Section 3: OpenCode Go plan usage (optional)
+    appendGoUsageTooltipLines(lines);
+
     statusBarItem.tooltip = lines.join("\n");
+}
+
+/**
+ * Force an immediate Go usage refresh (used by the checkUsage command) and
+ * re-render the tooltip once fresh data arrives.
+ */
+export async function refreshGoUsageNow(): Promise<GoUsageResult | null> {
+    if (!usageSecrets || !usageStatusBarItem) {
+        return null;
+    }
+    const apiKey = await usageSecrets.get("opencodego.apiKey");
+    if (!apiKey) {
+        return null;
+    }
+    // Bypass the in-flight guard for an explicit user request: reuse the
+    // module-level fetch but wait for its result directly.
+    usageRefreshInFlight = true;
+    try {
+        const usage = await getGoUsageCached(apiKey, true);
+        updateCumulativeTooltip(usageStatusBarItem);
+        return usage;
+    } finally {
+        usageRefreshInFlight = false;
+    }
 }

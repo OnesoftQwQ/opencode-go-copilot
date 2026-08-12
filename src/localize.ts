@@ -23,6 +23,22 @@ const zhCN: Record<string, string> = {
 	// statusBar cache tooltip
 	"Cache": "缓存",
 	"({0} cached, {1}%)": "(已缓存 {0}, 命中率 {1}%)",
+
+	// statusBar Go usage tooltip section
+	"OpenCode Go Usage": "OpenCode Go 用量",
+	"5h window": "5 小时窗口",
+	"Weekly": "周窗口",
+	"Monthly": "月窗口",
+	"resets in {0}": "{0} 后重置",
+	"Balance fallback: {0}": "余额回退: {0}",
+	"enabled": "已启用",
+	"disabled": "已禁用",
+	"Updated {0} ago": "{0} 前更新",
+
+	// extension.ts - checkUsage command
+	"No API key configured. Please run the 'OpenCode Go: Set API Key' command first.": "未配置 API 密钥。请先运行「OpenCode Go: 设置 API 密钥」命令。",
+	"OpenCode Go usage is unavailable (no active Go plan).": "无法获取 OpenCode Go 用量（没有有效的 Go 套餐）。",
+	"Failed to fetch OpenCode Go usage. See output for details.": "获取 OpenCode Go 用量失败，详情见输出面板。",
 	"No changes found in any workspace repositories.": "在任何工作区仓库中均未发现更改。",
 	"Git extension not found": "未找到 Git 扩展",
 	"No Git repositories available": "没有可用的 Git 仓库",
