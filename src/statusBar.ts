@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { LanguageModelChatInformation, LanguageModelChatRequestMessage, LanguageModelChatTool } from "vscode";
 import { countMessageTokens, countToolTokens } from "./provideToken";
 import { l10n, l10nFormat } from "./localize";
+import { logger } from "./logger";
 import type { StreamUsage } from "./commonApi";
 import {
     formatAgo,
@@ -53,6 +54,7 @@ async function refreshGoUsage(): Promise<void> {
     try {
         const apiKey = await usageSecrets.get("opencodego.apiKey");
         if (!apiKey) {
+            logger.debug("goUsage.poll.skip", { reason: "no-api-key" });
             return;
         }
         const usage = await getGoUsageCached(apiKey);
@@ -68,19 +70,23 @@ function stopUsagePolling(): void {
     if (usagePollTimer) {
         clearInterval(usagePollTimer);
         usagePollTimer = undefined;
+        logger.debug("goUsage.poll.stop", {});
     }
 }
 
 function startUsagePolling(): void {
     stopUsagePolling();
     if (!isUsageTooltipEnabled()) {
+        logger.debug("goUsage.poll.disabled", {});
         return;
     }
     // Kick off one immediate refresh (getGoUsageCached enforces its own TTL)
     void refreshGoUsage();
+    const intervalMs = getUsageRefreshIntervalMs();
     usagePollTimer = setInterval(() => {
         void refreshGoUsage();
-    }, getUsageRefreshIntervalMs());
+    }, intervalMs);
+    logger.debug("goUsage.poll.start", { intervalMs });
 }
 
 export function initStatusBar(context: vscode.ExtensionContext, secrets: vscode.SecretStorage): vscode.StatusBarItem {

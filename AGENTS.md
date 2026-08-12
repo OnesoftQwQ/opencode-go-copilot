@@ -991,11 +991,11 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 
 #### `fetchGoUsage(apiKey): Promise<GoUsageResult>`
 
-从 `${baseUrl}/usage` 拉取用量（Bearer 认证，10 秒 `AbortSignal.timeout` 超时）。顶层结构宽容解包（`usage` / `windows` / 平铺字段均可）；非 2xx 时抛出带 `status` 属性的 Error（401 由调用方识别为无 Go 套餐）。
+从 `${baseUrl}/usage` 拉取用量（Bearer 认证，10 秒 `AbortSignal.timeout` 超时）。顶层结构宽容解包（`usage` / `windows` / 平铺字段均可）；非 2xx 时抛出带 `status` 属性的 Error（401 由调用方识别为无 Go 套餐）。日志：成功时输出 `goUsage.fetch.ok`（info，含 url/durationMs/各窗口百分比/useBalance），超时输出 `goUsage.fetch.timeout`（warn），JSON 解析失败输出 `goUsage.fetch.parseError`（error）。
 
 #### `getGoUsageCached(apiKey, force?): Promise<GoUsageResult | null>`
 
-获取用量：缓存新鲜（5 分钟 TTL）时直接返回；`force=true` 时绕过 TTL 强制拉取（显式刷新用）。失败时保留旧缓存并记录 `lastFetchStatus`（`ok`/`unauthorized`/`error`），静默降级。
+获取用量：缓存新鲜（5 分钟 TTL）时直接返回；`force=true` 时绕过 TTL 强制拉取（显式刷新用）。失败时保留旧缓存并记录 `lastFetchStatus`（`ok`/`unauthorized`/`error`），静默降级。日志：每次失败恰好一条 warn——401 输出 `goUsage.fetch.unauthorized`（无 Go 套餐），其余输出 `goUsage.fetch.failed`（含 status/error）。
 
 #### `getUsageSnapshot(): GoUsageResult | null`
 
@@ -1039,11 +1039,11 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 
 #### `refreshGoUsage(): Promise<void>`
 
-后台刷新 Go 用量（fire-and-forget）：无 API Key 或已有刷新在途时直接返回；从 SecretStorage 读取 key 后调用 `getGoUsageCached()`，成功后重渲染 tooltip。`usageRefreshInFlight` 标志防并发。
+后台刷新 Go 用量（fire-and-forget）：无 API Key 或已有刷新在途时直接返回（无 key 时输出 `goUsage.poll.skip` debug 日志）；从 SecretStorage 读取 key 后调用 `getGoUsageCached()`，成功后重渲染 tooltip。`usageRefreshInFlight` 标志防并发。
 
 #### `stopUsagePolling() / startUsagePolling(): void`
 
-停止/启动轮询定时器。`startUsagePolling` 先停旧定时器，配置关闭时直接返回；启动时立即触发一次刷新，之后按配置间隔定时刷新。
+停止/启动轮询定时器。`startUsagePolling` 先停旧定时器，配置关闭时输出 `goUsage.poll.disabled`（debug）并直接返回；启动时立即触发一次刷新，之后按配置间隔定时刷新，输出 `goUsage.poll.start`/`goUsage.poll.stop`（debug，含 intervalMs）。
 
 #### `formatTokenCount(value): string`
 
@@ -1671,6 +1671,12 @@ type 取值：`feat` | `fix` | `refactor` | `docs` | `chore` | `improve` 等。
 - `models.loaded` — 模型加载
 - `modelsDev.fetch.*` — 目录拉取明细：`fetch.official`/`fetch.mirror`（成功，含 durationMs/bytes）、`fetch.officialFailed`/`fetch.mirrorFailed`/`fetch.timeout`/`fetch.hardcoded`（失败或回退原因）
 - `modelsDev.load` — 目录加载汇总（source/durationMs/providers/goModels/zenModels；官方源为 info，镜像/硬编码/失败为 warn）
+- `goUsage.fetch.ok` — 用量拉取成功（info，含 url/durationMs/rolling/weekly/monthly/useBalance）
+- `goUsage.fetch.timeout` — 用量拉取超时（warn）
+- `goUsage.fetch.unauthorized` — 用量拉取 401，无有效 Go 套餐（warn）
+- `goUsage.fetch.failed` — 用量拉取其他失败（warn，含 status/error）
+- `goUsage.fetch.parseError` — 用量响应 JSON 解析失败（error）
+- `goUsage.poll.start/stop/disabled/skip` — 状态栏用量轮询启停与跳过（debug）
 - `commit.start/end/error` — 提交消息生成
 - `openai.stream.*` / `anthropic.stream.*` — 流式处理
 - `apiKey.missing` — API Key 缺失

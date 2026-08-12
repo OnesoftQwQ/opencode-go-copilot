@@ -106,6 +106,7 @@ function parseWindow(raw: unknown): GoUsageWindow | undefined {
 async function fetchGoUsage(apiKey: string): Promise<GoUsageResult> {
     const apiBaseUrl = await resolveBaseUrl();
     const url = `${apiBaseUrl.replace(/\/+$/, "")}/usage`;
+    const start = performance.now();
     let response: Response;
     try {
         response = await fetch(url, {
@@ -121,12 +122,23 @@ async function fetchGoUsage(apiKey: string): Promise<GoUsageResult> {
     }
 
     if (!response.ok) {
+        // HTTP-level failures are logged by the caller (getGoUsageCached)
+        // with a single record per attempt.
         const error = new Error(`Go usage error: [${response.status}] ${response.statusText}`) as Error & { status?: number };
         error.status = response.status;
         throw error;
     }
 
-    const body = (await response.json()) as Record<string, unknown>;
+    let body: Record<string, unknown>;
+    try {
+        body = (await response.json()) as Record<string, unknown>;
+    } catch (err) {
+        logger.error("goUsage.fetch.parseError", {
+            url,
+            error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+    }
     // Lenient top-level unwrap: accept { usage: {...} }, { windows: {...} } or flat fields.
     const usageSource =
         (typeof body.usage === "object" && body.usage !== null ? body.usage : undefined) ??
@@ -134,12 +146,22 @@ async function fetchGoUsage(apiKey: string): Promise<GoUsageResult> {
         body;
 
     const raw = usageSource as Record<string, unknown>;
-    return {
+    const usage: GoUsageResult = {
         rolling: parseWindow(raw.rolling),
         weekly: parseWindow(raw.weekly),
         monthly: parseWindow(raw.monthly),
         useBalance: typeof body.useBalance === "boolean" ? body.useBalance : undefined,
     };
+
+    logger.info("goUsage.fetch.ok", {
+        url,
+        durationMs: Math.round(performance.now() - start),
+        rolling: usage.rolling ? Math.round(usage.rolling.percent) : undefined,
+        weekly: usage.weekly ? Math.round(usage.weekly.percent) : undefined,
+        monthly: usage.monthly ? Math.round(usage.monthly.percent) : undefined,
+        useBalance: usage.useBalance,
+    });
+    return usage;
 }
 
 /**
@@ -170,14 +192,20 @@ export async function getGoUsageCached(apiKey: string | undefined, force?: boole
         lastFetchStatus = "ok";
         return usage;
     } catch (err) {
-        // API call failed — keep stale cache; record status for diagnostics
-        lastFetchStatus = err instanceof Error && (err as Error & { status?: number }).status === 401
-            ? "unauthorized"
-            : "error";
-        logger.warn("goUsage.fetch.failed", {
+        // API call failed — keep stale cache; record status for diagnostics.
+        // HTTP-level errors are rethrown from fetchGoUsage; log exactly one
+        // record per attempt, distinguishing 401 (no active Go plan).
+        const status = err instanceof Error && (err as Error & { status?: number }).status;
+        lastFetchStatus = status === 401 ? "unauthorized" : "error";
+        const detail = {
             status: lastFetchStatus,
             error: err instanceof Error ? err.message : String(err),
-        });
+        };
+        if (status === 401) {
+            logger.warn("goUsage.fetch.unauthorized", detail);
+        } else {
+            logger.warn("goUsage.fetch.failed", detail);
+        }
         return cachedUsage;
     }
 }

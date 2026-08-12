@@ -32,12 +32,6 @@ export function activate(context: vscode.ExtensionContext) {
     // Register the OpenCode Go provider under the vendor id used in package.json
     vscode.lm.registerLanguageModelChatProvider("opencodego", provider);
 
-    // Helper: check if an API key is stored (without prompting)
-    const hasApiKey = async (): Promise<boolean> => {
-        const key = await context.secrets.get("opencodego.apiKey");
-        return !!key;
-    };
-
     // Management command to configure API key
     context.subscriptions.push(
         vscode.commands.registerCommand("opencodego.setApiKey", async () => {
