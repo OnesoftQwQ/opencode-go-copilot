@@ -40,8 +40,8 @@
 | **Token 计数**               | 使用 `o200k_base` tiktoken 分词器精确统计 token 用量                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | **状态栏**                   | 实时显示当前会话 token 使用量、累计用量、缓存命中率                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | **原生 Token 指示器**        | 始终启用，向 Copilot Chat 原生 Token 指示器报告 token 用量。通过发送 MIME 类型为 `usage` 的 `LanguageModelDataPart`（TextEncoder 编码 JSON）实现，无需自建状态栏。依赖 VS Code/Copilot Chat 1.116+ 对外部模型 `usage` data part 的识别                                                                                                                                                                                                                                                                                                                                                  |
-| **高级 Token 指示器**        | 可通过 `opencodego.enableThirdPartyTokenIndicator` 配置（默认开启）控制 VS Code 状态栏中的高级Token计数器。关闭后仅显示原生指示器                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| **套餐用量监控**             | 从官方用量端点 `GET /zen/go/v1/usage`（2026-08-11 上线，anomalyco/opencode#16513）拉取 Go 套餐用量：5 小时滚动 / 周 / 月三个窗口的使用率与重置时间，以及 `useBalance` 余额回退标志。数据以区块形式展示在状态栏悬停提示中（`opencodego.showUsageInTooltip` 控制，默认开启），后台按 `opencodego.usageRefreshInterval` 间隔轮询（默认 5 分钟，1-60 可调）；点击状态栏条目或运行 `opencodego.checkUsage` 命令可强制立即刷新并弹窗显示摘要。无 API Key 时不轮询，401（无 Go 套餐）与网络失败均静默降级、仅记录日志，响应字段名宽容解析（`percent`/`usagePercent`、`resetsAt`/`resetInSec` 双兼容）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| **高级 Token 指示器**        | 可通过 `opencodego.enableThirdPartyTokenIndicator` 配置（默认开启）控制 VS Code 状态栏中的高级Token计数器。状态栏主文本显示 Go 套餐用量（见下），累计 Token 信息展示在悬停提示中。关闭后仅显示原生指示器                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **套餐用量监控**             | 从官方用量端点 `GET /zen/go/v1/usage`（2026-08-11 上线，anomalyco/opencode#16513）拉取 Go 套餐用量：5 小时滚动 / 周 / 月三个窗口的使用率与重置时间，以及 `useBalance` 余额回退标志。状态栏主文本默认显示 5H 窗口用量（`Go 5H 65%`，无数据时 `Go --`）；悬停提示中展示三窗口明细与 5h 窗口重置倒计时（`opencodego.showUsageInTooltip` 控制 tooltip 区块，默认开启），后台按 `opencodego.usageRefreshInterval` 间隔轮询（默认 5 分钟，1-60 可调）；点击状态栏条目或运行 `opencodego.checkUsage` 命令可强制立即刷新并弹窗显示摘要。无 API Key 时不轮询，401（无 Go 套餐）与网络失败均静默降级、仅记录日志，响应字段名宽容解析（`percent`/`usagePercent`、`resetsAt`/`resetInSec` 双兼容）                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | **Git 提交消息生成**         | 一键生成 Conventional Commit 格式的 Git 提交消息，支持 `auto` 语言模式自动从历史提交检测语言                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | **多仓库支持**               | 支持多根工作区 (multi-root) 中多个 Git 仓库的提交消息生成                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | **模型预设**                 | 支持通过命令面板快速切换 temperature/top_p 预设（🎯 Precise/⚖️ Balanced/🔥 Creative），也支持手动自定义输入                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -1019,39 +1019,43 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 
 #### `initStatusBar(context, secrets): vscode.StatusBarItem`
 
-创建状态栏条目，重置累计计数器，显示 "Ready"。设置条目 `command` 为 `opencodego.checkUsage`（点击条目即刷新用量）；保存 SecretStorage 引用并启动 Go 用量后台轮询（`startUsagePolling`），注册配置变化监听（`opencodego.showUsageInTooltip`/`opencodego.usageRefreshInterval` 变化时重启轮询并重渲染 tooltip）与轮询定时器 dispose。
+创建状态栏条目（name 为 "Go Usage"），主文本初始为 "Go --"。设置条目 `command` 为 `opencodego.checkUsage`（点击条目即刷新用量）；保存 SecretStorage 引用并启动 Go 用量后台轮询（`startUsagePolling`），注册配置变化监听（`opencodego.showUsageInTooltip`/`opencodego.usageRefreshInterval` 变化时重启轮询并重渲染状态栏文本与 tooltip）与轮询定时器 dispose。
 
 #### `isUsageTooltipEnabled(): boolean`
 
-读取 `opencodego.showUsageInTooltip` 配置（默认 true）。
+读取 `opencodego.showUsageInTooltip` 配置（默认 true），仅控制 tooltip 中的用量区块。
 
 #### `getUsageRefreshIntervalMs(): number`
 
 读取 `opencodego.usageRefreshInterval`（分钟）并夹取到 1-60，换算为毫秒。
 
+#### `updateStatusBarGoUsageText(statusBarItem): void`
+
+更新状态栏主文本为 5H 窗口用量（"Go 5H 65%"），无缓存数据时显示 "Go --"。（模块内使用）
+
 #### `refreshGoUsage(): Promise<void>`
 
-后台刷新 Go 用量（fire-and-forget）：无 API Key 或已有刷新在途时直接返回（无 key 时输出 `goUsage.poll.skip` debug 日志）；从 SecretStorage 读取 key 后调用 `getGoUsageCached()`，成功后重渲染 tooltip。`usageRefreshInFlight` 标志防并发。
+后台刷新 Go 用量（fire-and-forget）：无 API Key 或已有刷新在途时直接返回（无 key 时输出 `goUsage.poll.skip` debug 日志）；从 SecretStorage 读取 key 后调用 `getGoUsageCached()`，成功后重渲染状态栏文本与 tooltip。`usageRefreshInFlight` 标志防并发。
 
 #### `stopUsagePolling() / startUsagePolling(): void`
 
-停止/启动轮询定时器。`startUsagePolling` 先停旧定时器，配置关闭时输出 `goUsage.poll.disabled`（debug）并直接返回；启动时立即触发一次刷新，之后按配置间隔定时刷新，输出 `goUsage.poll.start`/`goUsage.poll.stop`（debug，含 intervalMs）。
+停止/启动轮询定时器。轮询无条件启用（状态栏主文本依赖用量数据），`startUsagePolling` 先停旧定时器，立即触发一次刷新后按配置间隔定时刷新，输出 `goUsage.poll.start`/`goUsage.poll.stop`（debug，含 intervalMs）。
 
 #### `formatTokenCount(value): string`
 
-格式化 Token 数为人类可读格式 (K/M/B)。
+格式化 Token 数为人类可读格式 (K/M/B)（tooltip 渲染用）。
 
-#### `createProgressBar(usedTokens, maxTokens): string`
+#### `updateContextStatusBar(messages, tools, statusBarItem, modelConfig): Promise<void>`
 
-创建视觉进度条（使用 Unicode 块字符 ▁▂▃▄▅▆▇█）。
+更新状态栏：主文本刷新为 Go 用量，tooltip 显示累计 Token 与用量区块。新对话时重置累计计数器。返回估算输入 Token 数（供 fallback usage）。
 
-#### `updateContextStatusBar(messages, tools, model, statusBarItem, modelConfig): Promise<void>`
+#### `updateStatusBarWithApiPrompt(statusBarItem): void`
 
-更新状态栏文本：显示当前消息的 Token 用量和进度条。新对话时重置累计计数器。
+API 返回用量数据后重渲染状态栏（主文本 = Go 用量，tooltip = 累计 Token）。
 
 #### `resetCumulativeCounters(): void`
 
-重置所有累计 Token 计数器（VS Code 启动和新对话时调用）。
+重置所有累计 Token 计数器（VS Code 启动和新对话时调用）。（模块内使用）
 
 #### `recordUsage(usage: StreamUsage): void`
 
@@ -1668,7 +1672,7 @@ type 取值：`feat` | `fix` | `refactor` | `docs` | `chore` | `improve` 等。
 - `goUsage.fetch.unauthorized` — 用量拉取 401，无有效 Go 套餐（warn）
 - `goUsage.fetch.failed` — 用量拉取其他失败（warn，含 status/error）
 - `goUsage.fetch.parseError` — 用量响应 JSON 解析失败（error）
-- `goUsage.poll.start/stop/disabled/skip` — 状态栏用量轮询启停与跳过（debug）
+- `goUsage.poll.start/stop/skip` — 状态栏用量轮询启停与跳过（debug）
 - `commit.start/end/error` — 提交消息生成
 - `openai.stream.*` / `anthropic.stream.*` — 流式处理
 - `apiKey.missing` — API Key 缺失

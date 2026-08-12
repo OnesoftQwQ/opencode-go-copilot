@@ -2,10 +2,9 @@ import * as vscode from "vscode";
 
 const zhCN: Record<string, string> = {
 	// statusBar
-	"Token Count": "Token 计数",
-	"Current model token usage": "当前模型 token 使用量",
+	"Go Usage": "Go 用量",
+	"Go usage and token usage": "Go 用量与 Token 用量",
 	"Token Usage": "Token 使用量",
-	"Ready": "就绪",
 
 	// extension.ts - API key prompts
 	"OpenCode Go Provider API Key": "OpenCode Go 提供商 API 密钥",
@@ -25,7 +24,6 @@ const zhCN: Record<string, string> = {
 	"({0} cached, {1}%)": "(已缓存 {0}, 命中率 {1}%)",
 
 	// statusBar Go usage tooltip section
-	"Go Usage": "Go 用量",
 	"Week": "周",
 	"Month": "月",
 	"5h window resets in {0}": "五小时窗口将在 {0} 后重置",

@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { LanguageModelChatInformation, LanguageModelChatRequestMessage, LanguageModelChatTool } from "vscode";
+import { LanguageModelChatRequestMessage, LanguageModelChatTool } from "vscode";
 import { countMessageTokens, countToolTokens } from "./provideToken";
 import { l10n, l10nFormat } from "./localize";
 import { logger } from "./logger";
@@ -41,8 +41,8 @@ function getUsageRefreshIntervalMs(): number {
 
 /**
  * Refresh the cached Go usage (fire-and-forget). No-ops without an API key
- * or while a refresh is already in flight. On success the tooltip is
- * re-rendered so the next hover shows fresh data.
+ * or while a refresh is already in flight. On success the status bar text
+ * and tooltip are re-rendered so the next glance/hover shows fresh data.
  */
 async function refreshGoUsage(): Promise<void> {
     if (usageRefreshInFlight || !usageSecrets) {
@@ -57,6 +57,7 @@ async function refreshGoUsage(): Promise<void> {
         }
         const usage = await getGoUsageCached(apiKey);
         if (usage && usageStatusBarItem) {
+            updateStatusBarGoUsageText(usageStatusBarItem);
             updateCumulativeTooltip(usageStatusBarItem);
         }
     } finally {
@@ -74,11 +75,9 @@ function stopUsagePolling(): void {
 
 function startUsagePolling(): void {
     stopUsagePolling();
-    if (!isUsageTooltipEnabled()) {
-        logger.debug("goUsage.poll.disabled", {});
-        return;
-    }
-    // Kick off one immediate refresh (getGoUsageCached enforces its own TTL)
+    // Polling always runs (when an API key exists) because the status bar
+    // main text shows the Go usage; showUsageInTooltip only gates the
+    // tooltip section.
     void refreshGoUsage();
     const intervalMs = getUsageRefreshIntervalMs();
     usagePollTimer = setInterval(() => {
@@ -92,15 +91,15 @@ export function initStatusBar(context: vscode.ExtensionContext, secrets: vscode.
     resetCumulativeCounters();
 
     const tokenCountStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-    tokenCountStatusBarItem.name = l10n("Token Count");
-    tokenCountStatusBarItem.text = `$(symbol-numeric) ${l10n("Ready")}`;
-    tokenCountStatusBarItem.tooltip = l10n("Current model token usage");
+    tokenCountStatusBarItem.name = l10n("Go Usage");
+    tokenCountStatusBarItem.text = "Go --";
+    tokenCountStatusBarItem.tooltip = l10n("Go usage and token usage");
     // Clicking the status bar refreshes the Go usage immediately
     tokenCountStatusBarItem.command = "opencodego.checkUsage";
     context.subscriptions.push(tokenCountStatusBarItem);
     tokenCountStatusBarItem.show();
 
-    // Go usage polling for the tooltip section
+    // Go usage polling for the status bar text and tooltip section
     usageSecrets = secrets;
     usageStatusBarItem = tokenCountStatusBarItem;
     startUsagePolling();
@@ -109,6 +108,7 @@ export function initStatusBar(context: vscode.ExtensionContext, secrets: vscode.
         vscode.workspace.onDidChangeConfiguration((e) => {
             if (e.affectsConfiguration("opencodego.showUsageInTooltip") || e.affectsConfiguration("opencodego.usageRefreshInterval")) {
                 startUsagePolling();
+                updateStatusBarGoUsageText(tokenCountStatusBarItem);
                 updateCumulativeTooltip(tokenCountStatusBarItem);
             }
         })
@@ -132,26 +132,28 @@ export function formatTokenCount(value: number): string {
 }
 
 /**
- * Create a visual progress bar showing token usage.
+ * Update the status bar main text with the Go plan usage (5h window),
+ * e.g. "Go 5H 65%", or "Go --" while no usage data is available.
  */
-export function createProgressBar(usedTokens: number, maxTokens: number): string {
-    const blocks = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
-    const usagePercentage = Math.min((usedTokens / maxTokens) * 100, 100);
-    const blockIndex = Math.min(Math.floor((usagePercentage / 100) * blocks.length), blocks.length - 1);
-
-    return `${blocks[blockIndex]} ${usagePercentage.toFixed(1)}%`;
+function updateStatusBarGoUsageText(statusBarItem: vscode.StatusBarItem): void {
+    const usage = getUsageSnapshot();
+    const percent = usage?.rolling?.percent;
+    statusBarItem.text = percent !== undefined
+        ? `Go 5H ${Math.round(percent)}%`
+        : "Go --";
 }
 
 /**
  * Update the status bar with token usage information.
  * Resets cumulative counters when a new conversation starts
- * (no assistant messages in the history).
+ * (no assistant messages in the history). The status bar main text shows
+ * the Go plan usage (see updateStatusBarGoUsageText); token counts live in
+ * the tooltip.
  * @returns The estimated input token count (for fallback usage).
  */
 export async function updateContextStatusBar(
     messages: readonly LanguageModelChatRequestMessage[],
     tools: readonly LanguageModelChatTool[] | undefined,
-    model: LanguageModelChatInformation,
     statusBarItem: vscode.StatusBarItem,
     modelConfig: { includeReasoningInRequest: boolean }
 ): Promise<number> {
@@ -173,39 +175,29 @@ export async function updateContextStatusBar(
             totalTokens += await countToolTokens(tools);
         }
 
-        const maxTokens = model.maxInputTokens || 128000;
-        const progressBar = createProgressBar(totalTokens, maxTokens);
-        const formattedTokens = formatTokenCount(totalTokens);
-
-        statusBarItem.text = `$(symbol-numeric) ${formattedTokens} ${progressBar}`;
+        updateStatusBarGoUsageText(statusBarItem);
         // Always show cumulative tooltip (not per-request) to avoid flickering
         updateCumulativeTooltip(statusBarItem);
         return totalTokens;
     } catch {
-        statusBarItem.text = "$(symbol-numeric) ?";
+        updateStatusBarGoUsageText(statusBarItem);
         return 0;
     }
 }
 
 /**
- * Update the status bar main text using API-reported prompt token count.
- * Called when API returns usage data, overriding the initial client-side estimate.
+ * Re-render the status bar after the API reports usage data
+ * (status bar main text = Go usage, tooltip = cumulative token counts).
  */
-export function updateStatusBarWithApiPrompt(
-    apiPromptTokens: number,
-    maxTokens: number,
-    statusBarItem: vscode.StatusBarItem
-): void {
-    const progressBar = createProgressBar(apiPromptTokens, maxTokens);
-    const formattedTokens = formatTokenCount(apiPromptTokens);
-    statusBarItem.text = `$(symbol-numeric) ${formattedTokens} ${progressBar}`;
+export function updateStatusBarWithApiPrompt(statusBarItem: vscode.StatusBarItem): void {
+    updateStatusBarGoUsageText(statusBarItem);
     updateCumulativeTooltip(statusBarItem);
 }
 
 /**
  * Reset all cumulative token counters (called on VS Code startup and new conversation).
  */
-export function resetCumulativeCounters(): void {
+function resetCumulativeCounters(): void {
     cumulativeInputTokens = 0;
     cumulativeOutputTokens = 0;
     cumulativeCacheHitTokens = 0;
@@ -295,7 +287,7 @@ export function updateCumulativeTooltip(statusBarItem: vscode.StatusBarItem): vo
 
 /**
  * Force an immediate Go usage refresh (used by the checkUsage command) and
- * re-render the tooltip once fresh data arrives.
+ * re-render the status bar text and tooltip once fresh data arrives.
  */
 export async function refreshGoUsageNow(): Promise<GoUsageResult | null> {
     if (!usageSecrets || !usageStatusBarItem) {
@@ -310,6 +302,7 @@ export async function refreshGoUsageNow(): Promise<GoUsageResult | null> {
     usageRefreshInFlight = true;
     try {
         const usage = await getGoUsageCached(apiKey, true);
+        updateStatusBarGoUsageText(usageStatusBarItem);
         updateCumulativeTooltip(usageStatusBarItem);
         return usage;
     } finally {
