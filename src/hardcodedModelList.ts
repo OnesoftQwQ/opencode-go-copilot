@@ -8,7 +8,7 @@
  * (limit, cost, reasoning_options, attachment, modalities, ...), so the
  * fallback behaves like the real catalog instead of a bare ID list.
  *
- * Snapshot taken from the official models.dev catalog on 2026-08-04.
+ * Snapshot taken from the official models.dev catalog on 2026-08-12.
  */
 
 import type { CatalogProvider, ModelsDevEntry } from "./modelsDev";
@@ -260,7 +260,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
         },
         "deepseek-v4-flash": {
           "id": "deepseek-v4-flash",
-          "name": "DeepSeek V4 Flash (New)",
+          "name": "DeepSeek V4 Flash (2x usage)",
           "description": "Official DeepSeek V4 Flash release with enhanced agentic capabilities and integrated DSpark speculative decoding",
           "family": "deepseek-flash",
           "attachment": false,
@@ -269,6 +269,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             {
               "type": "effort",
               "values": [
+                "low",
                 "high",
                 "max"
               ]
@@ -297,9 +298,9 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "output": 384000
           },
           "cost": {
-            "input": 0.14,
-            "output": 0.28,
-            "cache_read": 0.0028
+            "input": 0.07,
+            "output": 0.14,
+            "cache_read": 0.0014
           }
         },
         "kimi-k2.5": {
@@ -2030,7 +2031,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
         },
         "deepseek-v4-flash": {
           "id": "deepseek-v4-flash",
-          "name": "DeepSeek V4 Flash 0731",
+          "name": "DeepSeek V4 Flash",
           "description": "Official DeepSeek V4 Flash release with enhanced agentic capabilities and integrated DSpark speculative decoding",
           "family": "deepseek-flash",
           "attachment": false,
@@ -2042,6 +2043,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             {
               "type": "effort",
               "values": [
+                "low",
                 "high",
                 "max"
               ]
@@ -2238,9 +2240,49 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "context": 256000,
             "output": 64000
           },
+          "status": "deprecated",
           "cost": {
             "input": 0,
             "output": 0
+          }
+        },
+        "longcat-2.0-free": {
+          "id": "longcat-2.0-free",
+          "name": "LongCat-2.0 Free",
+          "description": "Meituan LongCat-2.0, a reasoning model with tool calling and a 1M-token context window",
+          "family": "longcat",
+          "attachment": false,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "toggle"
+            }
+          ],
+          "tool_call": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "temperature": true,
+          "release_date": "2026-06-30",
+          "last_updated": "2026-06-30",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": false,
+          "limit": {
+            "context": 1000000,
+            "output": 131072
+          },
+          "status": "deprecated",
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0
           }
         },
         "qwen3.6-plus-free": {
@@ -2367,6 +2409,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "context": 262144,
             "output": 32768
           },
+          "status": "deprecated",
           "cost": {
             "input": 0,
             "output": 0,
@@ -2416,7 +2459,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
         },
         "deepseek-v4-flash-free": {
           "id": "deepseek-v4-flash-free",
-          "name": "DeepSeek V4 Flash Free (New)",
+          "name": "DeepSeek V4 Flash Free",
           "description": "Official DeepSeek V4 Flash release with enhanced agentic capabilities and integrated DSpark speculative decoding",
           "family": "deepseek-flash",
           "attachment": false,
@@ -2425,6 +2468,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             {
               "type": "effort",
               "values": [
+                "low",
                 "high",
                 "max"
               ]
@@ -2727,6 +2771,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "context": 200000,
             "output": 32000
           },
+          "status": "deprecated",
           "provider": {
             "npm": "@ai-sdk/anthropic"
           },
@@ -3187,6 +3232,37 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "cache_read": 0
           }
         },
+        "ling-3.0-tiny-free": {
+          "id": "ling-3.0-tiny-free",
+          "name": "Ling-3.0-tiny Free",
+          "description": "Compact MoE model for responsive agents, instruction following, and multi-turn conversations",
+          "family": "ling",
+          "attachment": false,
+          "reasoning": true,
+          "reasoning_options": [],
+          "tool_call": true,
+          "structured_output": false,
+          "temperature": true,
+          "release_date": "2026-08-06",
+          "last_updated": "2026-08-06",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": false,
+          "limit": {
+            "context": 262144,
+            "output": 32768
+          },
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
         "grok-code": {
           "id": "grok-code",
           "name": "Grok Code Fast 1",
@@ -3443,11 +3519,27 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
           "family": "hy3-free",
           "attachment": false,
           "reasoning": true,
-          "reasoning_options": [],
+          "reasoning_options": [
+            {
+              "type": "toggle"
+            },
+            {
+              "type": "effort",
+              "values": [
+                "low",
+                "medium",
+                "high"
+              ]
+            }
+          ],
           "tool_call": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "structured_output": true,
           "temperature": true,
-          "release_date": "2026-06-26",
-          "last_updated": "2026-06-26",
+          "release_date": "2026-07-06",
+          "last_updated": "2026-07-06",
           "modalities": {
             "input": [
               "text"
@@ -4195,7 +4287,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
         "grok-build-0.1": {
           "id": "grok-build-0.1",
           "name": "Grok Build 0.1",
-          "description": "Grok coding model for agentic engineering, edits, and codebase workflows",
+          "description": "Fast Grok coding model tuned for agentic engineering and iterative edits",
           "family": "grok-build",
           "attachment": true,
           "reasoning": true,
@@ -4203,12 +4295,13 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
           "tool_call": true,
           "structured_output": true,
           "temperature": true,
-          "release_date": "2026-05-20",
-          "last_updated": "2026-05-20",
+          "release_date": "2026-04-16",
+          "last_updated": "2026-04-16",
           "modalities": {
             "input": [
               "text",
-              "image"
+              "image",
+              "pdf"
             ],
             "output": [
               "text"
@@ -4218,6 +4311,9 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
           "limit": {
             "context": 256000,
             "output": 256000
+          },
+          "provider": {
+            "npm": "@ai-sdk/openai"
           },
           "cost": {
             "input": 1,
@@ -4655,6 +4751,41 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "output": 10,
             "cache_read": 0.2,
             "cache_write": 2.5
+          }
+        },
+        "nemotron-3.5-lightning-free": {
+          "id": "nemotron-3.5-lightning-free",
+          "name": "Nemotron 3.5 Lightning Free",
+          "description": "Fast NVIDIA Nemotron MoE for reliable agentic tasks across enterprise workloads",
+          "family": "nemotron-free",
+          "attachment": false,
+          "reasoning": true,
+          "reasoning_options": [],
+          "tool_call": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "structured_output": true,
+          "temperature": true,
+          "release_date": "2026-08-11",
+          "last_updated": "2026-08-11",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": true,
+          "limit": {
+            "context": 262144,
+            "output": 262144
+          },
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0
           }
         },
         "nemotron-3-ultra-free": {
