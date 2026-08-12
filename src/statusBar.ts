@@ -92,7 +92,7 @@ export function initStatusBar(context: vscode.ExtensionContext, secrets: vscode.
 
     const tokenCountStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     tokenCountStatusBarItem.name = l10n("Go Usage");
-    tokenCountStatusBarItem.text = "Go --";
+    tokenCountStatusBarItem.text = "$(symbol-numeric) Go --";
     tokenCountStatusBarItem.tooltip = l10n("Go usage and token usage");
     // Clicking the status bar refreshes the Go usage immediately
     tokenCountStatusBarItem.command = "opencodego.checkUsage";
@@ -133,14 +133,15 @@ export function formatTokenCount(value: number): string {
 
 /**
  * Update the status bar main text with the Go plan usage (5h window),
- * e.g. "Go 5H 65%", or "Go --" while no usage data is available.
+ * e.g. "$(symbol-numeric) Go 5H 65%", or "$(symbol-numeric) Go --"
+ * while no usage data is available.
  */
 function updateStatusBarGoUsageText(statusBarItem: vscode.StatusBarItem): void {
     const usage = getUsageSnapshot();
     const percent = usage?.rolling?.percent;
     statusBarItem.text = percent !== undefined
-        ? `Go 5H ${Math.round(percent)}%`
-        : "Go --";
+        ? `$(symbol-numeric) Go 5H ${Math.round(percent)}%`
+        : "$(symbol-numeric) Go --";
 }
 
 /**
@@ -220,8 +221,8 @@ export function recordUsage(usage: StreamUsage): void {
 
 /**
  * Append the OpenCode Go plan usage section to the tooltip lines.
- * Compact layout: a title line followed by one line per window
- * ("5H 65%" / "周 30%" / "月 12%") and the 5h window reset countdown.
+ * Compact layout: one line per window ("5H 65%" / "周 30%" / "月 12%")
+ * and the 5h window reset countdown.
  * Shows nothing when disabled or no data is cached.
  */
 function appendGoUsageTooltipLines(lines: string[]): void {
@@ -242,7 +243,6 @@ function appendGoUsageTooltipLines(lines: string[]): void {
         return;
     }
 
-    lines.push(l10n("Go Usage"));
     for (const [label, window] of present) {
         lines.push(`${label} ${Math.round(window.percent)}%`);
     }
