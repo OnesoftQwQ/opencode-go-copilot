@@ -25,15 +25,10 @@ const zhCN: Record<string, string> = {
 	"({0} cached, {1}%)": "(已缓存 {0}, 命中率 {1}%)",
 
 	// statusBar Go usage tooltip section
-	"OpenCode Go Usage": "OpenCode Go 用量",
-	"5h window": "5 小时窗口",
-	"Weekly": "周窗口",
-	"Monthly": "月窗口",
-	"resets in {0}": "{0} 后重置",
-	"Balance fallback: {0}": "余额回退: {0}",
-	"enabled": "已启用",
-	"disabled": "已禁用",
-	"Updated {0} ago": "{0} 前更新",
+	"Go Usage": "Go 用量",
+	"Week": "周",
+	"Month": "月",
+	"5h window resets in {0}": "五小时窗口将在 {0} 后重置",
 
 	// extension.ts - checkUsage command
 	"No API key configured. Please run the 'OpenCode Go: Set API Key' command first.": "未配置 API 密钥。请先运行「OpenCode Go: 设置 API 密钥」命令。",

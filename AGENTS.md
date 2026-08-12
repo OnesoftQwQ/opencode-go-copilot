@@ -1005,17 +1005,9 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 
 最近一次拉取结果状态（供 checkUsage 命令区分 401 无套餐与一般失败）。
 
-#### `getUsageFetchTimestamp(): number | undefined`
-
-最近一次成功拉取的时间戳（毫秒），无成功记录时返回 undefined。
-
 #### `formatResetDuration(iso): string`
 
-将 ISO 重置时间格式化为倒计时（"2h 13m"、"12d 5h"、"45m"）。
-
-#### `formatAgo(timestampMs): string`
-
-将距今毫秒数格式化为 "2m"、"1h 5m"、"<1m"。
+将 ISO 重置时间格式化为紧凑倒计时（"2H13M"、"45M"）。
 
 #### `formatUsageSummary(usage): string`
 
@@ -1067,7 +1059,7 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 
 #### `appendGoUsageTooltipLines(lines): void`
 
-将 Go 套餐用量区块追加到 tooltip 行数组：配置关闭或无缓存时直接返回；存在至少一个窗口时追加空行 + "OpenCode Go 用量" 标题 + 每个窗口一行（`标签: 百分比% (重置倒计时)`）+ 可选的 `余额回退: 已启用/已禁用` 行 + 更新时间行（"{0} 前更新"）。
+将 Go 套餐用量区块追加到 tooltip 行数组：配置关闭或无缓存时直接返回；存在至少一个窗口时追加标题行 "Go 用量" + 每个窗口一行（`5H 65%` / `周 30%` / `月 12%`，无空行分隔）+ 5h 窗口重置倒计时行（"五小时窗口将在 2H13M 后重置"，`resetsAt` 缺失或解析失败时跳过）。
 
 #### `updateCumulativeTooltip(statusBarItem): void`
 

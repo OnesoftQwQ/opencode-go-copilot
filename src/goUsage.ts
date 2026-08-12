@@ -225,14 +225,7 @@ export function getUsageFetchStatus(): UsageFetchStatus {
 }
 
 /**
- * Timestamp (ms) of the most recent successful fetch, or undefined.
- */
-export function getUsageFetchTimestamp(): number | undefined {
-    return cacheTimestamp > 0 ? cacheTimestamp : undefined;
-}
-
-/**
- * Format an ISO reset time as a human-readable countdown, e.g. "2h 13m", "12d 5h".
+ * Format an ISO reset time as a compact countdown, e.g. "2H13M", "45M".
  */
 export function formatResetDuration(iso: string): string {
     const diffMs = new Date(iso).getTime() - Date.now();
@@ -240,33 +233,12 @@ export function formatResetDuration(iso: string): string {
         return "";
     }
     const totalMinutes = Math.max(0, Math.ceil(diffMs / 60000));
-    const days = Math.floor(totalMinutes / 1440);
-    const hours = Math.floor((totalMinutes % 1440) / 60);
-    const minutes = totalMinutes % 60;
-    if (days > 0) {
-        return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
-    }
-    if (hours > 0) {
-        return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-    }
-    return `${Math.max(minutes, 1)}m`;
-}
-
-/**
- * Format an elapsed time (ms since timestamp) as "2m", "1h 5m", "<1m".
- */
-export function formatAgo(timestampMs: number): string {
-    const diffMs = Date.now() - timestampMs;
-    const totalMinutes = Math.max(0, Math.floor(diffMs / 60000));
-    if (totalMinutes < 1) {
-        return "<1m";
-    }
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     if (hours > 0) {
-        return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+        return `${hours}H${minutes}M`;
     }
-    return `${minutes}m`;
+    return `${Math.max(minutes, 1)}M`;
 }
 
 /**

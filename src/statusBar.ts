@@ -5,9 +5,7 @@ import { l10n, l10nFormat } from "./localize";
 import { logger } from "./logger";
 import type { StreamUsage } from "./commonApi";
 import {
-    formatAgo,
     formatResetDuration,
-    getUsageFetchTimestamp,
     getUsageSnapshot,
     getGoUsageCached,
     type GoUsageResult,
@@ -230,7 +228,9 @@ export function recordUsage(usage: StreamUsage): void {
 
 /**
  * Append the OpenCode Go plan usage section to the tooltip lines.
- * Shows nothing (no trailing blank line) when disabled or no data is cached.
+ * Compact layout: a title line followed by one line per window
+ * ("5H 65%" / "周 30%" / "月 12%") and the 5h window reset countdown.
+ * Shows nothing when disabled or no data is cached.
  */
 function appendGoUsageTooltipLines(lines: string[]): void {
     if (!isUsageTooltipEnabled()) {
@@ -241,29 +241,24 @@ function appendGoUsageTooltipLines(lines: string[]): void {
         return;
     }
     const windows: Array<[string, GoUsageWindow | undefined]> = [
-        [l10n("5h window"), usage.rolling],
-        [l10n("Weekly"), usage.weekly],
-        [l10n("Monthly"), usage.monthly],
+        ["5H", usage.rolling],
+        [l10n("Week"), usage.weekly],
+        [l10n("Month"), usage.monthly],
     ];
     const present = windows.filter((entry): entry is [string, GoUsageWindow] => entry[1] !== undefined);
     if (present.length === 0) {
         return;
     }
 
-    lines.push("");
-    lines.push(l10n("OpenCode Go Usage"));
+    lines.push(l10n("Go Usage"));
     for (const [label, window] of present) {
-        const resetText = window.resetsAt
-            ? ` (${l10nFormat("resets in {0}", formatResetDuration(window.resetsAt))})`
-            : "";
-        lines.push(`${label}: ${Math.round(window.percent)}%${resetText}`);
+        lines.push(`${label} ${Math.round(window.percent)}%`);
     }
-    if (usage.useBalance !== undefined) {
-        lines.push(l10nFormat("Balance fallback: {0}", usage.useBalance ? l10n("enabled") : l10n("disabled")));
-    }
-    const fetchedAt = getUsageFetchTimestamp();
-    if (fetchedAt !== undefined) {
-        lines.push(l10nFormat("Updated {0} ago", formatAgo(fetchedAt)));
+    if (usage.rolling?.resetsAt) {
+        const reset = formatResetDuration(usage.rolling.resetsAt);
+        if (reset) {
+            lines.push(l10nFormat("5h window resets in {0}", reset));
+        }
     }
 }
 
