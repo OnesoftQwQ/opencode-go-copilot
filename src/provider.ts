@@ -27,8 +27,8 @@ import { AnthropicApi } from "./anthropic/anthropicApi";
 import type { AnthropicRequestBody } from "./anthropic/anthropicTypes";
 import { CommonApi, type StreamUsage } from "./commonApi";
 import { callVisionModel, callVisionModelMulti } from "./vision/imageProxy";
-import { ASK_IMAGE_TOOL_NAME, ASK_IMAGE_TOOL_DEF, ASK_WITH_MULTI_IMAGE_TOOL_NAME, ASK_WITH_MULTI_IMAGE_TOOL_DEF } from "./vision/types";
-import type { InterceptedToolCall, StoredImage } from "./vision/types";
+import { ASK_IMAGE_TOOL_DEF, ASK_WITH_MULTI_IMAGE_TOOL_NAME, ASK_WITH_MULTI_IMAGE_TOOL_DEF } from "./vision/types";
+import type { StoredImage } from "./vision/types";
 import { createVisionToolHistoryPart } from "./vision/historyPart";
 import type { VisionToolHistoryEntry } from "./vision/historyCodec";
 import { logger } from "./logger";
@@ -249,7 +249,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             const enableThirdPartyIndicator = config.get<boolean>("opencodego.enableThirdPartyTokenIndicator", true);
 
             // Calculate client-side token estimate for fallback (also updates Advanced Token indicator if enabled)
-            const estimatedInputTokens = await updateContextStatusBar(messages, options.tools, model, this.statusBarItem, modelConfig);
+            const estimatedInputTokens = await updateContextStatusBar(messages, options.tools, this.statusBarItem, modelConfig);
 
             // Apply delay between consecutive requests
             const modelDelay = um?.delay;
@@ -331,7 +331,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     if (enableThirdPartyIndicator) {
                         recordUsage(usage);
                         updateCumulativeTooltip(this.statusBarItem);
-                        updateStatusBarWithApiPrompt(usage.promptTokens, model.maxInputTokens || 128000, this.statusBarItem);
+                        updateStatusBarWithApiPrompt(this.statusBarItem);
                     }
                 };
                 const anthropicMessages = await anthropicApi.convertMessages(messages, modelConfig);
@@ -407,7 +407,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     if (enableThirdPartyIndicator) {
                         recordUsage(usage);
                         updateCumulativeTooltip(this.statusBarItem);
-                        updateStatusBarWithApiPrompt(usage.promptTokens, model.maxInputTokens || 128000, this.statusBarItem);
+                        updateStatusBarWithApiPrompt(this.statusBarItem);
                     }
                 };
                 const openaiMessages = await openaiApi.convertMessages(messages, modelConfig);

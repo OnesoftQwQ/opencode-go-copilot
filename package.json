@@ -24,7 +24,7 @@
 	"bugs": {
 		"url": "https://github.com/OnesoftQwQ/opencode-go-copilot/issues"
 	},
-	"version": "1.7.8",
+	"version": "1.9.0",
 	"engines": {
 		"vscode": "^1.116.0"
 	},
@@ -81,6 +81,11 @@
 				"command": "opencodego.updateModelList",
 				"category": "%commandCategory%",
 				"title": "%command.updateModelList%"
+			},
+			{
+				"command": "opencodego.checkUsage",
+				"category": "%commandCategory%",
+				"title": "%command.checkUsage%"
 			}
 		],
 		"walkthroughs": [
@@ -383,6 +388,18 @@
 					"minimum": 1,
 					"maximum": 20,
 					"markdownDescription": "%config.visionMaxRounds.desc%"
+				},
+				"opencodego.showUsageInTooltip": {
+					"type": "boolean",
+					"default": true,
+					"description": "%config.showUsageInTooltip.desc%"
+				},
+				"opencodego.usageRefreshInterval": {
+					"type": "number",
+					"default": 5,
+					"minimum": 1,
+					"maximum": 60,
+					"markdownDescription": "%config.usageRefreshInterval.desc%"
 				}
 			}
 		}

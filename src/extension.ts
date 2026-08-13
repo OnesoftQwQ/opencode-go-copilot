@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { OpenCodeGoChatModelProvider } from "./provider";
-import { initStatusBar } from "./statusBar";
+import { initStatusBar, refreshGoUsageNow } from "./statusBar";
+import { formatUsageSummary, getUsageFetchStatus } from "./goUsage";
 import { logger } from "./logger";
 import { l10n, l10nFormat } from "./localize";
 import type { ModelPreset } from "./types";
@@ -25,17 +26,11 @@ export function activate(context: vscode.ExtensionContext) {
     // Initialize TokenizerManager with extension path
     TokenizerManager.initialize(context.extensionPath);
 
-    const tokenCountStatusBarItem: vscode.StatusBarItem = initStatusBar(context);
+    const tokenCountStatusBarItem: vscode.StatusBarItem = initStatusBar(context, context.secrets);
     const provider = new OpenCodeGoChatModelProvider(context.secrets, tokenCountStatusBarItem);
 
     // Register the OpenCode Go provider under the vendor id used in package.json
     vscode.lm.registerLanguageModelChatProvider("opencodego", provider);
-
-    // Helper: check if an API key is stored (without prompting)
-    const hasApiKey = async (): Promise<boolean> => {
-        const key = await context.secrets.get("opencodego.apiKey");
-        return !!key;
-    };
 
     // Management command to configure API key
     context.subscriptions.push(
@@ -73,6 +68,28 @@ export function activate(context: vscode.ExtensionContext) {
                 logger.error("models.update.failed", { error: String(error) });
                 vscode.window.showErrorMessage(l10n("Failed to update OpenCode Go model list. See output for details."));
             }
+        })
+    );
+
+    // Command to check / refresh the OpenCode Go plan usage.
+    // Also bound to clicking the status bar item (see statusBar.ts).
+    context.subscriptions.push(
+        vscode.commands.registerCommand("opencodego.checkUsage", async () => {
+            const apiKey = await context.secrets.get("opencodego.apiKey");
+            if (!apiKey) {
+                vscode.window.showWarningMessage(l10n("No API key configured. Please run the 'OpenCode Go: Set API Key' command first."));
+                return;
+            }
+            const usage = await refreshGoUsageNow();
+            if (!usage) {
+                if (getUsageFetchStatus() === "unauthorized") {
+                    vscode.window.showErrorMessage(l10n("OpenCode Go usage is unavailable (no active Go plan)."));
+                } else {
+                    vscode.window.showErrorMessage(l10n("Failed to fetch OpenCode Go usage. See output for details."));
+                }
+                return;
+            }
+            vscode.window.showInformationMessage(`OpenCode Go: ${formatUsageSummary(usage)}`);
         })
     );
 
