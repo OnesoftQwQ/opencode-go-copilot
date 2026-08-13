@@ -4,7 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'New version (e.g. 0.2.3). If omitted, only builds without version sync.'
+        description: >-
+          New version (e.g. 0.2.3). If omitted, only builds without
+          version sync.
         required: false
         type: string
   release:
@@ -61,8 +63,16 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json src/hardcodedModelList.ts
-          git diff --cached --quiet || git commit -m "chore: bump version to ${VER}, sync model list [skip ci]"
-          BRANCH=$(git branch -r --contains "$GITHUB_SHA" | head -1 | sed 's|.*origin/||' | xargs)
+          MSG="chore: bump version to ${VER}, sync model list [skip ci]"
+          git diff --cached --quiet || git commit -m "$MSG"
+          # 优先推送 master（release 流程的版本同步提交应落在 master）；
+          # 仅当 master 不含触发提交时回退到其它包含该提交的分支。
+          BRANCH=$(git branch -r --contains "$GITHUB_SHA" \
+            | sed 's|.*origin/||' | grep -x 'master' | head -1)
+          if [ -z "$BRANCH" ]; then
+            BRANCH=$(git branch -r --contains "$GITHUB_SHA" \
+              | head -1 | sed 's|.*origin/||' | xargs)
+          fi
           if [ -n "$BRANCH" ]; then
             git push origin "HEAD:refs/heads/$BRANCH"
           else
@@ -77,7 +87,9 @@ jobs:
 
       - name: Get version from package.json
         id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          echo "version=${VER}" >> $GITHUB_OUTPUT
 
       - name: Get tag name
         id: tag
@@ -97,7 +109,8 @@ jobs:
           name: Release ${{ steps.tag.outputs.tag }}
           body: |
             # ${{ steps.tag.outputs.tag }}
-            [CHANGELOG](https://github.com/OnesoftQwQ/opencode-go-copilot/commits/${{ steps.tag.outputs.tag }}) 了解详细变更。
+            [CHANGELOG](https://github.com/OnesoftQwQ/opencode-go-copilot)
+            了解详细变更。
           draft: true
           prerelease: false
           files: extension.vsix
@@ -126,4 +139,6 @@ jobs:
       - name: Publish to VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx @vscode/vsce publish -p "$VSCE_PAT" --packagePath extension.vsix --allow-all-proposed-apis
+        run: |
+          npx @vscode/vsce publish -p "$VSCE_PAT" \
+            --packagePath extension.vsix --allow-all-proposed-apis
