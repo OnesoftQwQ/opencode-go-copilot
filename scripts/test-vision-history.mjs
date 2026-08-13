@@ -63,9 +63,9 @@ class TextPart {
         this.value = value;
     }
 }
-class ToolCallPart {}
-class ToolResultPart {}
-class ThinkingPart {}
+class ToolCallPart { }
+class ToolResultPart { }
+class ThinkingPart { }
 const vscodeShim = {
     LanguageModelDataPart: DataPart,
     LanguageModelTextPart: TextPart,
@@ -125,6 +125,34 @@ try {
         },
         { role: "assistant", content: [{ type: "text", text: "The previous answer." }, { type: "thinking", thinking: "Next step." }] },
     ]);
+
+    // A tool-call assistant message WITHOUT any reasoning parts must still carry
+    // reasoning_content (empty string) when includeReasoningInRequest is true —
+    // DeepSeek thinking mode requires the field on every assistant message that
+    // follows a tool call; omitting it triggers a 400 on subsequent requests.
+    const toolCallPart = new ToolCallPart();
+    toolCallPart.callId = "call_tool_1";
+    toolCallPart.name = "runTests";
+    toolCallPart.input = {};
+    const toolOnlyMessages = [
+        { role: 2, content: [toolCallPart] },
+        { role: 1, content: [new TextPart("tests passed")] },
+    ];
+    const openaiToolOnly = await new OpenaiApi("test").convertMessages(toolOnlyMessages, {
+        includeReasoningInRequest: true,
+        vision: false,
+    });
+    assert.deepEqual(openaiToolOnly[0], {
+        role: "assistant",
+        reasoning_content: "",
+        tool_calls: [
+            {
+                id: "call_tool_1",
+                type: "function",
+                function: { name: "runTests", arguments: "{}" },
+            },
+        ],
+    });
 } finally {
     Module._load = originalLoad;
 }

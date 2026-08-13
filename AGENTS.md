@@ -438,7 +438,7 @@ src/
 | `tokenizer/tokenizerManager.ts`       | ~115 | o200k_base 分词器管理 (含 LRU 缓存)                                                                                                                                                                    |
 | `tokenizer/imageUtils.ts`             | ~130 | 图片尺寸解析 (PNG/GIF/JPEG/WebP)                                                                                                                                                                       |
 | `vision/types.ts`                     | ~53  | Vision proxy 类型定义（`StoredImage`, `InterceptedToolCall`, `ASK_IMAGE_TOOL_DEF`, `ASK_IMAGE_TOOL_NAME`, `ASK_WITH_MULTI_IMAGE_TOOL_DEF`, `ASK_WITH_MULTI_IMAGE_TOOL_NAME`, `DEFAULT_VISION_PROMPT`） |
-| `vision/historyCodec.ts`              | ~150 | 视觉工具历史 DataPart 的 MIME、数据校验/编解码，以及 OpenAI/Anthropic 标准 tool call + tool result 消息重建；由 `scripts/test-vision-history.mjs` 做编解码和双 API 转换器顺序闭环测试                  |
+| `vision/historyCodec.ts`              | ~150 | 视觉工具历史 DataPart 的 MIME、数据校验/编解码，以及 OpenAI/Anthropic 标准 tool call + tool result 消息重建；由 `scripts/test-vision-history.mjs` 做编解码和双 API 转换器顺序闭环测试（含无推理工具调用回合必须回传空 `reasoning_content` 的 DeepSeek 回归用例） |
 | `vision/historyPart.ts`               | ~28  | 创建和解析 `application/vnd.opencodego.vision-tool-history+json` DataPart；测试脚本使用 VS Code 最小运行时桩验证下一轮消息转换                                                                         |
 | `vision/imageProxy.ts`                | ~95  | 图片代理核心：调用视觉模型描述图片（`callVisionModel`/`callVisionModelMulti`），支持 thinking 模式配置和文本流式转发                                                                                   |
 
@@ -1177,7 +1177,7 @@ API 返回用量数据后重渲染状态栏（主文本 = Go 用量，tooltip = 
 
 #### `async convertMessages(messages, modelConfig): Promise<OpenAIChatMessage[]>`
 
-将 VS Code 消息转换为 OpenAI 格式（**异步**）。支持文本、图片、工具调用、工具结果、推理内容的消息转换。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据；**视觉模型时保留工具结果（`LanguageModelToolResultPart`）内的图片 `LanguageModelDataPart`，转换为 `image_url` content 与文本合并为多模态 content 数组发送**（如内置 `view_image` 工具返回的图片）；**MCP 工具返回的 resource-link（`application/vnd.code.resource-link`）data part 会被解析并通过 `resolveResourceLinkToImage()` 读取为实际图片，视觉模型直接发送、非视觉模型存入 `_localImages` 供 `ask_image` 代理使用，解析失败时以文本形式提示 URI**。
+将 VS Code 消息转换为 OpenAI 格式（**异步**）。支持文本、图片、工具调用、工具结果、推理内容的消息转换。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据；**视觉模型时保留工具结果（`LanguageModelToolResultPart`）内的图片 `LanguageModelDataPart`，转换为 `image_url` content 与文本合并为多模态 content 数组发送**（如内置 `view_image` 工具返回的图片）；**MCP 工具返回的 resource-link（`application/vnd.code.resource-link`）data part 会被解析并通过 `resolveResourceLinkToImage()` 读取为实际图片，视觉模型直接发送、非视觉模型存入 `_localImages` 供 `ask_image` 代理使用，解析失败时以文本形式提示 URI**。**`reasoning_content` 回传规则**：`includeReasoningInRequest` 为 true 时，assistant 消息只要携带推理内容**或工具调用**就设置 `reasoning_content`（无推理时为空字符串）——DeepSeek 思考模式要求携带 `tools` 参数的请求中，工具调用回合的 assistant 消息必须回传该字段（即使为空），缺失会在后续请求触发 400（`The reasoning_content in the thinking mode must be passed back to the API`）。
 
 #### `prepareRequestBody(rb, um?, options?): Record<string, unknown>`
 
