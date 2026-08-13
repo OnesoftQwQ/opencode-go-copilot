@@ -129,7 +129,7 @@
 				{
 					"command": "opencodego.generateGitCommitMessage",
 					"group": "navigation",
-					"when": "config.git.enabled && scmProvider == git && !opencodego.isGeneratingCommit"
+					"when": "config.opencodego.enableCommitGeneration && config.git.enabled && scmProvider == git && !opencodego.isGeneratingCommit"
 				},
 				{
 					"command": "opencodego.abortGitCommitMessage",
@@ -140,7 +140,7 @@
 			"commandPalette": [
 				{
 					"command": "opencodego.generateGitCommitMessage",
-					"when": "config.git.enabled && !opencodego.isGeneratingCommit"
+					"when": "config.opencodego.enableCommitGeneration && config.git.enabled && !opencodego.isGeneratingCommit"
 				},
 				{
 					"command": "opencodego.abortGitCommitMessage",
@@ -400,6 +400,11 @@
 					"minimum": 1,
 					"maximum": 60,
 					"markdownDescription": "%config.usageRefreshInterval.desc%"
+				},
+				"opencodego.enableCommitGeneration": {
+					"type": "boolean",
+					"default": true,
+					"description": "%config.enableCommitGeneration.desc%"
 				}
 			}
 		}
