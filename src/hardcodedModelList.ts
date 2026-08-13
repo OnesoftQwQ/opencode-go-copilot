@@ -8,7 +8,7 @@
  * (limit, cost, reasoning_options, attachment, modalities, ...), so the
  * fallback behaves like the real catalog instead of a bare ID list.
  *
- * Snapshot taken from the official models.dev catalog on 2026-08-12.
+ * Snapshot taken from the official models.dev catalog on 2026-08-13.
  */
 
 import type { CatalogProvider, ModelsDevEntry } from "./modelsDev";
@@ -650,7 +650,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
         },
         "deepseek-v4-pro": {
           "id": "deepseek-v4-pro",
-          "name": "DeepSeek V4 Pro",
+          "name": "DeepSeek V4 Pro (New)",
           "description": "Flagship DeepSeek model for coding, reasoning, and agentic work",
           "family": "deepseek-thinking",
           "attachment": false,
@@ -885,7 +885,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
         "grok-4.5": {
           "id": "grok-4.5",
           "name": "Grok 4.5",
-          "description": "xAI's latest Grok for chat, coding, agentic tools, and lower hallucination risk",
+          "description": "xAI's Grok model for chat, coding, agentic tools, and lower hallucination risk",
           "family": "grok",
           "attachment": true,
           "reasoning": true,
@@ -3553,7 +3553,6 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "context": 190000,
             "output": 64000
           },
-          "status": "deprecated",
           "cost": {
             "input": 0,
             "output": 0,
@@ -3998,7 +3997,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
         "grok-4.5": {
           "id": "grok-4.5",
           "name": "Grok 4.5",
-          "description": "xAI's latest Grok for chat, coding, agentic tools, and lower hallucination risk",
+          "description": "xAI's Grok model for chat, coding, agentic tools, and lower hallucination risk",
           "family": "grok",
           "attachment": true,
           "reasoning": true,
@@ -4092,6 +4091,69 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "input": 0.95,
             "output": 4,
             "cache_read": 0.19
+          }
+        },
+        "grok-4.6": {
+          "id": "grok-4.6",
+          "name": "Grok 4.6",
+          "description": "xAI's frontier model for long-running agents, coding, knowledge work, and visual projects",
+          "family": "grok",
+          "attachment": true,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "effort",
+              "values": [
+                "low",
+                "medium",
+                "high",
+                "xhigh"
+              ]
+            }
+          ],
+          "tool_call": true,
+          "structured_output": true,
+          "temperature": true,
+          "knowledge": "2026-02-01",
+          "release_date": "2026-08-12",
+          "last_updated": "2026-08-12",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": false,
+          "limit": {
+            "context": 500000,
+            "output": 500000
+          },
+          "provider": {
+            "npm": "@ai-sdk/openai"
+          },
+          "cost": {
+            "input": 2,
+            "output": 6,
+            "cache_read": 0.5,
+            "tiers": [
+              {
+                "input": 4,
+                "output": 12,
+                "cache_read": 1,
+                "tier": {
+                  "type": "context",
+                  "size": 200000
+                }
+              }
+            ],
+            "context_over_200k": {
+              "input": 4,
+              "output": 12,
+              "cache_read": 1
+            }
           }
         },
         "kimi-k2": {
