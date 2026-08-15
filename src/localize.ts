@@ -22,6 +22,12 @@ const zhCN: Record<string, string> = {
 	// statusBar cache tooltip
 	"Cache": "缓存",
 	"({0} cached, {1}%)": "(已缓存 {0}, 命中率 {1}%)",
+	"Hit rate (last call)": "命中率(上一次调用)",
+	"Total hit rate": "总命中",
+	"Input": "输入",
+	"Output": "输出",
+	"Total saved": "累计节省",
+	"Cost": "费用",
 
 	// statusBar Go usage tooltip section
 	"Week": "周",
