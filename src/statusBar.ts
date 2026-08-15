@@ -17,6 +17,12 @@ let cumulativeInputTokens = 0;
 let cumulativeOutputTokens = 0;
 let cumulativeCacheHitTokens = 0;
 let cumulativeCacheMissTokens = 0;
+// Cumulative cost in USD (reset together with the token counters above)
+let cumulativeCost = 0;
+let cumulativeSaved = 0;
+// Most recent API call's cache hit rate (updated on every usage report)
+let lastUsageHitRate: number | undefined;
+let prevUsageHitRate: number | undefined;
 
 // Go usage polling state (usage shown in the status bar tooltip)
 let usageSecrets: vscode.SecretStorage | undefined;
@@ -132,15 +138,23 @@ export function formatTokenCount(value: number): string {
 }
 
 /**
- * Update the status bar main text with the Go plan usage (5h window),
- * e.g. "$(symbol-numeric) Go 5H 65%", or "$(symbol-numeric) Go --"
- * while no usage data is available.
+ * Update the status bar main text with the Go plan usage (5h window) and
+ * the overall cache hit rate, e.g. "$(symbol-numeric) 5H:65%,Hit:99%", or
+ * "$(symbol-numeric) Go --" while no usage data is available.
  */
 function updateStatusBarGoUsageText(statusBarItem: vscode.StatusBarItem): void {
     const usage = getUsageSnapshot();
     const percent = usage?.rolling?.percent;
-    statusBarItem.text = percent !== undefined
-        ? `$(symbol-numeric) Go 5H ${Math.round(percent)}%`
+    const totalCache = cumulativeCacheHitTokens + cumulativeCacheMissTokens;
+    const parts: string[] = [];
+    if (percent !== undefined) {
+        parts.push(`5H:${Math.round(percent)}%`);
+    }
+    if (totalCache > 0) {
+        parts.push(`Hit:${Math.round((cumulativeCacheHitTokens / totalCache) * 100)}%`);
+    }
+    statusBarItem.text = parts.length > 0
+        ? `$(symbol-numeric) ${parts.join(",")}`
         : "$(symbol-numeric) Go --";
 }
 
@@ -203,12 +217,26 @@ function resetCumulativeCounters(): void {
     cumulativeOutputTokens = 0;
     cumulativeCacheHitTokens = 0;
     cumulativeCacheMissTokens = 0;
+    cumulativeCost = 0;
+    cumulativeSaved = 0;
+}
+
+/**
+ * Model cost information (USD per 1M tokens).
+ */
+export interface ModelCost {
+    cache_read: number;
+    input: number;
+    output: number;
 }
 
 /**
  * Record streaming usage data into cumulative counters.
+ * Cost accounting follows the same formula as opencode's session tracker:
+ * tokens × price / 1e6, summed over input, output and cache-read tokens.
+ * Savings = cache-hit tokens × (input price − cache-read price).
  */
-export function recordUsage(usage: StreamUsage): void {
+export function recordUsage(usage: StreamUsage, cost?: ModelCost): void {
     cumulativeInputTokens += usage.promptTokens;
     cumulativeOutputTokens += usage.completionTokens;
     if (usage.cacheHitTokens !== undefined) {
@@ -217,10 +245,28 @@ export function recordUsage(usage: StreamUsage): void {
     if (usage.cacheMissTokens !== undefined) {
         cumulativeCacheMissTokens += usage.cacheMissTokens;
     }
+    // Track the most recent API call's cache hit rate (for the tooltip)
+    if (usage.cacheHitTokens !== undefined && usage.cacheMissTokens !== undefined) {
+        const callTotal = usage.cacheHitTokens + usage.cacheMissTokens;
+        if (callTotal > 0) {
+            prevUsageHitRate = lastUsageHitRate;
+            lastUsageHitRate = (usage.cacheHitTokens / callTotal) * 100;
+        }
+    }
+    if (cost) {
+        const cacheHit = usage.cacheHitTokens ?? 0;
+        const cacheMiss = usage.cacheMissTokens ?? 0;
+        cumulativeCost +=
+            (usage.promptTokens * cost.input) / 1_000_000 +
+            (usage.completionTokens * cost.output) / 1_000_000 +
+            (cacheHit * cost.cache_read) / 1_000_000 +
+            (cacheMiss * cost.input) / 1_000_000;
+        cumulativeSaved += (cacheHit * (cost.input - cost.cache_read)) / 1_000_000;
+    }
 }
 
 /**
- * Append the OpenCode Go plan usage section to the tooltip lines.
+ * Append the OpenCode Go plan usage section to the tooltip rows.
  * Compact layout: one line per window ("5H 65%" / "周 30%" / "月 12%")
  * and the 5h window reset countdown.
  * Shows nothing when disabled or no data is cached.
@@ -244,45 +290,107 @@ function appendGoUsageTooltipLines(lines: string[]): void {
     }
 
     for (const [label, window] of present) {
-        lines.push(`${label}——${Math.round(window.percent)}%`);
+        lines.push(`<div>${label}——${Math.round(window.percent)}%</div>`);
     }
     if (usage.rolling?.resetsAt) {
         const reset = formatResetDuration(usage.rolling.resetsAt);
         if (reset) {
-            lines.push(l10nFormat("5h window resets in {0}", reset));
+            lines.push(`<div>${l10nFormat("5h window resets in {0}", reset)}</div>`);
         }
     }
 }
 
 /**
- * Update the status bar tooltip with cumulative input/output token counts,
- * DeepSeek cache info (if available) and OpenCode Go plan usage (if enabled
- * and data is cached).
+ * Render a continuous pill progress bar as HTML (theme-aware).
+ * A filled green segment followed by a muted empty segment, both rendered as
+ * solid color blocks via span background-color (the only visual styles
+ * allowed by VS Code's markdown sanitizer). The segments are filled with
+ * invisible &nbsp; so the result is one continuous bar — no glyphs, no gaps.
+ */
+function renderProgressBar(percent: number): string {
+    const clamped = Math.max(0, Math.min(100, percent));
+    const totalUnits = 20; // 20 invisible units → 5% per unit
+    const filled = Math.round((clamped / 100) * totalUnits);
+    const empty = totalUnits - filled;
+    const nbsp = "\u00A0";
+    let html = "";
+    if (filled > 0) {
+        // NOTE: the sanitizer regex requires every style declaration to end
+        // with a semicolon, otherwise the whole style attr is stripped.
+        html += `<span style="background-color:var(--vscode-charts-green);">${nbsp.repeat(filled)}</span>`;
+    }
+    if (empty > 0) {
+        html += `<span style="background-color:var(--vscode-descriptionForeground);">${nbsp.repeat(empty)}</span>`;
+    }
+    return html;
+}
+
+/**
+ * Format a USD amount, trimming trailing zeros (e.g. 0.102, 0.0097).
+ */
+function formatUsd(value: number): string {
+    return Number(value.toFixed(4)).toString();
+}
+
+/**
+ * Update the status bar tooltip with cache hit rates, token details,
+ * cost/savings (if model cost data is available) and OpenCode Go plan
+ * usage (if enabled and data is cached).
+ *
+ * The tooltip is a MarkdownString with supportHtml enabled, so the progress
+ * bars and cost rows render as rich HTML (theme-colored, like a modern UI)
+ * instead of plain text. All HTML stays within VS Code's sanitizer
+ * allow-list (div/span/strong + span style color with --vscode-* vars).
  */
 export function updateCumulativeTooltip(statusBarItem: vscode.StatusBarItem): void {
-    const arrowUp = "\u2191";
-    const arrowDown = "\u2193";
-    const lines: string[] = [];
+    const rows: string[] = [];
 
-    // Line 1: cumulative input + cache info
-    let inputLine = `${arrowUp} ${formatTokenCount(cumulativeInputTokens)}`;
-    if (cumulativeCacheHitTokens > 0 || cumulativeCacheMissTokens > 0) {
-        const totalCache = cumulativeCacheHitTokens + cumulativeCacheMissTokens;
-        const cachePercent = totalCache > 0
-            ? Math.round((cumulativeCacheHitTokens / totalCache) * 100)
-            : 0;
-        const cacheFormatted = formatTokenCount(cumulativeCacheHitTokens);
-        inputLine += ` ${l10nFormat("({0} cached, {1}%)", cacheFormatted, cachePercent)}`;
+    // Most recent API call hit rate, with delta vs the previous call
+    if (lastUsageHitRate !== undefined) {
+        rows.push(`<div><strong>${l10n("Hit rate (last call)")}</strong></div>`);
+        let deltaHtml = "";
+        if (prevUsageHitRate !== undefined) {
+            const delta = lastUsageHitRate - prevUsageHitRate;
+            const arrow = delta >= 0 ? "\u2191" : "\u2193";
+            const deltaColor = delta >= 0 ? "var(--vscode-charts-green)" : "var(--vscode-charts-red)";
+            deltaHtml = ` <span style="color:${deltaColor}">${arrow}${Math.abs(delta).toFixed(1)}%</span>`;
+        }
+        rows.push(`<div>${renderProgressBar(lastUsageHitRate)} ${lastUsageHitRate.toFixed(1)}%${deltaHtml}</div>`);
     }
-    lines.push(inputLine);
 
-    // Line 2: cumulative output
-    lines.push(`${arrowDown} ${formatTokenCount(cumulativeOutputTokens)}`);
+    // Total hit rate (session cumulative)
+    const totalCache = cumulativeCacheHitTokens + cumulativeCacheMissTokens;
+    if (totalCache > 0) {
+        const totalPercent = (cumulativeCacheHitTokens / totalCache) * 100;
+        rows.push(
+            `<div><strong>${l10n("Total hit rate")}:</strong></div>`,
+            `<div>${renderProgressBar(totalPercent)} ${totalPercent.toFixed(1)}%</div>`
+        );
+    }
+
+    // Token details (session cumulative): total input = cache hit + miss
+    if (cumulativeCacheHitTokens > 0 || cumulativeCacheMissTokens > 0) {
+        rows.push(
+            `<div>${l10n("Input")}: ${formatTokenCount(cumulativeCacheHitTokens + cumulativeCacheMissTokens)} tok &nbsp;&nbsp;&nbsp;&nbsp;(${formatTokenCount(cumulativeCacheHitTokens)}+${formatTokenCount(cumulativeCacheMissTokens)})</div>`
+        );
+    }
+    rows.push(`<div>${l10n("Output")}: ${cumulativeOutputTokens.toLocaleString()} tok</div>`);
+
+    // Cost & savings (only shown when model cost data was provided)
+    if (cumulativeCost > 0 || cumulativeSaved > 0) {
+        rows.push(
+            `<div>${l10n("Total saved")}: <span style="color:var(--vscode-charts-green)">~$${formatUsd(cumulativeSaved)}</span></div>`,
+            `<div>${l10n("Cost")}: <span style="color:var(--vscode-charts-yellow)">$${formatUsd(cumulativeCost)}</span></div>`
+        );
+    }
 
     // Section 3: OpenCode Go plan usage (optional)
-    appendGoUsageTooltipLines(lines);
+    appendGoUsageTooltipLines(rows);
 
-    statusBarItem.tooltip = lines.join("\n");
+    const md = new vscode.MarkdownString("", true);
+    md.supportHtml = true;
+    md.appendMarkdown(rows.join(""));
+    statusBarItem.tooltip = md;
 }
 
 /**

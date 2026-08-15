@@ -323,15 +323,22 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             if (apiMode === "anthropic") {
                 // Anthropic API mode
                 const anthropicApi = new AnthropicApi(model.id);
+                // Accumulate incremental usage during streaming; flushed once
+                // after the stream ends so counters/tooltip update only when
+                // the current response has finished (no mid-stream flicker or
+                // double-counting if the API reports usage more than once).
+                let anthropicUsage: StreamUsage | undefined;
                 anthropicApi.onUsage = (usage) => {
                     usageReportedDuringStream = true;
                     // Always report to native Copilot indicator (use original progress, not trackingProgress wrapper)
                     reportNativeUsage(usage, progress);
-                    // Conditionally update Advanced Token indicator
                     if (enableThirdPartyIndicator) {
-                        recordUsage(usage);
-                        updateCumulativeTooltip(this.statusBarItem);
-                        updateStatusBarWithApiPrompt(this.statusBarItem);
+                        if (!anthropicUsage) {
+                            anthropicUsage = { ...usage };
+                        } else {
+                            anthropicUsage.promptTokens += usage.promptTokens;
+                            anthropicUsage.completionTokens += usage.completionTokens;
+                        }
                     }
                 };
                 const anthropicMessages = await anthropicApi.convertMessages(messages, modelConfig);
@@ -396,18 +403,25 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     token: token,
                     options: options,
                 });
+
+                // Response finished: flush accumulated usage once
+                if (enableThirdPartyIndicator && anthropicUsage) {
+                    recordUsage(anthropicUsage, um?.cost);
+                    updateStatusBarWithApiPrompt(this.statusBarItem);
+                }
             } else {
                 // OpenAI Chat Completions API mode
                 const openaiApi = new OpenaiApi(model.id);
+                // OpenAI usage chunks are cumulative; keep the last (final)
+                // report and flush once after the stream ends so counters and
+                // the tooltip only update when the response has finished.
+                let openaiUsage: StreamUsage | undefined;
                 openaiApi.onUsage = (usage) => {
                     usageReportedDuringStream = true;
                     // Always report to native Copilot indicator (use original progress, not trackingProgress wrapper)
                     reportNativeUsage(usage, progress);
-                    // Conditionally update Advanced Token indicator
                     if (enableThirdPartyIndicator) {
-                        recordUsage(usage);
-                        updateCumulativeTooltip(this.statusBarItem);
-                        updateStatusBarWithApiPrompt(this.statusBarItem);
+                        openaiUsage = usage;
                     }
                 };
                 const openaiMessages = await openaiApi.convertMessages(messages, modelConfig);
@@ -472,6 +486,12 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     token: token,
                     options: options,
                 });
+
+                // Response finished: flush final usage once
+                if (enableThirdPartyIndicator && openaiUsage) {
+                    recordUsage(openaiUsage, um?.cost);
+                    updateStatusBarWithApiPrompt(this.statusBarItem);
+                }
             }
 
             // Fallback: if API did not return usage data, use client-side calculation for native indicator
@@ -484,7 +504,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 };
                 reportNativeUsage(fallbackUsage, progress);
                 if (enableThirdPartyIndicator) {
-                    recordUsage(fallbackUsage);
+                    recordUsage(fallbackUsage, um?.cost);
                     updateCumulativeTooltip(this.statusBarItem);
                 }
             }
