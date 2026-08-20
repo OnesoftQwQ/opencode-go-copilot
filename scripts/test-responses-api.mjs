@@ -153,6 +153,35 @@ try {
     assert.equal("reasoning" in noReasoningBody, false);
     assert.equal("include" in noReasoningBody, false);
 
+    // A Responses model that does not declare an off effort value must NOT be
+    // sent `reasoning.effort: "none"`; reasoning controls are omitted instead.
+    const noNoneEffortBody = api.prepareRequestBody(
+        { model: "grok-4.5", input: [], stream: true, store: false },
+        {
+            id: "grok-4.5",
+            owned_by: "opencode",
+            supportsReasoning: true,
+            supportsDisablingReasoning: false,
+            enable_thinking: false,
+        },
+    );
+    assert.equal("reasoning" in noNoneEffortBody, false);
+    assert.equal("include" in noNoneEffortBody, false);
+
+    // A Responses model that declares `none`/`disabled` still gets the off
+    // effort when thinking is disabled.
+    const noneEffortBody = api.prepareRequestBody(
+        { model: "gpt-5.6-luna", input: [], stream: true, store: false },
+        {
+            id: "gpt-5.6-luna",
+            owned_by: "opencode",
+            supportsReasoning: true,
+            supportsDisablingReasoning: true,
+            enable_thinking: false,
+        },
+    );
+    assert.deepEqual(noneEffortBody.reasoning, { effort: "none" });
+
     const streamed = [];
     let usage;
     api.onUsage = (value) => { usage = value; };
@@ -253,6 +282,7 @@ try {
             id: "gpt-5.6-luna",
             owned_by: "opencode",
             apiMode: "openai-responses",
+            supportsDisablingReasoning: true,
             enable_thinking: false,
         },
         "Generate one commit subject.",

@@ -528,7 +528,7 @@ src/
 
 #### `interface ModelMeta`
 
-解析后的模型元数据。models.dev 可提供的字段全部为**必选**（含保守默认值）：`displayName`、`vision`、`reasoning`、`thinkingMode`、`supportedReasoningEfforts`、`defaultReasoningEffort`、`contextLength`、`maxOutputTokens`、`apiMode`、`supportsTemperature`、`toolCalling`、`baseUrl`、`cost`；可选字段：`thinkingBudget`、`status`。
+解析后的模型元数据。models.dev 可提供的字段全部为**必选**（含保守默认值）：`displayName`、`vision`、`reasoning`、`supportsDisablingReasoning`、`thinkingMode`、`supportedReasoningEfforts`、`defaultReasoningEffort`、`contextLength`、`maxOutputTokens`、`apiMode`、`supportsTemperature`、`toolCalling`、`baseUrl`、`cost`；可选字段：`thinkingBudget`、`status`。
 
 #### `isZenFreeModelId(modelId): boolean`
 
@@ -544,7 +544,7 @@ src/
 
 #### `buildCatalogModelInfo(providerId, modelId): LanguageModelChatInformation`
 
-构建模型选择器条目。Zen 模型名前缀 `[Zen]`，deprecated 模型前缀 `[Depr]`。推理强度枚举由 `buildReasoningEnum()` 生成：effort 列表含 `none` 时映射为 `禁用思考` 档；`defaultReasoningEffort` 不在枚举内时回退到最高档（如 adaptive 模型的 `enabled` → `adaptive`）。
+构建模型选择器条目。Zen 模型名前缀 `[Zen]`，deprecated 模型前缀 `[Depr]`。推理强度枚举由 `buildReasoningEnum()` 生成：`disabled` 档在前、`none`/`disabled` effort 值归一为 `禁用思考` 档（已由 `resolveFromCatalog` 过滤，避免重复档）；`defaultReasoningEffort` 不在枚举内时回退到最高档（如 adaptive 模型的 `enabled` → `adaptive`）。当模型为 Responses 原生协议且未声明关闭档位（`supportsDisablingReasoning=false`）时不注入 `disabled` 档，避免用户选择无效的禁用项。
 
 #### `getCatalogModelConfig(modelId): OpenCodeGoModelItem`
 
@@ -597,6 +597,7 @@ src/
 | `useForCommitGeneration`       | `boolean` (可选)                  | 是否用于提交消息生成                      |
 | `delay`                        | `number` (可选)                   | 模型专属请求延迟                          |
 | `apiMode`                      | `ApiMode` (可选)                  | API 模式：OpenAI Chat、Responses 或 Anthropic |
+| `supportsDisablingReasoning`   | `boolean` (可选)                  | 目录是否声明 `none`/`disabled` effort 档；Responses 适配器据此决定能否发送 `reasoning.effort="none"` |
 | `headers`                      | `Record<string, string>` (可选)   | 自定义 HTTP 头                            |
 
 #### `interface ModelsResponse`
@@ -767,9 +768,9 @@ API 实现的抽象基类。
 
 获取服务商提供的全部模型 ID 列表（未加载时返回空数组）。
 
-#### `inferThinkingMode(entry) / inferReasoningEfforts(entry) / inferDefaultReasoningEffort(entry) / inferVision(entry) / inferThinkingBudget(entry)`
+#### `inferThinkingMode(entry) / inferSupportsDisablingReasoning(entry) / inferReasoningEfforts(entry) / inferDefaultReasoningEffort(entry) / inferVision(entry) / inferThinkingBudget(entry)`
 
-从目录条目推断：思考模式（effort values 含 `none`/`disabled` → switchable；仅含实际强度或无选项 → always；非 effort 选项沿用 switchable）、思考强度列表（`effort` 类型 values）、默认强度（最高档）、视觉能力（`attachment`/`modalities`）、思考预算（`budget_tokens` 的 min/max）。因此不会向未声明关闭档位的 Responses 模型强行发送 `reasoning.effort="none"`。
+从目录条目推断：思考模式（`reasoning_options` 非空 → switchable，空但 `reasoning=true` → always；与 Chat/Anthropic 协议关闭思考的方式 `thinking` 标志解耦）、思考强度列表（`effort` 类型 values）、默认强度（最高档）、视觉能力（`attachment`/`modalities`）、思考预算（`budget_tokens` 的 min/max）。`inferSupportsDisablingReasoning()` 判断目录是否声明 `none`/`disabled` effort 档（或 toggle 型开关），**仅**由 Responses 协议适配器用于决定是否发送 `reasoning.effort="none"`：未声明关闭档位的 Responses 模型不发该值，避免端点拒绝；Chat/Anthropic 协议不受影响。
 
 #### `clearModelsDevCache(): void`
 
@@ -1219,7 +1220,7 @@ API 返回用量数据后重渲染状态栏（主文本 = Go 用量，tooltip = 
 
 #### `class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequestBody>`
 
-独立的 OpenAI Responses 协议适配器。`convertMessages()` 将 VS Code 文本、图片、工具调用与工具结果转换为 typed input Items；工具结果图片使用 `function_call_output.output` 的 `input_text`/`input_image` 数组，并还原视觉历史及 encrypted reasoning 私有 DataPart。`prepareRequestBody()` 映射 `max_output_tokens`、`reasoning`、`include`、扁平 function tools（`strict:false`）及协议专属 extra 保留键。
+独立的 OpenAI Responses 协议适配器。`convertMessages()` 将 VS Code 文本、图片、工具调用与工具结果转换为 typed input Items；工具结果图片使用 `function_call_output.output` 的 `input_text`/`input_image` 数组，并还原视觉历史及 encrypted reasoning 私有 DataPart。`prepareRequestBody()` 映射 `max_output_tokens`、`reasoning`、`include`、扁平 function tools（`strict:false`）及协议专属 extra 保留键；仅当模型声明支持（`supportsDisablingReasoning=true`）时才在禁用思考时发送 `reasoning.effort="none"`，否则省略 reasoning 控制并记录日志（模型按自身默认行为思考）。
 
 #### `processStreamingResponse(responseBody, progress, token): Promise<void>`
 

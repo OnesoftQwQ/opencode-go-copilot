@@ -25,6 +25,7 @@ import {
     getCatalogProviderModelIds,
     inferDefaultReasoningEffort,
     inferReasoningEfforts,
+    inferSupportsDisablingReasoning,
     inferThinkingBudget,
     inferThinkingMode,
     inferVision,
@@ -58,6 +59,8 @@ export interface ModelMeta {
     displayName: string;
     vision: boolean;
     reasoning: boolean;
+    /** Whether the model declares an explicit off value for reasoning effort (used by the Responses adapter). */
+    supportsDisablingReasoning: boolean;
     thinkingMode: "switchable" | "always" | "adaptive";
     supportedReasoningEfforts: string[];
     defaultReasoningEffort: string;
@@ -117,6 +120,7 @@ function resolveFromCatalog(providerId: ProviderId, modelId: string): ModelMeta 
         displayName: entry?.name ?? modelId,
         vision: entry ? inferVision(entry) : false,
         reasoning: entry?.reasoning ?? false,
+        supportsDisablingReasoning: entry ? inferSupportsDisablingReasoning(entry) : true,
         thinkingMode,
         supportedReasoningEfforts,
         defaultReasoningEffort: entry ? inferDefaultReasoningEffort(entry) : "enabled",
@@ -141,6 +145,7 @@ function applyOverride(meta: ModelMeta, override?: ModelMetaOverride): ModelMeta
         displayName: override.displayName ?? meta.displayName,
         vision: override.vision ?? meta.vision,
         reasoning: meta.reasoning,
+        supportsDisablingReasoning: override.supportsDisablingReasoning ?? meta.supportsDisablingReasoning,
         thinkingMode: override.thinkingMode ?? meta.thinkingMode,
         supportedReasoningEfforts: override.supportedReasoningEfforts ?? meta.supportedReasoningEfforts,
         defaultReasoningEffort: override.defaultReasoningEffort ?? meta.defaultReasoningEffort,
@@ -173,10 +178,19 @@ function buildReasoningEnum(meta: ModelMeta): {
     defaultEffort: string;
 } {
     const hasEfforts = meta.supportedReasoningEfforts.length > 0;
+    // A Responses-native model that does not declare an off effort value cannot
+    // accept `reasoning.effort: "none"`; hide the "disabled" option for it so
+    // users do not pick an ineffective off switch. Other protocols disable
+    // thinking via `thinking: { type: "disabled" }` regardless of the effort
+    // list, so they keep the "disabled" option.
+    const canShowDisabled =
+        meta.apiMode !== "openai-responses" || meta.supportsDisablingReasoning !== false;
     let enumValues: string[];
     if (hasEfforts) {
         if (meta.thinkingMode === "switchable") {
-            enumValues = ["disabled", ...meta.supportedReasoningEfforts];
+            enumValues = canShowDisabled
+                ? ["disabled", ...meta.supportedReasoningEfforts]
+                : [...meta.supportedReasoningEfforts];
         } else {
             enumValues = [...meta.supportedReasoningEfforts];
         }
@@ -353,6 +367,7 @@ export function getCatalogModelConfig(modelId: string): OpenCodeGoModelItem {
         max_completion_tokens: meta.maxOutputTokens,
         apiMode: meta.apiMode,
         supportsReasoning: meta.reasoning,
+        supportsDisablingReasoning: meta.supportsDisablingReasoning,
         enable_thinking: true,
         include_reasoning_in_request: override?.includeReasoningInRequest ?? true,
         thinkingMode: meta.thinkingMode,

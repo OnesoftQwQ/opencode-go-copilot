@@ -239,7 +239,15 @@ export class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequest
         if (um?.supportsReasoning === false) {
             // Do not send reasoning controls to models that do not expose them.
         } else if (um?.enable_thinking === false) {
-            rb.reasoning = { effort: "none" };
+            // Only send an explicit off effort when the catalog says the model
+            // accepts it. Responses-native models without a `none`/`disabled`
+            // value reject `reasoning.effort: "none"`; leave reasoning unset so
+            // the model falls back to its own default behaviour.
+            if (um.supportsDisablingReasoning !== false) {
+                rb.reasoning = { effort: "none" };
+            } else {
+                logger.warn("responses.forces-thinking", { model: um.id ?? "unknown" });
+            }
         } else {
             const effort = um?.reasoning_effort;
             rb.reasoning = {

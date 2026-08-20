@@ -309,21 +309,48 @@ export function getCatalogProviderModelIds(providerId: string): string[] {
  *
  * - `reasoning: false` or missing → `"always"` (no thinking at all)
  * - `reasoning_options` is empty or missing → `"always"` (thinking always on, no user control)
- * - effort values include `none`/`disabled` → `"switchable"`
- * - effort values omit a disabled value → `"always"`
- * - non-effort options keep the legacy `"switchable"` behavior
+ * - `reasoning_options` has entries → `"switchable"` (user can toggle / pick effort)
+ *
+ * Note: whether a model accepts an explicit off switch (`effort: "none"`) on a
+ * given protocol is a separate concern; that capability is exposed through
+ * `inferSupportsDisablingReasoning()` (used by the Responses adapter), so the
+ * generic thinking mode keeps the pre-existing semantics for Chat/Anthropic
+ * protocols (which disable thinking via `thinking: { type: "disabled" }`, not
+ * via an effort value).
  */
 export function inferThinkingMode(entry: ModelsDevEntry): "switchable" | "always" | "adaptive" {
     if (!entry.reasoning) return "always";
     const opts = entry.reasoning_options;
     if (!opts || opts.length === 0) return "always";
-    const effortOption = opts.find((option) => option.type === "effort" && option.values?.length);
-    if (effortOption?.values) {
-        return effortOption.values.some((value) => value === "none" || value === "disabled")
-            ? "switchable"
-            : "always";
-    }
     return "switchable";
+}
+
+/**
+ * Whether the catalog declares that the model can accept an explicit off
+ * value for reasoning effort (`"none"` / `"disabled"`).
+ *
+ * - effort list includes `none`/`disabled` → `true`
+ * - toggle-style option (simple on/off) → `true`
+ * - effort list omits a disabled value → `false`
+ * - no reasoning options at all → `false`
+ *
+ * This is used ONLY by the OpenAI Responses protocol adapter: sending
+ * `reasoning.effort: "none"` to a Responses model that does not declare such a
+ * value can be rejected by the endpoint. Chat Completions / Anthropic
+ * protocols disable thinking independently of this (via `thinking` flags).
+ */
+export function inferSupportsDisablingReasoning(entry: ModelsDevEntry): boolean {
+    const opts = entry.reasoning_options;
+    if (!opts || opts.length === 0 || !entry.reasoning) return false;
+    for (const opt of opts) {
+        if (opt.type === "effort" && opt.values?.length) {
+            return opt.values.some((value) => value === "none" || value === "disabled");
+        }
+        if (opt.type === "toggle") {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**

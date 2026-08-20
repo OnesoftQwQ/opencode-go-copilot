@@ -29,6 +29,8 @@ export interface ModelMetaOverride {
     apiMode?: ApiMode;
     supportsTemperature?: boolean;
     toolCalling?: boolean;
+    /** Override whether the model accepts an explicit off effort value (`none`/`disabled`) on the Responses protocol. */
+    supportsDisablingReasoning?: boolean;
     baseUrl?: string;
     /** Fields the catalog cannot express: request-body extras (e.g. reasoning_split) */
     extra?: Record<string, unknown>;

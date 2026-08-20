@@ -59,6 +59,8 @@ export interface OpenCodeGoModelItem {
     supportsTemperature?: boolean;
     /** Whether the catalog declares reasoning support. */
     supportsReasoning?: boolean;
+    /** Whether the catalog declares an explicit off value for reasoning effort (`none`/`disabled`). Used by the OpenAI Responses adapter to avoid sending `reasoning.effort: "none"` to models that reject it. */
+    supportsDisablingReasoning?: boolean;
     /** Custom HTTP headers */
     headers?: Record<string, string>;
     /** Cost information for this model */
