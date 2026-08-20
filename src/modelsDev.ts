@@ -309,12 +309,20 @@ export function getCatalogProviderModelIds(providerId: string): string[] {
  *
  * - `reasoning: false` or missing → `"always"` (no thinking at all)
  * - `reasoning_options` is empty or missing → `"always"` (thinking always on, no user control)
- * - `reasoning_options` has entries → `"switchable"` (user can toggle)
+ * - effort values include `none`/`disabled` → `"switchable"`
+ * - effort values omit a disabled value → `"always"`
+ * - non-effort options keep the legacy `"switchable"` behavior
  */
 export function inferThinkingMode(entry: ModelsDevEntry): "switchable" | "always" | "adaptive" {
     if (!entry.reasoning) return "always";
     const opts = entry.reasoning_options;
     if (!opts || opts.length === 0) return "always";
+    const effortOption = opts.find((option) => option.type === "effort" && option.values?.length);
+    if (effortOption?.values) {
+        return effortOption.values.some((value) => value === "none" || value === "disabled")
+            ? "switchable"
+            : "always";
+    }
     return "switchable";
 }
 

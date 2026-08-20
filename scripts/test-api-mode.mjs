@@ -28,7 +28,7 @@ Module._load = function (request, parent, isMain) {
 };
 
 try {
-    const { deduceApiModeFromCatalog } = require("../out/modelsDev.js");
+    const { deduceApiModeFromCatalog, inferThinkingMode } = require("../out/modelsDev.js");
 
     assert.equal(deduceApiModeFromCatalog("gpt-5.6-luna", "@ai-sdk/openai"), "openai-responses");
     assert.equal(deduceApiModeFromCatalog("glm-5", "@ai-sdk/openai-compatible"), "openai");
@@ -41,6 +41,17 @@ try {
     // A provider-wide adapter is passed only after the caller has checked the
     // model-level override, so the selected adapter remains deterministic.
     assert.equal(deduceApiModeFromCatalog("grok-4.5", "@ai-sdk/openai"), "openai-responses");
+
+    assert.equal(inferThinkingMode({
+        id: "gpt-5.6-luna",
+        reasoning: true,
+        reasoning_options: [{ type: "effort", values: ["none", "low", "high"] }],
+    }), "switchable");
+    assert.equal(inferThinkingMode({
+        id: "grok-4.5",
+        reasoning: true,
+        reasoning_options: [{ type: "effort", values: ["low", "medium", "high"] }],
+    }), "always");
 
     console.log("api mode resolution: ok");
 } finally {

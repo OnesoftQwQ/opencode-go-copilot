@@ -15,6 +15,8 @@
 
 Integrate [OpenCode Go](https://opencode.ai/go) and optional Zen free models into GitHub Copilot Chat as a VS Code extension.
 
+The extension reads adapter metadata from models.dev and automatically routes each model through its declared OpenAI-compatible Chat Completions, OpenAI Responses, or Anthropic Messages protocol.
+
 ### Usage
 
 1. **Set API Key**: `Ctrl+Shift+P` → `OpenCodeGo: Set OpenCode Go API Key`
@@ -116,6 +118,8 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 > **本插件与 OpenCode 官方或 Anomaly 无关，也未获得其官方维护或认可。**
 
 将 [OpenCode Go](https://opencode.ai/go) 以及可选的 Zen 免费模型集成到 GitHub Copilot Chat 的 VS Code 插件。
+
+插件会读取 models.dev 的适配器元数据，自动按模型声明选择 OpenAI 兼容 Chat Completions、OpenAI Responses 或 Anthropic Messages 请求格式。
 
 ### 使用
 

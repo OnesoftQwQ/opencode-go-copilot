@@ -354,7 +354,7 @@ generateCommitMsg(secrets, scm?)
   │   ├── 用户当前输入 (SCM InputBox)
   │   └── Git Diff 内容
   ├── 调用 API:
-  │   ├── OpenaiApi.createMessage() / AnthropicApi.createMessage()
+  │   ├── 按 models.dev 的 apiMode 选择 OpenaiApi / ResponsesApi / AnthropicApi.createMessage()
   │   └── 流式输出到 SCM InputBox
   └── 清理: 移除 ``` 标记和 <think> 标签
 ```
@@ -528,7 +528,7 @@ src/
 
 #### `interface ModelMeta`
 
-解析后的模型元数据。models.dev 可提供的字段全部为**必选**（含保守默认值）：`displayName`、`vision`、`thinkingMode`、`supportedReasoningEfforts`、`defaultReasoningEffort`、`contextLength`、`maxOutputTokens`、`apiMode`、`supportsTemperature`、`toolCalling`、`baseUrl`、`cost`；可选字段：`thinkingBudget`、`status`。
+解析后的模型元数据。models.dev 可提供的字段全部为**必选**（含保守默认值）：`displayName`、`vision`、`reasoning`、`thinkingMode`、`supportedReasoningEfforts`、`defaultReasoningEffort`、`contextLength`、`maxOutputTokens`、`apiMode`、`supportsTemperature`、`toolCalling`、`baseUrl`、`cost`；可选字段：`thinkingBudget`、`status`。
 
 #### `isZenFreeModelId(modelId): boolean`
 
@@ -769,7 +769,7 @@ API 实现的抽象基类。
 
 #### `inferThinkingMode(entry) / inferReasoningEfforts(entry) / inferDefaultReasoningEffort(entry) / inferVision(entry) / inferThinkingBudget(entry)`
 
-从目录条目推断：思考模式（`reasoning_options` 非空 → switchable，空但 `reasoning=true` → always）、思考强度列表（`effort` 类型 values）、默认强度（最高档）、视觉能力（`attachment`/`modalities`）、思考预算（`budget_tokens` 的 min/max）。
+从目录条目推断：思考模式（effort values 含 `none`/`disabled` → switchable；仅含实际强度或无选项 → always；非 effort 选项沿用 switchable）、思考强度列表（`effort` 类型 values）、默认强度（最高档）、视觉能力（`attachment`/`modalities`）、思考预算（`budget_tokens` 的 min/max）。因此不会向未声明关闭档位的 Responses 模型强行发送 `reasoning.effort="none"`。
 
 #### `clearModelsDevCache(): void`
 
@@ -1229,6 +1229,10 @@ API 返回用量数据后重渲染状态栏（主文本 = Go 用量，tooltip = 
 
 取出并清空最近一轮 Responses 流中捕获的 encrypted reasoning items，供 provider 在同一次图片代理循环的下一轮请求中放回。
 
+#### `async *createMessage(model, systemPrompt, messages, baseUrl, apiKey, signal?): AsyncGenerator<{ type: "text"; text: string }>`
+
+为 Git 提交消息生成发送 `store:false` 的 `/responses` 流式请求，使用顶层 `instructions` 和 typed input Items，并从 `response.output_text.delta` 逐块返回文本；失败事件直接抛错，取消时同步中止 reader。
+
 ### 4.14c `src/openai/responsesState.ts`
 
 校验 Responses reasoning output item 的 `id`、`summary` 与 `encrypted_content`，并用专用 VS Code DataPart MIME 编解码，使 `store:false` 请求不依赖服务端保存响应状态。
@@ -1365,7 +1369,7 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 
 #### `performCommitMsgGeneration(secrets, gitDiff, inputBox, repoPath?): Promise<void>`
 
-核心生成逻辑。构建 prompt（含自定义提示词、最近提交风格、用户输入、diff 内容），支持 `auto` 语言模式（由模型根据历史 commit 风格自动推断），创建 API 实例，流式输出提交消息到 InputBox。支持通过配置 `opencodego.commitIncludeCommitDiff` 控制风格参考中是否包含历史提交的实际代码变更（默认关闭）。支持通过配置 `opencodego.commitAttachContextFiles`（默认开启）控制是否将仓库根目录的 `AGENTS.md` 和 `README.md` 内容附加到 prompt 中作为额外上下文。在选择模型配置后浅拷贝（`{ ...config }`）再修改 `enable_thinking` 和 `max_completion_tokens`，防止对共享的自动发现配置缓存的突变。
+核心生成逻辑。构建 prompt（含自定义提示词、最近提交风格、用户输入、diff 内容），支持 `auto` 语言模式（由模型根据历史 commit 风格自动推断），根据 catalog 的 `apiMode` 创建 OpenAI Chat、OpenAI Responses 或 Anthropic API 实例，流式输出提交消息到 InputBox。支持通过配置 `opencodego.commitIncludeCommitDiff` 控制风格参考中是否包含历史提交的实际代码变更（默认关闭）。支持通过配置 `opencodego.commitAttachContextFiles`（默认开启）控制是否将仓库根目录的 `AGENTS.md` 和 `README.md` 内容附加到 prompt 中作为额外上下文。在选择模型配置后浅拷贝（`{ ...config }`）再修改 `enable_thinking` 和 `max_completion_tokens`，防止对共享的自动发现配置缓存的突变；只有 catalog 声明 `none`/`disabled` 档位时才为提交生成关闭 reasoning。
 
 #### `abortCommitGeneration(): void`
 

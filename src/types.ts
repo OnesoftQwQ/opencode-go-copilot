@@ -57,6 +57,8 @@ export interface OpenCodeGoModelItem {
     thinkingMode?: "switchable" | "always" | "adaptive";
     /** Whether this model supports setting temperature/top_p. Default true. */
     supportsTemperature?: boolean;
+    /** Whether the catalog declares reasoning support. */
+    supportsReasoning?: boolean;
     /** Custom HTTP headers */
     headers?: Record<string, string>;
     /** Cost information for this model */

@@ -236,7 +236,9 @@ export class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequest
             rb.max_output_tokens = um.max_tokens;
         }
 
-        if (um?.enable_thinking === false) {
+        if (um?.supportsReasoning === false) {
+            // Do not send reasoning controls to models that do not expose them.
+        } else if (um?.enable_thinking === false) {
             rb.reasoning = { effort: "none" };
         } else {
             const effort = um?.reasoning_effort;
@@ -437,6 +439,106 @@ export class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequest
             cancelDisposable?.dispose();
             reader.releaseLock();
             this.reportEndThinking(progress);
+        }
+    }
+
+    /** Stream a simple text response for Git commit message generation. */
+    async *createMessage(
+        model: OpenCodeGoModelItem,
+        systemPrompt: string,
+        messages: { role: string; content: string }[],
+        baseUrl: string,
+        apiKey: string,
+        signal?: AbortSignal
+    ): AsyncGenerator<{ type: "text"; text: string }> {
+        const input: ResponsesInputItem[] = messages.map((message) => {
+            if (message.role === "assistant") {
+                return {
+                    role: "assistant" as const,
+                    content: [{ type: "output_text" as const, text: message.content }],
+                };
+            }
+            if (message.role === "system") {
+                return { role: "system" as const, content: message.content };
+            }
+            return {
+                role: "user" as const,
+                content: [{ type: "input_text" as const, text: message.content }],
+            };
+        });
+
+        let requestBody: ResponsesRequestBody = {
+            model: model.id,
+            input,
+            stream: true,
+            store: false,
+            ...(systemPrompt ? { instructions: systemPrompt } : {}),
+        };
+        requestBody = this.prepareRequestBody(requestBody, model, undefined);
+
+        const headers = CommonApi.prepareHeaders(apiKey, "openai-responses", model.headers);
+        const url = `${baseUrl.replace(/\/+$/, "")}/responses`;
+        const response = await fetch(url, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(requestBody),
+            signal,
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(
+                `Responses API error: [${response.status}] ${response.statusText}${errorText ? `\n${errorText}` : ""}\nURL: ${url}`
+            );
+        }
+        if (!response.body) {
+            throw new Error("No response body from Responses API");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let terminal = false;
+        const cancelReader = (): void => {
+            reader.cancel().catch(() => { });
+        };
+        signal?.addEventListener("abort", cancelReader, { once: true });
+
+        try {
+            while (!terminal) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop() ?? "";
+
+                for (const rawLine of lines) {
+                    const line = rawLine.trimEnd();
+                    if (!line.startsWith("data:")) continue;
+                    const data = line.slice(5).trim();
+                    if (!data || data === "[DONE]") continue;
+
+                    let event: ResponsesStreamEvent;
+                    try {
+                        event = JSON.parse(data) as ResponsesStreamEvent;
+                    } catch {
+                        continue;
+                    }
+                    if (event.type === "response.output_text.delta" && event.delta) {
+                        yield { type: "text", text: event.delta };
+                    } else if (event.type === "response.completed" || event.type === "response.incomplete") {
+                        terminal = true;
+                        break;
+                    } else if (event.type === "response.failed" || event.type === "error") {
+                        const code = event.code ?? event.response?.error?.code;
+                        const message = event.message ?? event.response?.error?.message ?? "OpenAI Responses stream failed";
+                        throw new Error(code ? `${code}: ${message}` : message);
+                    }
+                }
+            }
+        } finally {
+            signal?.removeEventListener("abort", cancelReader);
+            reader.releaseLock();
         }
     }
 }

@@ -3,6 +3,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { getGitDiff, getRecentCommits } from "./gitUtils";
 import { OpenaiApi } from "../openai/openaiApi";
+import { ResponsesApi } from "../openai/responsesApi";
 import { AnthropicApi } from "../anthropic/anthropicApi";
 import { getCatalogModelConfig } from "../catalogModels";
 import { getCatalogProviderBaseUrl } from "../modelsDev";
@@ -227,8 +228,11 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
         const selectedModel: OpenCodeGoModelItem = {
             ...getCatalogModelConfig(commitModelId)
         };
-        // Commit messages are simple tasks — disable thinking to speed up generation.
-        selectedModel.enable_thinking = false;
+        // Commit messages are simple tasks — disable thinking when the catalog
+        // says the model supports a disabled/none reasoning mode.
+        if (selectedModel.thinkingMode !== "always") {
+            selectedModel.enable_thinking = false;
+        }
         // Cap max_completion_tokens to avoid proxy 500 errors with oversized values
         if (selectedModel.max_completion_tokens && selectedModel.max_completion_tokens > 8192) {
             selectedModel.max_completion_tokens = 8192;
@@ -272,7 +276,9 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
 
         const apiInstance = apiMode === "anthropic"
             ? new AnthropicApi(modelId)
-            : new OpenaiApi(modelId);
+            : apiMode === "openai-responses"
+                ? new ResponsesApi(modelId)
+                : new OpenaiApi(modelId);
 
         commitGenerationAbortController = new AbortController();
         const stream = apiInstance.createMessage(selectedModel, systemPrompt, messages, baseUrl, apiKey, commitGenerationAbortController.signal);

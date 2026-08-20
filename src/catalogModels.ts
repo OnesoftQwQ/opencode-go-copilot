@@ -57,6 +57,7 @@ const DEFAULT_MAX_TOKENS = 4096;
 export interface ModelMeta {
     displayName: string;
     vision: boolean;
+    reasoning: boolean;
     thinkingMode: "switchable" | "always" | "adaptive";
     supportedReasoningEfforts: string[];
     defaultReasoningEffort: string;
@@ -115,6 +116,7 @@ function resolveFromCatalog(providerId: ProviderId, modelId: string): ModelMeta 
     return {
         displayName: entry?.name ?? modelId,
         vision: entry ? inferVision(entry) : false,
+        reasoning: entry?.reasoning ?? false,
         thinkingMode,
         supportedReasoningEfforts,
         defaultReasoningEffort: entry ? inferDefaultReasoningEffort(entry) : "enabled",
@@ -138,6 +140,7 @@ function applyOverride(meta: ModelMeta, override?: ModelMetaOverride): ModelMeta
     return {
         displayName: override.displayName ?? meta.displayName,
         vision: override.vision ?? meta.vision,
+        reasoning: meta.reasoning,
         thinkingMode: override.thinkingMode ?? meta.thinkingMode,
         supportedReasoningEfforts: override.supportedReasoningEfforts ?? meta.supportedReasoningEfforts,
         defaultReasoningEffort: override.defaultReasoningEffort ?? meta.defaultReasoningEffort,
@@ -349,6 +352,7 @@ export function getCatalogModelConfig(modelId: string): OpenCodeGoModelItem {
         context_length: meta.contextLength,
         max_completion_tokens: meta.maxOutputTokens,
         apiMode: meta.apiMode,
+        supportsReasoning: meta.reasoning,
         enable_thinking: true,
         include_reasoning_in_request: override?.includeReasoningInRequest ?? true,
         thinkingMode: meta.thinkingMode,

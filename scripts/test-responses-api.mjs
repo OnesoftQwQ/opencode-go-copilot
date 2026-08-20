@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const Module = require("node:module");
 const originalLoad = Module._load;
+const originalFetch = globalThis.fetch;
 
 class DataPart {
     constructor(data, mimeType) {
@@ -43,6 +44,8 @@ const vscodeShim = {
     LanguageModelToolResultPart: ToolResultPart,
     LanguageModelThinkingPart: ThinkingPart,
     LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
+    extensions: { getExtension: () => undefined },
+    version: "test",
     workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }) },
     window: {
         createOutputChannel: () => ({
@@ -138,6 +141,18 @@ try {
     });
     assert.equal(body.tool_choice, "required");
 
+    const noReasoningBody = api.prepareRequestBody(
+        { model: "plain-model", input: [], stream: true, store: false },
+        {
+            id: "plain-model",
+            owned_by: "opencode",
+            supportsReasoning: false,
+            enable_thinking: false,
+        },
+    );
+    assert.equal("reasoning" in noReasoningBody, false);
+    assert.equal("include" in noReasoningBody, false);
+
     const streamed = [];
     let usage;
     api.onUsage = (value) => { usage = value; };
@@ -223,7 +238,43 @@ try {
         { role: "assistant", content: [{ type: "output_text", text: "Prior answer" }] },
     ]);
 
+    let capturedRequest;
+    globalThis.fetch = async (url, init) => {
+        capturedRequest = { url: String(url), init };
+        return new Response(makeStream([
+            { type: "response.output_text.delta", delta: "feat: " },
+            { type: "response.output_text.delta", delta: "support responses" },
+            { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 3 } } },
+        ]), { status: 200 });
+    };
+    const commitChunks = [];
+    for await (const chunk of new ResponsesApi("gpt-5.6-luna").createMessage(
+        {
+            id: "gpt-5.6-luna",
+            owned_by: "opencode",
+            apiMode: "openai-responses",
+            enable_thinking: false,
+        },
+        "Generate one commit subject.",
+        [{ role: "user", content: "diff --git a/a b/a" }],
+        "https://example.test/v1/",
+        "test-token",
+    )) {
+        commitChunks.push(chunk.text);
+    }
+    assert.deepEqual(commitChunks, ["feat: ", "support responses"]);
+    assert.equal(capturedRequest.url, "https://example.test/v1/responses");
+    assert.equal(capturedRequest.init.headers.Authorization, "Bearer test-token");
+    const commitBody = JSON.parse(capturedRequest.init.body);
+    assert.equal(commitBody.store, false);
+    assert.equal(commitBody.instructions, "Generate one commit subject.");
+    assert.deepEqual(commitBody.reasoning, { effort: "none" });
+    assert.deepEqual(commitBody.input, [
+        { role: "user", content: [{ type: "input_text", text: "diff --git a/a b/a" }] },
+    ]);
+
     console.log("responses api: ok");
 } finally {
     Module._load = originalLoad;
+    globalThis.fetch = originalFetch;
 }
