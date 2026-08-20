@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import type { OpenCodeGoModelItem, RetryConfig } from "./types";
 import type { StoredImage } from "./vision/types";
 import { OpenAIFunctionToolDef } from "./openai/openaiTypes";
+import type { ResponsesFunctionToolDef } from "./openai/responsesTypes";
 import { CancellationToken } from "vscode";
 
 const RETRY_MAX_ATTEMPTS = 3;
@@ -134,6 +135,30 @@ export function convertToolsToOpenAI(
     }
 
     return { tools, tool_choice: toolChoice };
+}
+
+/** Convert an OpenAI Chat function definition to the flat Responses format. */
+export function convertOpenAIToolToResponses(tool: OpenAIFunctionToolDef): ResponsesFunctionToolDef {
+    return {
+        type: "function",
+        name: tool.function.name,
+        description: tool.function.description,
+        parameters: tool.function.parameters ?? { type: "object", properties: {} },
+        // VS Code tool schemas are not guaranteed to satisfy OpenAI strict-mode
+        // requirements (all properties required, additionalProperties=false).
+        strict: false,
+    };
+}
+
+/** Convert VS Code tool definitions to the flat OpenAI Responses format. */
+export function convertToolsToResponses(
+    options?: vscode.ProvideLanguageModelChatResponseOptions
+): { tools?: ResponsesFunctionToolDef[]; tool_choice?: string } {
+    const chatTools = convertToolsToOpenAI(options);
+    return {
+        tools: chatTools.tools?.map(convertOpenAIToolToResponses),
+        tool_choice: chatTools.tool_choice,
+    };
 }
 
 /**

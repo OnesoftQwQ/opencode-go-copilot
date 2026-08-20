@@ -104,7 +104,7 @@ models.dev 目录通过 `reasoning_options` 字段提供每个模型的思考能
 │  │   4. 应用请求延迟 (delay)                                     │  │
 │  │   5. 构建请求 → API 路由选择                                  │  │
 │  │      ├─ apiMode="openai"           → OpenaiApi                │  │
-│  │      ├─ apiMode="openai-responses" → ResponsesApi（规划中）   │  │
+│  │      ├─ apiMode="openai-responses" → ResponsesApi            │  │
 │  │      └─ apiMode="anthropic"        → AnthropicApi             │  │
 │  │   6. 发送 HTTP 请求 (fetch with undici + 超时控制)             │  │
 │  │   7. 流式解析响应 → Progress<LanguageModelResponsePart2>      │  │
@@ -426,13 +426,15 @@ src/
 | `commonApi.ts`                        | ~467 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截、User-Agent 配置读取）                                                                                                             |
 | `provideModel.ts`                     | ~180 | 模型信息提供函数：以 catalog 的 `opencode-go` provider 全量构建列表（可选按 API 列表过滤），Zen 免费模型从 `opencode` provider 按 `isZenFreeModelId()`（`-free` 后缀 + 硬编码 `big-pickle`）过滤；1 分钟间隔缓存与并发去重                                                                      |
 | `provideToken.ts`                     | ~100 | Token 用量计算                                                                                                                                                                                         |
-| `utils.ts`                            | ~285 | 工具函数 (重试、角色映射、工具转换等)                                                                                                                                                                  |
+| `utils.ts`                            | ~490 | 工具函数（重试、角色映射、OpenAI Chat/Responses 工具格式转换等）                                                                                                                                       |
 | `statusBar.ts`                        | ~317 | 状态栏创建、更新、累计计数器、Go 用量轮询与 tooltip 区块渲染                                                                                                                                           |
 | `logger.ts`                           | ~55  | 日志输出 (LogOutputChannel)                                                                                                                                                                            |
 | `localize.ts`                         | ~109 | 中英文国际化（含 `low/medium/high/xhigh/max` 思考强度标签）                                                                                                                                            |
 | `versionManager.ts`                   | ~35  | 扩展版本信息（使用正确扩展 ID `OnesoftQwQ.opencode-go-copilot-provider`）                                                                                                                              |
 | `openai/openaiApi.ts`                 | ~613 | OpenAI 格式 API 实现 (消息转换/请求构建/流式处理/图片代理)                                                                                                                                             |
 | `openai/openaiTypes.ts`               | ~75  | OpenAI 类型定义                                                                                                                                                                                        |
+| `openai/responsesApi.ts`              | ~410 | OpenAI Responses 格式 API 实现：typed input Items、扁平工具定义、请求参数映射、Responses SSE 文本/推理/工具/usage 解析                                                                                   |
+| `openai/responsesTypes.ts`            | ~125 | OpenAI Responses 请求、输入 Item、工具、usage 与流事件类型定义                                                                                                                                         |
 | `anthropic/anthropicApi.ts`           | ~535 | Anthropic 格式 API 实现 (消息转换/请求构建/流式处理/图片代理)                                                                                                                                          |
 | `anthropic/anthropicTypes.ts`         | ~130 | Anthropic 类型定义                                                                                                                                                                                     |
 | `gitCommit/commitMessageGenerator.ts` | ~295 | Git 提交消息生成逻辑                                                                                                                                                                                   |
@@ -1200,6 +1202,22 @@ API 返回用量数据后重渲染状态栏（主文本 = Go 用量，tooltip = 
 #### `async *createMessage(model, systemPrompt, messages, baseUrl, apiKey, signal?): AsyncGenerator<{ type: "text"; text: string }>`
 
 非流式聊天消息生成器（用于 Git 提交生成）。发送 HTTP 请求后 yield 文本块。注册取消回调：`signal.addEventListener("abort")` 时调用 `reader.cancel()` 立即中断流。
+
+---
+
+### 4.14b `src/openai/responsesApi.ts`
+
+#### `class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequestBody>`
+
+独立的 OpenAI Responses 协议适配器。`convertMessages()` 将 VS Code 文本、图片、工具调用与工具结果转换为 typed input Items；工具结果图片使用 `function_call_output.output` 的 `input_text`/`input_image` 数组。`prepareRequestBody()` 映射 `max_output_tokens`、`reasoning`、`include`、扁平 function tools（`strict:false`）及协议专属 extra 保留键。
+
+#### `processStreamingResponse(responseBody, progress, token): Promise<void>`
+
+解析 Responses SSE 类型事件：文本 delta、推理 delta、function call item/arguments、completed/incomplete/failed/error 与 usage。工具以 `output_index` 复用 `CommonApi` 缓冲和 `LanguageModelToolCallPart` 发射逻辑；terminal failure 直接抛错而不是吞掉。由 `scripts/test-responses-api.mjs` 验证消息/图片/工具转换、请求体、跨 chunk SSE、工具单次发射和 usage 映射。
+
+### 4.14c `src/openai/responsesTypes.ts`
+
+声明 Responses 的输入文本/图片、助手输出、reasoning、`function_call`、`function_call_output`、扁平工具、请求体、usage 与流事件类型。
 
 ---
 
