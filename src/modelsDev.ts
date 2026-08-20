@@ -24,6 +24,7 @@
 import * as vscode from "vscode";
 import { HARDCODED_CATALOG } from "./hardcodedModelList";
 import { logger } from "./logger";
+import type { ApiMode } from "./types";
 
 const CATALOG_URL = "https://models.dev/catalog.json";
 const CACHE_TTL_MS = 60 * 1000; // 1 minute — dedupes concurrent startup activations
@@ -480,14 +481,24 @@ export function hasModelDevEntry(apiModelId: string): boolean {
 }
 
 /**
- * Deduce API mode (openai vs anthropic) from a model ID and optional catalog entry.
- * Uses family-based heuristics since the catalog does not directly expose apiMode.
- *
- * Also checks the `provider.npm` field: @ai-sdk/anthropic → anthropic.
+ * Resolve the request protocol from the models.dev adapter package.
+ * The provider-specific model override is selected by the caller before the
+ * provider-wide default. Family heuristics are retained only for legacy or
+ * incomplete catalogs that do not expose a recognized adapter package.
  */
-export function deduceApiModeFromFamily(modelId: string, entry?: ModelsDevEntry): "openai" | "anthropic" {
-    // Check provider npm hint first
-    if (entry?.provider?.npm?.includes("anthropic")) return "anthropic";
+export function deduceApiModeFromCatalog(
+    modelId: string,
+    adapterNpm?: string,
+    entry?: ModelsDevEntry
+): ApiMode {
+    switch (adapterNpm) {
+        case "@ai-sdk/openai":
+            return "openai-responses";
+        case "@ai-sdk/anthropic":
+            return "anthropic";
+        case "@ai-sdk/openai-compatible":
+            return "openai";
+    }
 
     const family = entry?.family?.toLowerCase() ?? "";
     if (family.includes("claude") || family.includes("anthropic")) return "anthropic";

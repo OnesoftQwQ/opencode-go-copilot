@@ -413,6 +413,7 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
+		"test:api-mode": "npm run compile && node scripts/test-api-mode.mjs",
 		"test:vision-history": "npm run compile && node scripts/test-vision-history.mjs",
 		"lint": "eslint",
 		"watch": "tsc -watch -p ./",

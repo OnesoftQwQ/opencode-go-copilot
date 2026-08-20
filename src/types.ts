@@ -1,3 +1,6 @@
+/** Request protocol used by an OpenCode model. */
+export type ApiMode = "openai" | "openai-responses" | "anthropic";
+
 /**
  * A single model entry for OpenCode Go.
  */
@@ -49,7 +52,7 @@ export interface OpenCodeGoModelItem {
      */
     delay?: number;
     /** API mode (for internal use) */
-    apiMode?: string;
+    apiMode?: ApiMode;
     /** Whether this model supports switching thinking on/off ("switchable"), always has it ("always"), or only disabled/adaptive ("adaptive") */
     thinkingMode?: "switchable" | "always" | "adaptive";
     /** Whether this model supports setting temperature/top_p. Default true. */

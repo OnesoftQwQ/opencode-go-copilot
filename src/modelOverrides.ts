@@ -12,6 +12,8 @@
  * otherwise the value resolved from the catalog is used.
  */
 
+import type { ApiMode } from "./types";
+
 /**
  * Override for a single model. Every field is optional — only the fields
  * written here take effect; everything else falls through to the catalog.
@@ -24,7 +26,7 @@ export interface ModelMetaOverride {
     defaultReasoningEffort?: string;
     contextLength?: number;
     maxOutputTokens?: number;
-    apiMode?: "openai" | "anthropic";
+    apiMode?: ApiMode;
     supportsTemperature?: boolean;
     toolCalling?: boolean;
     baseUrl?: string;

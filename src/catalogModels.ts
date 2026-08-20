@@ -13,12 +13,13 @@
  */
 
 import type { LanguageModelChatInformation } from "vscode";
-import type { OpenCodeGoModelItem } from "./types";
+import type { ApiMode, OpenCodeGoModelItem } from "./types";
 import { l10n } from "./localize";
 import { MODEL_OVERRIDES, type ModelMetaOverride } from "./modelOverrides";
 import {
-    deduceApiModeFromFamily,
+    deduceApiModeFromCatalog,
     ensureModelsDevLoaded,
+    getCatalogProvider,
     getCatalogProviderBaseUrl,
     getCatalogProviderModelEntry,
     getCatalogProviderModelIds,
@@ -61,7 +62,7 @@ export interface ModelMeta {
     defaultReasoningEffort: string;
     contextLength: number;
     maxOutputTokens: number;
-    apiMode: "openai" | "anthropic";
+    apiMode: ApiMode;
     supportsTemperature: boolean;
     toolCalling: boolean;
     baseUrl: string;
@@ -103,6 +104,8 @@ function resolveFromCatalog(providerId: ProviderId, modelId: string): ModelMeta 
     const providerEntry = getCatalogProviderModelEntry(providerId, modelId);
     const globalEntry = lookupModelDevEntry(modelId);
     const entry: ModelsDevEntry | undefined = providerEntry ?? globalEntry;
+    const providerNpm = getCatalogProvider(providerId)?.npm;
+    const adapterNpm = providerEntry?.provider?.npm ?? providerNpm;
 
     const thinkingMode = entry ? inferThinkingMode(entry) : "switchable";
     const rawEfforts = entry ? inferReasoningEfforts(entry) : undefined;
@@ -117,7 +120,7 @@ function resolveFromCatalog(providerId: ProviderId, modelId: string): ModelMeta 
         defaultReasoningEffort: entry ? inferDefaultReasoningEffort(entry) : "enabled",
         contextLength: entry?.limit?.context ?? DEFAULT_CONTEXT_LENGTH,
         maxOutputTokens: entry?.limit?.output ?? DEFAULT_MAX_TOKENS,
-        apiMode: entry ? deduceApiModeFromFamily(modelId, entry) : "openai",
+        apiMode: deduceApiModeFromCatalog(modelId, adapterNpm, entry),
         supportsTemperature: entry?.temperature ?? true,
         toolCalling: entry?.tool_call ?? true,
         baseUrl: getCatalogProviderBaseUrl(providerId, FALLBACK_BASE_URLS[providerId]),

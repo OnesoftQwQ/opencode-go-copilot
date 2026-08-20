@@ -31,7 +31,7 @@
 | **自动模型发现**             | 模型列表以 `models.dev` 目录为唯一数据源（1 分钟 TTL 缓存，兼作启动并发激活去重）。通过 `opencodego.enableAutoModelDiscovery` 配置（默认开启）控制是否从 `/zen/go/v1/models` 获取实际可用列表过滤模型选择器（不可用模型隐藏，API 不可用则显示目录全量）。服务商 URL、模型列表、参数（含 `reasoning_options` 思考强度）均从目录自动获取；API 不可用时目录不可用的降级为空列表，待下次拉取恢复                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | **目录容灾回退**             | 目录获取采用三级回退链：官方 `models.dev`（10 秒超时）→ 镜像（`opencodego.modelsDevMirrorUrl`，默认 `https://modelsdev-mirror.onesoft.top/catalog.json`，30 秒超时，请求头携带 `platform: opencode-go-copilot` 及可选 `x-mirror-token`）→ 硬编码兜底目录快照。镜像/兜底命中时按 1 分钟间隔持续重试官方源，官方恢复后自动切回                                                                                                                                                                                                                                                                                                                                                                                                   |
 | **OpenCode Zen 免费模型**    | 通过设置开关启用，从 `models.dev` 目录的 `opencode` 服务商获取模型列表并过滤出免费模型（`-free` 后缀约定 + 硬编码集合 `ZEN_FREE_EXTRA_IDS` 补充无后缀免费模型，如 `big-pickle`），以 `OpenCode Zen` 标识追加到模型选择器。元数据合并链与 Go 模型完全统一：`MODEL_OVERRIDES` > 目录条目 > 保守默认值。支持内存缓存（1 分钟 TTL）                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| **双 API 模式**              | 同时支持 **OpenAI 兼容格式** (`/chat/completions`) 和 **Anthropic 格式** (`/v1/messages`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **三 API 模式**              | 根据 `models.dev` 的模型级 `provider.npm`（缺失时继承服务商 `npm`）区分 **OpenAI 兼容格式** (`/chat/completions`)、**OpenAI Responses 格式** (`/responses`) 和 **Anthropic 格式** (`/v1/messages`)；旧目录缺少适配器信息时才使用 family 启发式兜底                                                                                                                                                                                                                                                                                                                                             |
 | **流式推理**                 | 支持 SSE (Server-Sent Events) 流式响应，实时输出文本和工具调用                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | **Thinking/推理**            | 支持模型的推理过程展示 ("thinking" 状态)，包括 XML think 块解析                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **工具调用 (Tool Calling)**  | 支持 VS Code 的 LanguageModelToolCallPart 机制                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -103,8 +103,9 @@ models.dev 目录通过 `reasoning_options` 字段提供每个模型的思考能
 │  │       (LanguageModelDataPart, MIME type "usage", VS Code 1.116+)│  │
 │  │   4. 应用请求延迟 (delay)                                     │  │
 │  │   5. 构建请求 → API 路由选择                                  │  │
-│  │      ├─ apiMode="openai"    → OpenaiApi                       │  │
-│  │      └─ apiMode="anthropic" → AnthropicApi                    │  │
+│  │      ├─ apiMode="openai"           → OpenaiApi                │  │
+│  │      ├─ apiMode="openai-responses" → ResponsesApi（规划中）   │  │
+│  │      └─ apiMode="anthropic"        → AnthropicApi             │  │
 │  │   6. 发送 HTTP 请求 (fetch with undici + 超时控制)             │  │
 │  │   7. 流式解析响应 → Progress<LanguageModelResponsePart2>      │  │
 │  │      ├─ LanguageModelTextPart     (文本)                      │  │
@@ -168,7 +169,8 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   ├── 2c. 注入 vision 配置
   │       └── modelConfig.vision = um?.vision ?? false
   │
-  ├── 3. 确定 API 模式 (apiMode: "openai" | "anthropic")
+  ├── 3. 确定 API 模式 (apiMode: "openai" | "openai-responses" | "anthropic")
+  │       模型 provider.npm > 服务商 npm > 旧目录 family 兜底
   │
   ├── 4. 记录请求开始日志
   │
@@ -586,7 +588,7 @@ src/
 | `supportsTemperature`          | `boolean` (可选)                  | 是否支持设置 temperature/top_p，默认 true |
 | `useForCommitGeneration`       | `boolean` (可选)                  | 是否用于提交消息生成                      |
 | `delay`                        | `number` (可选)                   | 模型专属请求延迟                          |
-| `apiMode`                      | `string` (可选)                   | API 模式                                  |
+| `apiMode`                      | `ApiMode` (可选)                  | API 模式：OpenAI Chat、Responses 或 Anthropic |
 | `headers`                      | `Record<string, string>` (可选)   | 自定义 HTTP 头                            |
 
 #### `interface ModelsResponse`
@@ -765,9 +767,9 @@ API 实现的抽象基类。
 
 清除缓存的 models.dev 目录数据（重置 `metadataMap`、`shortIdMap`、`providersMap`、`cacheTimestamp` 和 `lastLoadFailed`）。由 `resetAutoDiscoveryState()` 在强制刷新时调用，确保下次查询重新拉取最新目录。
 
-#### `deduceApiModeFromFamily(modelId, entry?)`
+#### `deduceApiModeFromCatalog(modelId, adapterNpm?, entry?)`
 
-根据模型 ID 和可选的 models.dev 条目推断 API 格式（`"openai"` 或 `"anthropic"`）。使用 family 启发式判断：Claude/Anthropic 系列、Qwen 3.6/3.7 系列（匹配 `/qwen[\s-]*3\.[67]/i`）、Gemma 系列 → Anthropic；其余 → OpenAI。被 `catalogModels.resolveFromCatalog()` 调用于确定模型的 apiMode 兜底。
+根据 `models.dev` 适配器包解析 API 格式：`@ai-sdk/openai` → `"openai-responses"`、`@ai-sdk/openai-compatible` → `"openai"`、`@ai-sdk/anthropic` → `"anthropic"`。调用方先选择模型级 `provider.npm`，缺失时继承服务商 `npm`；未识别或旧目录缺失适配器信息时才使用原 family 启发式兜底。由 `scripts/test-api-mode.mjs` 验证三协议映射和旧目录兼容行为。
 
 ---
 
