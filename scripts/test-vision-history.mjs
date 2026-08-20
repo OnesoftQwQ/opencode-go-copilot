@@ -5,6 +5,7 @@ import {
     serializeVisionToolHistory,
     toAnthropicVisionToolMessages,
     toOpenAIVisionToolMessages,
+    toResponsesVisionToolItems,
 } from "../out/vision/historyCodec.js";
 
 const entry = {
@@ -38,6 +39,19 @@ assert.deepEqual(toAnthropicVisionToolMessages(entry), [
     {
         role: "user",
         content: [{ type: "tool_result", tool_use_id: entry.id, content: entry.result }],
+    },
+]);
+assert.deepEqual(toResponsesVisionToolItems(entry), [
+    {
+        type: "function_call",
+        call_id: entry.id,
+        name: entry.name,
+        arguments: JSON.stringify(entry.args),
+    },
+    {
+        type: "function_call_output",
+        call_id: entry.id,
+        output: entry.result,
     },
 ]);
 assert.equal(deserializeVisionToolHistory(new TextEncoder().encode("not-json")), null);
@@ -85,6 +99,7 @@ Module._load = function (request, parent, isMain) {
 try {
     const { createVisionToolHistoryPart } = require("../out/vision/historyPart.js");
     const { OpenaiApi } = require("../out/openai/openaiApi.js");
+    const { ResponsesApi } = require("../out/openai/responsesApi.js");
     const { AnthropicApi } = require("../out/anthropic/anthropicApi.js");
     const persistedPart = createVisionToolHistoryPart(entry);
     const nextTurnMessages = [
@@ -124,6 +139,25 @@ try {
             content: [{ type: "tool_result", tool_use_id: entry.id, content: entry.result }],
         },
         { role: "assistant", content: [{ type: "text", text: "The previous answer." }, { type: "thinking", thinking: "Next step." }] },
+    ]);
+
+    const responsesItems = await new ResponsesApi("test").convertMessages(nextTurnMessages, {
+        includeReasoningInRequest: true,
+        vision: false,
+    });
+    assert.deepEqual(responsesItems.slice(0, 3), [
+        {
+            type: "function_call",
+            call_id: entry.id,
+            name: entry.name,
+            arguments: JSON.stringify(entry.args),
+        },
+        {
+            type: "function_call_output",
+            call_id: entry.id,
+            output: entry.result,
+        },
+        { role: "assistant", content: [{ type: "output_text", text: "The previous answer." }] },
     ]);
 
     // A tool-call assistant message WITHOUT any reasoning parts must still carry

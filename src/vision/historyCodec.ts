@@ -1,5 +1,6 @@
 import type { AnthropicMessage } from "../anthropic/anthropicTypes";
 import type { OpenAIChatMessage } from "../openai/openaiTypes";
+import type { ResponsesInputItem } from "../openai/responsesTypes";
 import { ASK_IMAGE_TOOL_NAME, ASK_WITH_MULTI_IMAGE_TOOL_NAME } from "./types";
 
 /**
@@ -119,6 +120,23 @@ export function toOpenAIVisionToolMessages(entry: VisionToolHistoryEntry): OpenA
             role: "tool",
             tool_call_id: entry.id,
             content: entry.result,
+        },
+    ];
+}
+
+/** Rebuild the standard Responses function call + output pair. */
+export function toResponsesVisionToolItems(entry: VisionToolHistoryEntry): ResponsesInputItem[] {
+    return [
+        {
+            type: "function_call",
+            call_id: entry.id,
+            name: entry.name,
+            arguments: JSON.stringify(entry.args),
+        },
+        {
+            type: "function_call_output",
+            call_id: entry.id,
+            output: entry.result,
         },
     ];
 }

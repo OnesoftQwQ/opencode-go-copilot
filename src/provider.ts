@@ -12,7 +12,7 @@ import {
 
 import * as path from "path";
 
-import type { ModelPreset, OpenCodeGoModelItem } from "./types";
+import type { ApiMode, ModelPreset, OpenCodeGoModelItem } from "./types";
 
 import { createRetryConfig, executeWithRetry, convertToolsToOpenAI } from "./utils";
 import { getCatalogProviderBaseUrl } from "./modelsDev";
@@ -23,6 +23,8 @@ import { l10nFormat } from "./localize";
 import { countMessageTokens, textTokenLength } from "./provideToken";
 import { updateContextStatusBar, recordUsage, updateCumulativeTooltip, updateStatusBarWithApiPrompt } from "./statusBar";
 import { OpenaiApi } from "./openai/openaiApi";
+import { ResponsesApi } from "./openai/responsesApi";
+import type { ResponsesRequestBody } from "./openai/responsesTypes";
 import { AnthropicApi } from "./anthropic/anthropicApi";
 import type { AnthropicRequestBody } from "./anthropic/anthropicTypes";
 import { CommonApi, type StreamUsage } from "./commonApi";
@@ -396,6 +398,73 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     token: token,
                     options: options,
                 });
+            } else if (apiMode === "openai-responses") {
+                // OpenAI Responses API mode
+                const responsesApi = new ResponsesApi(model.id);
+                responsesApi.onUsage = (usage) => {
+                    usageReportedDuringStream = true;
+                    reportNativeUsage(usage, progress);
+                    if (enableThirdPartyIndicator) {
+                        recordUsage(usage);
+                        updateCumulativeTooltip(this.statusBarItem);
+                        updateStatusBarWithApiPrompt(this.statusBarItem);
+                    }
+                };
+                const responsesInput = await responsesApi.convertMessages(messages, modelConfig);
+
+                let requestBody: ResponsesRequestBody = {
+                    model: um?.id ?? model.id,
+                    input: responsesInput,
+                    stream: true,
+                    store: false,
+                };
+                requestBody = responsesApi.prepareRequestBody(requestBody, um, options);
+
+                const url = `${BASE_URL.replace(/\/+$/, "")}/responses`;
+                logger.debug("request.body", { url, requestBody });
+                const response = await executeWithRetry(async () => {
+                    const res = await dispatchFetch(url, {
+                        method: "POST",
+                        headers: requestHeaders,
+                        body: JSON.stringify(requestBody),
+                        signal: abortController.signal,
+                    });
+
+                    if (!res.ok) {
+                        const errorText = await res.text();
+                        console.error("[OpenCodeGo] Responses API error response", errorText);
+                        if (errorText.includes("image is sensitive")) {
+                            throw new Error(`IMAGE_SENSITIVE: ${errorText}`);
+                        }
+                        throw new Error(
+                            `Responses API error: [${res.status}] ${res.statusText}${errorText ? `\n${errorText}` : ""}\nURL: ${url}`
+                        );
+                    }
+
+                    return res;
+                }, retryConfig);
+
+                if (!response.body) {
+                    throw new Error("No response body from Responses API");
+                }
+                await responsesApi.processStreamingResponse(response.body, trackingProgress, token);
+
+                clearTimeout(timeoutId);
+                await this._handleInterceptedToolCall({
+                    api: responsesApi,
+                    apiMode: "openai-responses",
+                    model: model,
+                    um: um,
+                    modelApiKey: modelApiKey,
+                    baseUrl: BASE_URL,
+                    dispatchFetch: dispatchFetch,
+                    requestHeaders: requestHeaders,
+                    retryConfig: retryConfig,
+                    abortController: abortController,
+                    trackingProgress: trackingProgress,
+                    token: token,
+                    options: options,
+                });
             } else {
                 // OpenAI Chat Completions API mode
                 const openaiApi = new OpenaiApi(model.id);
@@ -572,7 +641,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
      */
     private async _handleInterceptedToolCall(params: {
         api: CommonApi<any, any>;
-        apiMode: string;
+        apiMode: ApiMode;
         model: LanguageModelChatInformation;
         um: OpenCodeGoModelItem | undefined;
         modelApiKey: string;
@@ -849,6 +918,49 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
                     if (response.body) {
                         await api.processStreamingResponse(response.body, params.trackingProgress, params.token);
+                    }
+                } else if (params.apiMode === "openai-responses") {
+                    // Responses format: preserve encrypted reasoning items, then append
+                    // the intercepted function call and its local vision result.
+                    const responsesApi = api as ResponsesApi;
+                    currentMessages.push(...responsesApi.takeCapturedReasoningItems());
+                    currentMessages.push({
+                        type: "function_call" as const,
+                        call_id: intercepted.id,
+                        name: intercepted.name,
+                        arguments: JSON.stringify(intercepted.args),
+                    });
+                    currentMessages.push({
+                        type: "function_call_output" as const,
+                        call_id: intercepted.id,
+                        output: description,
+                    });
+
+                    let body: ResponsesRequestBody = {
+                        model: params.um?.id ?? params.model.id,
+                        input: currentMessages,
+                        stream: true,
+                        store: false,
+                    };
+                    body = responsesApi.prepareRequestBody(body, params.um, params.options);
+
+                    const url = `${params.baseUrl.replace(/\/+$/, "")}/responses`;
+                    const response = await executeWithRetry(async () => {
+                        const res = await params.dispatchFetch(url, {
+                            method: "POST",
+                            headers: params.requestHeaders,
+                            body: JSON.stringify(body),
+                            signal: roundAbortController.signal,
+                        });
+                        if (!res.ok) {
+                            const errorText = await res.text();
+                            throw new Error(`Responses API error: [${res.status}] ${res.statusText}${errorText ? `\n${errorText}` : ""}`);
+                        }
+                        return res;
+                    }, params.retryConfig);
+
+                    if (response.body) {
+                        await responsesApi.processStreamingResponse(response.body, params.trackingProgress, params.token);
                     }
                 } else {
                     // OpenAI format: append assistant tool_call + tool result

@@ -24,6 +24,7 @@
 import * as vscode from "vscode";
 import { HARDCODED_CATALOG } from "./hardcodedModelList";
 import { logger } from "./logger";
+import type { ApiMode } from "./types";
 
 const CATALOG_URL = "https://models.dev/catalog.json";
 const CACHE_TTL_MS = 60 * 1000; // 1 minute — dedupes concurrent startup activations
@@ -308,13 +309,48 @@ export function getCatalogProviderModelIds(providerId: string): string[] {
  *
  * - `reasoning: false` or missing → `"always"` (no thinking at all)
  * - `reasoning_options` is empty or missing → `"always"` (thinking always on, no user control)
- * - `reasoning_options` has entries → `"switchable"` (user can toggle)
+ * - `reasoning_options` has entries → `"switchable"` (user can toggle / pick effort)
+ *
+ * Note: whether a model accepts an explicit off switch (`effort: "none"`) on a
+ * given protocol is a separate concern; that capability is exposed through
+ * `inferSupportsDisablingReasoning()` (used by the Responses adapter), so the
+ * generic thinking mode keeps the pre-existing semantics for Chat/Anthropic
+ * protocols (which disable thinking via `thinking: { type: "disabled" }`, not
+ * via an effort value).
  */
 export function inferThinkingMode(entry: ModelsDevEntry): "switchable" | "always" | "adaptive" {
     if (!entry.reasoning) return "always";
     const opts = entry.reasoning_options;
     if (!opts || opts.length === 0) return "always";
     return "switchable";
+}
+
+/**
+ * Whether the catalog declares that the model can accept an explicit off
+ * value for reasoning effort (`"none"` / `"disabled"`).
+ *
+ * - effort list includes `none`/`disabled` → `true`
+ * - toggle-style option (simple on/off) → `true`
+ * - effort list omits a disabled value → `false`
+ * - no reasoning options at all → `false`
+ *
+ * This is used ONLY by the OpenAI Responses protocol adapter: sending
+ * `reasoning.effort: "none"` to a Responses model that does not declare such a
+ * value can be rejected by the endpoint. Chat Completions / Anthropic
+ * protocols disable thinking independently of this (via `thinking` flags).
+ */
+export function inferSupportsDisablingReasoning(entry: ModelsDevEntry): boolean {
+    const opts = entry.reasoning_options;
+    if (!opts || opts.length === 0 || !entry.reasoning) return false;
+    for (const opt of opts) {
+        if (opt.type === "effort" && opt.values?.length) {
+            return opt.values.some((value) => value === "none" || value === "disabled");
+        }
+        if (opt.type === "toggle") {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -480,14 +516,24 @@ export function hasModelDevEntry(apiModelId: string): boolean {
 }
 
 /**
- * Deduce API mode (openai vs anthropic) from a model ID and optional catalog entry.
- * Uses family-based heuristics since the catalog does not directly expose apiMode.
- *
- * Also checks the `provider.npm` field: @ai-sdk/anthropic → anthropic.
+ * Resolve the request protocol from the models.dev adapter package.
+ * The provider-specific model override is selected by the caller before the
+ * provider-wide default. Family heuristics are retained only for legacy or
+ * incomplete catalogs that do not expose a recognized adapter package.
  */
-export function deduceApiModeFromFamily(modelId: string, entry?: ModelsDevEntry): "openai" | "anthropic" {
-    // Check provider npm hint first
-    if (entry?.provider?.npm?.includes("anthropic")) return "anthropic";
+export function deduceApiModeFromCatalog(
+    modelId: string,
+    adapterNpm?: string,
+    entry?: ModelsDevEntry
+): ApiMode {
+    switch (adapterNpm) {
+        case "@ai-sdk/openai":
+            return "openai-responses";
+        case "@ai-sdk/anthropic":
+            return "anthropic";
+        case "@ai-sdk/openai-compatible":
+            return "openai";
+    }
 
     const family = entry?.family?.toLowerCase() ?? "";
     if (family.includes("claude") || family.includes("anthropic")) return "anthropic";
