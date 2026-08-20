@@ -326,8 +326,9 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
 - **支持无限追问**: 模型拿到图片描述后可以继续调用 ask_image 追问细节（最多 `visionMaxRounds` 次，默认 5）
 - **工具共存**: 每轮同时注入 VS Code 原生工具（read_file 等）+ ask_image，模型可混合使用
 - **图片数据生命周期**: 图片存于 API 实例的 `_localImages` 数组，请求结束后随实例 GC 自动回收；历史记录只持久化调用参数、结果和必要的 reasoning_content，不复制原始图片字节
-- **跨轮工具历史**: `historyCodec.ts` 负责序列化/校验及 OpenAI/Anthropic 标准消息重建，`historyPart.ts` 负责 VS Code DataPart 的创建与解析；旧 history DataPart 在新请求中被消费，不会再次输出造成重复
+- **跨轮工具历史**: `historyCodec.ts` 负责序列化/校验及 OpenAI Chat、OpenAI Responses、Anthropic 三种标准消息重建，`historyPart.ts` 负责 VS Code DataPart 的创建与解析；旧 history DataPart 在新请求中被消费，不会再次输出造成重复
 - **OpenAI 模式**: 使用 `tool_calls` + `tool` role 消息格式构建每轮
+- **OpenAI Responses 模式**: 使用 `function_call` + `function_call_output` input items 构建每轮，并以私有 DataPart 保存 `reasoning.encrypted_content`，支持 `store:false` 的无状态多轮请求
 - **Anthropic 模式**: 使用 `tool_use` + `tool_result` content block 格式构建每轮
 - **参数保留**: 每轮保留 temperature、top_p、thinking 模式等原始参数
 - **DeepSeek 兼容**: 对 DeepSeek 模型的 assistant tool_call 消息注入 reasoning_content 字段
@@ -385,7 +386,10 @@ src/
 ├── versionManager.ts                     # 版本信息管理
 ├── openai/
 │   ├── openaiApi.ts                      # OpenAI 兼容 API 实现
-│   └── openaiTypes.ts                    # OpenAI 类型定义
+│   ├── openaiTypes.ts                    # OpenAI 类型定义
+│   ├── responsesApi.ts                   # OpenAI Responses API 实现
+│   ├── responsesState.ts                 # Responses 加密推理状态 DataPart 编解码
+│   └── responsesTypes.ts                 # OpenAI Responses 类型定义
 ├── anthropic/
 │   ├── anthropicApi.ts                   # Anthropic API 实现
 │   └── anthropicTypes.ts                 # Anthropic 类型定义
@@ -434,6 +438,7 @@ src/
 | `openai/openaiApi.ts`                 | ~613 | OpenAI 格式 API 实现 (消息转换/请求构建/流式处理/图片代理)                                                                                                                                             |
 | `openai/openaiTypes.ts`               | ~75  | OpenAI 类型定义                                                                                                                                                                                        |
 | `openai/responsesApi.ts`              | ~410 | OpenAI Responses 格式 API 实现：typed input Items、扁平工具定义、请求参数映射、Responses SSE 文本/推理/工具/usage 解析                                                                                   |
+| `openai/responsesState.ts`            | ~70  | 校验并编解码 `reasoning.encrypted_content` 私有 DataPart，使 `store:false` 的 Responses 推理模型可在后续请求中无状态续传                                                                               |
 | `openai/responsesTypes.ts`            | ~125 | OpenAI Responses 请求、输入 Item、工具、usage 与流事件类型定义                                                                                                                                         |
 | `anthropic/anthropicApi.ts`           | ~535 | Anthropic 格式 API 实现 (消息转换/请求构建/流式处理/图片代理)                                                                                                                                          |
 | `anthropic/anthropicTypes.ts`         | ~130 | Anthropic 类型定义                                                                                                                                                                                     |
@@ -442,7 +447,7 @@ src/
 | `tokenizer/tokenizerManager.ts`       | ~115 | o200k_base 分词器管理 (含 LRU 缓存)                                                                                                                                                                    |
 | `tokenizer/imageUtils.ts`             | ~130 | 图片尺寸解析 (PNG/GIF/JPEG/WebP)                                                                                                                                                                       |
 | `vision/types.ts`                     | ~53  | Vision proxy 类型定义（`StoredImage`, `InterceptedToolCall`, `ASK_IMAGE_TOOL_DEF`, `ASK_IMAGE_TOOL_NAME`, `ASK_WITH_MULTI_IMAGE_TOOL_DEF`, `ASK_WITH_MULTI_IMAGE_TOOL_NAME`, `DEFAULT_VISION_PROMPT`） |
-| `vision/historyCodec.ts`              | ~150 | 视觉工具历史 DataPart 的 MIME、数据校验/编解码，以及 OpenAI/Anthropic 标准 tool call + tool result 消息重建；由 `scripts/test-vision-history.mjs` 做编解码和双 API 转换器顺序闭环测试（含无推理工具调用回合必须回传空 `reasoning_content` 的 DeepSeek 回归用例） |
+| `vision/historyCodec.ts`              | ~170 | 视觉工具历史 DataPart 的 MIME、数据校验/编解码，以及 OpenAI Chat、OpenAI Responses、Anthropic 标准工具调用/结果重建；由 `scripts/test-vision-history.mjs` 做编解码和三 API 转换器顺序闭环测试（含无推理工具调用回合必须回传空 `reasoning_content` 的 DeepSeek 回归用例） |
 | `vision/historyPart.ts`               | ~28  | 创建和解析 `application/vnd.opencodego.vision-tool-history+json` DataPart；测试脚本使用 VS Code 最小运行时桩验证下一轮消息转换                                                                         |
 | `vision/imageProxy.ts`                | ~95  | 图片代理核心：调用视觉模型描述图片（`callVisionModel`/`callVisionModelMulti`），支持 thinking 模式配置和文本流式转发                                                                                   |
 
@@ -494,17 +499,18 @@ src/
 
 #### `provideLanguageModelChatResponse(model, messages, options, progress, token): Promise<void>`
 
-核心方法：处理聊天请求，流式返回响应。包括模型配置获取（统一 `getCatalogModelConfig`，按 `-free` 后缀 + 硬编码集合自动分流 Zen/Go）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理、API 路由、流式解析、图片代理拦截处理和错误处理。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。模型配置通过 `{ ...um }` 浅拷贝后再修改 thinking/temperature，防止并发会话间互相泄漏设置。
+核心方法：处理聊天请求，流式返回响应。包括模型配置获取（统一 `getCatalogModelConfig`，按 `-free` 后缀 + 硬编码集合自动分流 Zen/Go）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理，以及按 `apiMode` 精确路由到 `/chat/completions`、`/responses`、`/v1/messages`。三种协议分别由 `OpenaiApi`、`ResponsesApi`、`AnthropicApi` 转换请求和解析流，之后统一处理图片代理拦截与错误。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。模型配置通过 `{ ...um }` 浅拷贝后再修改 thinking/temperature，防止并发会话间互相泄漏设置。
 
 #### `private async _handleInterceptedToolCall(params): Promise<void>`
 
-处理图片代理拦截。循环处理最多 `opencodego.visionMaxRounds` 轮（默认 5）。每轮检测 API 实例的 `interceptedToolCall`，发出 thinking 块显示“正在根据图片提问：[问题]”，关闭 thinking 块后视觉模型输出以普通文本流式显示，并立即输出一个 `application/vnd.opencodego.vision-tool-history+json` DataPart 保存调用 ID、参数、视觉结果和 OpenAI 模式所需的 `reasoning_content`。单图调用 `callVisionModel()`，多图调用 `callVisionModelMulti()`，构建本轮 API 请求（追加 assistant tool_call + tool result），注入 VS Code 原生工具 + ask_image（+ ask_with_multi_image 当 >=2 图时）供模型继续使用，保留 temperature/reasoning_effort 等原始参数，DeepSeek 兼容注入 `reasoning_content`。模型不再调用 ask_image/ask_with_multi_image 时退出循环。
+处理图片代理拦截。循环处理最多 `opencodego.visionMaxRounds` 轮（默认 5）。每轮检测 API 实例的 `interceptedToolCall`，发出 thinking 块显示“正在根据图片提问：[问题]”，关闭 thinking 块后视觉模型输出以普通文本流式显示，并立即输出一个 `application/vnd.opencodego.vision-tool-history+json` DataPart 保存调用 ID、参数、视觉结果和 OpenAI Chat 模式所需的 `reasoning_content`。单图调用 `callVisionModel()`，多图调用 `callVisionModelMulti()`，按当前协议追加工具调用与结果，注入 VS Code 原生工具 + ask_image（+ ask_with_multi_image 当 >=2 图时）供模型继续使用，保留 temperature/reasoning_effort 等原始参数；Responses 模式额外续传本轮捕获的 encrypted reasoning item。模型不再调用 ask_image/ask_with_multi_image 时退出循环。
 
 - 视觉模型调用期间用户取消则跳过本轮。
 - 每轮创建独立 AbortController，带独立超时。
 - 每轮注入 VS Code 原生工具 + ask_image + ask_with_multi_image，确保模型可以混合使用。
 - Anthropic 模式额外恢复 `system` 内容（`_systemContent`）和 `thinking` 参数。
 - 第二轮及后续轮次请求体中显式设置 `tool_choice` 为 `"auto"`（OpenAI）或 `{ type: "auto" }`（Anthropic），确保模型可继续调用工具。
+- Responses 模式的第二轮及后续请求继续使用 `store:false`、`/responses` 与扁平工具定义，并在 function call 前放回上一轮 encrypted reasoning item。
 - 使用 `_resetStreamState()` 重置流状态，避免 `_completedToolCallIndices` 等状态在轮次间残留导致工具调用被跳过。
 - `thinking` 字段值统一使用字符串（`"enabled"` / `"disabled"`），与 `prepareRequestBody` 保持一致。
 
@@ -807,7 +813,7 @@ API 实现的抽象基类。
 
 #### `countMessageTokens(text, modelConfig): Promise<number>`
 
-计算消息的总 Token 数。支持 `LanguageModelTextPart`、`LanguageModelDataPart`（图片/二进制）、`LanguageModelToolCallPart`、`LanguageModelToolResultPart`、`LanguageModelThinkingPart`。
+计算消息的总 Token 数。支持 `LanguageModelTextPart`、`LanguageModelDataPart`（图片/二进制）、`LanguageModelToolCallPart`、`LanguageModelToolResultPart`、`LanguageModelThinkingPart`；视觉历史和 Responses encrypted reasoning 两种私有 DataPart 只承担协议回放状态，不按普通二进制重复估算。
 
 #### `textTokenLength(text): Promise<number>`
 
@@ -960,6 +966,10 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 #### `toOpenAIVisionToolMessages(entry): OpenAIChatMessage[]`
 
 重建 OpenAI 标准 `assistant.tool_calls` + `tool` 消息，保留 DeepSeek 需要的 `reasoning_content`。
+
+#### `toResponsesVisionToolItems(entry): ResponsesInputItem[]`
+
+重建 OpenAI Responses 标准 `function_call` + `function_call_output` input items。
 
 #### `toAnthropicVisionToolMessages(entry): AnthropicMessage[]`
 
@@ -1209,13 +1219,21 @@ API 返回用量数据后重渲染状态栏（主文本 = Go 用量，tooltip = 
 
 #### `class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequestBody>`
 
-独立的 OpenAI Responses 协议适配器。`convertMessages()` 将 VS Code 文本、图片、工具调用与工具结果转换为 typed input Items；工具结果图片使用 `function_call_output.output` 的 `input_text`/`input_image` 数组。`prepareRequestBody()` 映射 `max_output_tokens`、`reasoning`、`include`、扁平 function tools（`strict:false`）及协议专属 extra 保留键。
+独立的 OpenAI Responses 协议适配器。`convertMessages()` 将 VS Code 文本、图片、工具调用与工具结果转换为 typed input Items；工具结果图片使用 `function_call_output.output` 的 `input_text`/`input_image` 数组，并还原视觉历史及 encrypted reasoning 私有 DataPart。`prepareRequestBody()` 映射 `max_output_tokens`、`reasoning`、`include`、扁平 function tools（`strict:false`）及协议专属 extra 保留键。
 
 #### `processStreamingResponse(responseBody, progress, token): Promise<void>`
 
-解析 Responses SSE 类型事件：文本 delta、推理 delta、function call item/arguments、completed/incomplete/failed/error 与 usage。工具以 `output_index` 复用 `CommonApi` 缓冲和 `LanguageModelToolCallPart` 发射逻辑；terminal failure 直接抛错而不是吞掉。由 `scripts/test-responses-api.mjs` 验证消息/图片/工具转换、请求体、跨 chunk SSE、工具单次发射和 usage 映射。
+解析 Responses SSE 类型事件：文本 delta、推理 delta、function call item/arguments、completed/incomplete/failed/error 与 usage。工具以 `output_index` 复用 `CommonApi` 缓冲和 `LanguageModelToolCallPart` 发射逻辑；完整 reasoning item 会被捕获并输出为 `application/vnd.opencodego.responses-reasoning+json` DataPart，供当前图片代理下一轮和未来会话轮次无状态续传；terminal failure 直接抛错而不是吞掉。由 `scripts/test-responses-api.mjs` 验证消息/图片/工具转换、请求体、跨 chunk SSE、工具单次发射、usage 映射与 encrypted reasoning 回放。
 
-### 4.14c `src/openai/responsesTypes.ts`
+#### `takeCapturedReasoningItems(): ResponsesInputItem[]`
+
+取出并清空最近一轮 Responses 流中捕获的 encrypted reasoning items，供 provider 在同一次图片代理循环的下一轮请求中放回。
+
+### 4.14c `src/openai/responsesState.ts`
+
+校验 Responses reasoning output item 的 `id`、`summary` 与 `encrypted_content`，并用专用 VS Code DataPart MIME 编解码，使 `store:false` 请求不依赖服务端保存响应状态。
+
+### 4.14d `src/openai/responsesTypes.ts`
 
 声明 Responses 的输入文本/图片、助手输出、reasoning、`function_call`、`function_call_output`、扁平工具、请求体、usage 与流事件类型。
 

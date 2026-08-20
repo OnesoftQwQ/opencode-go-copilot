@@ -8,7 +8,7 @@ import {
     Progress,
     CancellationToken,
 } from "vscode";
-import { OpenCodeGoModelItem } from "./types";
+import type { ApiMode, OpenCodeGoModelItem } from "./types";
 import { tryParseJSONObject } from "./utils";
 import { VersionManager } from "./versionManager";
 import type { InterceptedToolCall, StoredImage } from "./vision/types";
@@ -432,7 +432,7 @@ export abstract class CommonApi<TMessage, TRequestBody> {
      */
     public static prepareHeaders(
         apiKey: string,
-        apiMode: string,
+        apiMode: ApiMode,
         customHeaders?: Record<string, string>
     ): Record<string, string> {
         // Internal override for testing or contingency (e.g. if the API ever gates access by User-Agent again).

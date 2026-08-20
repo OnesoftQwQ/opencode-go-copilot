@@ -25,7 +25,14 @@ import {
 import { logger } from "../logger";
 import type { StoredImage } from "../vision/types";
 import { ASK_IMAGE_TOOL_DEF, ASK_WITH_MULTI_IMAGE_TOOL_DEF } from "../vision/types";
+import { parseVisionToolHistoryPart } from "../vision/historyPart";
+import { toResponsesVisionToolItems } from "../vision/historyCodec";
 import type { OpenAIFunctionToolDef } from "./openaiTypes";
+import {
+    createResponsesReasoningPart,
+    normalizeResponsesReasoningItem,
+    parseResponsesReasoningPart,
+} from "./responsesState";
 import type {
     ResponsesFunctionCallItem,
     ResponsesFunctionCallOutputItem,
@@ -43,9 +50,17 @@ const imageDirective = (imageIndex: number): string =>
 /** OpenAI Responses protocol adapter. */
 export class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequestBody> {
     private _hasImages = false;
+    private _capturedReasoningItems: ResponsesInputItem[] = [];
 
     constructor(modelId: string) {
         super(modelId);
+    }
+
+    /** Return and clear reasoning items captured in the latest streaming round. */
+    takeCapturedReasoningItems(): ResponsesInputItem[] {
+        const items = this._capturedReasoningItems;
+        this._capturedReasoningItems = [];
+        return items;
     }
 
     /** Convert VS Code request messages into Responses input items. */
@@ -91,9 +106,16 @@ export class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequest
             const imageParts: vscode.LanguageModelDataPart[] = [];
             const toolCalls: ResponsesFunctionCallItem[] = [];
             const toolResults: ResponsesFunctionCallOutputItem[] = [];
+            const internalItems: ResponsesInputItem[] = [];
 
             for (const part of message.content ?? []) {
-                if (part instanceof vscode.LanguageModelTextPart) {
+                const reasoningItem = parseResponsesReasoningPart(part);
+                const visionHistory = parseVisionToolHistoryPart(part);
+                if (reasoningItem) {
+                    internalItems.push(reasoningItem);
+                } else if (visionHistory) {
+                    internalItems.push(...toResponsesVisionToolItems(visionHistory));
+                } else if (part instanceof vscode.LanguageModelTextPart) {
                     if (modelSupportsVision) {
                         textParts.push(part.value);
                     } else {
@@ -170,6 +192,7 @@ export class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequest
             const joinedText = textParts.join("").trim();
 
             if (role === "assistant") {
+                out.push(...internalItems);
                 if (joinedText) {
                     out.push({ role: "assistant", content: [{ type: "output_text", text: joinedText }] });
                 }
@@ -327,6 +350,13 @@ export class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequest
                     this._toolCallBuffers.set(index, buffer);
                     await this.tryEmitBufferedToolCall(index, progress);
                 } else if (event.item?.type === "reasoning") {
+                    const item = normalizeResponsesReasoningItem(event.item);
+                    if (item) {
+                        this._capturedReasoningItems.push(item);
+                        progress.report(
+                            createResponsesReasoningPart(item) as unknown as LanguageModelResponsePart
+                        );
+                    }
                     this.reportEndThinking(progress);
                 }
                 return false;
@@ -359,6 +389,7 @@ export class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequest
         const modelId = this._modelId;
         logger.debug("responses.stream.start", { modelId });
         this._resetStreamState();
+        this._capturedReasoningItems = [];
 
         const reader = responseBody.getReader();
         const decoder = new TextDecoder();

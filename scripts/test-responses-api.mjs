@@ -76,6 +76,7 @@ try {
     const { logger } = require("../out/logger.js");
     logger.init();
     const { ResponsesApi } = require("../out/openai/responsesApi.js");
+    const { RESPONSES_REASONING_MIME } = require("../out/openai/responsesState.js");
 
     const api = new ResponsesApi("gpt-5.6-luna");
     const messages = [
@@ -157,6 +158,16 @@ try {
                 item: { type: "function_call", id: "item_1", call_id: "call_1", name: "read_file", arguments: "{\"filePath\":\"/tmp/a\"}" },
             },
             {
+                type: "response.output_item.done",
+                output_index: 0,
+                item: {
+                    type: "reasoning",
+                    id: "rs_1",
+                    summary: [{ type: "summary_text", text: "Checking" }],
+                    encrypted_content: "encrypted-reasoning-state",
+                },
+            },
+            {
                 type: "response.completed",
                 response: {
                     usage: { input_tokens: 10, output_tokens: 4, input_tokens_details: { cached_tokens: 3 } },
@@ -180,6 +191,37 @@ try {
         cacheHitTokens: 3,
         cacheMissTokens: 7,
     });
+
+    const reasoningParts = streamed.filter(
+        (part) => part instanceof DataPart && part.mimeType === RESPONSES_REASONING_MIME,
+    );
+    assert.equal(reasoningParts.length, 1, "encrypted reasoning state must be emitted exactly once");
+    assert.deepEqual(api.takeCapturedReasoningItems(), [
+        {
+            type: "reasoning",
+            id: "rs_1",
+            summary: [{ type: "summary_text", text: "Checking" }],
+            encrypted_content: "encrypted-reasoning-state",
+        },
+    ]);
+    assert.deepEqual(api.takeCapturedReasoningItems(), [], "captured reasoning state must be drained");
+
+    const replayed = await new ResponsesApi("gpt-5.6-luna").convertMessages(
+        [
+            { role: 2, content: [reasoningParts[0], new TextPart("Prior answer")] },
+            { role: 1, content: [new TextPart("Continue")] },
+        ],
+        { includeReasoningInRequest: true, vision: false },
+    );
+    assert.deepEqual(replayed.slice(0, 2), [
+        {
+            type: "reasoning",
+            id: "rs_1",
+            summary: [{ type: "summary_text", text: "Checking" }],
+            encrypted_content: "encrypted-reasoning-state",
+        },
+        { role: "assistant", content: [{ type: "output_text", text: "Prior answer" }] },
+    ]);
 
     console.log("responses api: ok");
 } finally {
