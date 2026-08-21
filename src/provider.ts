@@ -18,7 +18,12 @@ import { createRetryConfig, executeWithRetry, convertToolsToOpenAI } from "./uti
 import { getCatalogProviderBaseUrl } from "./modelsDev";
 
 import { prepareLanguageModelChatInformation } from "./provideModel";
-import { getCatalogModelConfig, resolveProviderForModelId, resolveVisionProxyModelId } from "./catalogModels";
+import {
+    applyReasoningEffortSelection,
+    getCatalogModelConfig,
+    resolveProviderForModelId,
+    resolveVisionProxyModelId,
+} from "./catalogModels";
 import { l10nFormat } from "./localize";
 import { countMessageTokens, textTokenLength } from "./provideToken";
 import { updateContextStatusBar, recordUsage, updateCumulativeTooltip, updateStatusBarWithApiPrompt } from "./statusBar";
@@ -179,25 +184,11 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
             // Apply reasoning effort from model configuration to determine thinking mode
             // - "disabled" → turn off thinking (unless model has thinkingMode="always")
+            // - "default" → enable thinking but let the provider choose its effort
             // - "enabled" → turn on thinking with default effort
             // - "high"/"max" → turn on thinking with specified effort
             if (um) {
-                const effort = getRequestedReasoningEffort(options);
-                if (effort) {
-                    if (effort === "disabled") {
-                        if (um.thinkingMode !== "always") {
-                            um.enable_thinking = false;
-                            um.include_reasoning_in_request = false;
-                            um.reasoning_effort = undefined;
-                        }
-                    } else {
-                        um.enable_thinking = true;
-                        um.include_reasoning_in_request = true;
-                        if (effort !== "enabled") {
-                            um.reasoning_effort = effort;
-                        }
-                    }
-                }
+                applyReasoningEffortSelection(um, getRequestedReasoningEffort(options));
             }
 
             // Inject temperature & top_p from model preset or custom settings

@@ -50,6 +50,7 @@ const zhCN: Record<string, string> = {
 		"服务端连接被关闭，生成内容过长时间过长。请重试或请求较短的内容。",
 
 	// reasoning effort labels (keys are English fallback text)
+	"Default": "默认",
 	"Disabled": "禁用思考",
 	"Adaptive": "自动",
 	"Thinking": "思考",
@@ -60,6 +61,7 @@ const zhCN: Record<string, string> = {
 	"Maximum": "最高",
 
 	// reasoning effort descriptions (keys are English fallback text)
+	"Use the model's default reasoning effort": "使用模型服务端的默认推理强度",
 	"Do not enable thinking": "不启用思考",
 	"Automatically decide when to think": "自动决定何时思考",
 	"Enable thinking": "启用思考",

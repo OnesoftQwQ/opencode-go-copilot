@@ -370,11 +370,13 @@ export function inferReasoningEfforts(entry: ModelsDevEntry): string[] | undefin
 
 /**
  * Infer the default reasoning effort from a catalog model entry.
- * Returns the last (highest) effort value, or "enabled" if no effort values.
+ * Effort-style models default to the provider's own reasoning level instead
+ * of forcing the last (highest) advertised variant. Models without explicit
+ * effort values keep the existing generic "enabled" behaviour.
  */
 export function inferDefaultReasoningEffort(entry: ModelsDevEntry): string {
     const efforts = inferReasoningEfforts(entry);
-    if (efforts && efforts.length > 0) return efforts[efforts.length - 1];
+    if (efforts && efforts.length > 0) return "default";
     return "enabled";
 }
 

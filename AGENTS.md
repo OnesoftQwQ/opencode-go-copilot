@@ -75,8 +75,8 @@ models.dev 目录通过 `reasoning_options` 字段提供每个模型的思考能
 
 | 目录数据 | 推导结果 | 示例 |
 | -------- | -------- | ---- |
-| `{"type":"effort","values":["high","max"]}` | `switchable`，强度档 `高/极高`（含 `禁用思考`） | deepseek-v4-*、glm-5.2、kimi-k3 (`["max"]`) |
-| `{"type":"effort","values":[...,"none",...]}` | `switchable`，`none` 映射为 `禁用思考` 档 | gpt-5.6-luna（6 档）、hy3 |
+| `{"type":"effort","values":["high","max"]}` | `switchable`，强度档含 `默认/禁用思考/高/最高`；通用默认值为 `默认`（不发送 effort） | deepseek-v4-*、glm-5.2、kimi-k3 (`["max"]`) |
+| `{"type":"effort","values":[...,"none",...]}` | `switchable`，`none` 映射为 `禁用思考` 档，另保留服务端 `默认` 档 | gpt-5.6-luna（6 档）、hy3 |
 | `{"type":"toggle"}` | `switchable`，仅 `禁用思考/思考` | qwen3.x、minimax-m3 |
 | `reasoning=true` 且 `reasoning_options=[]` | `always`（思考常开，无开关） | glm-5/5.1、kimi-k2.x、mimo 系列 |
 | `{"type":"budget_tokens","max":N}` | `thinking_budget`（OpenAI 模式请求体 `budget_tokens`） | qwen3.5/3.6 (81920)、qwen3.7/3.8 (262144) |
@@ -158,6 +158,7 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   │
   ├── 2. 应用用户配置的 reasoningEffort
   │       ├── "disabled" → 关闭思考（always 模型除外）
+  │       ├── "default" → 开启思考但不发送 effort，使用服务端原生默认强度
   │       ├── "adaptive" → 开启思考，自动模式（发送 thinking: { type: "adaptive" }）
   │       ├── "enabled" → 开启思考，使用默认推理力度
   │       ├── "high"/"max" → 开启思考，指定推理力度
@@ -433,7 +434,7 @@ src/
 | `utils.ts`                            | ~490 | 工具函数（重试、角色映射、OpenAI Chat/Responses 工具格式转换等）                                                                                                                                       |
 | `statusBar.ts`                        | ~317 | 状态栏创建、更新、累计计数器、Go 用量轮询与 tooltip 区块渲染                                                                                                                                           |
 | `logger.ts`                           | ~55  | 日志输出 (LogOutputChannel)                                                                                                                                                                            |
-| `localize.ts`                         | ~109 | 中英文国际化（含 `low/medium/high/xhigh/max` 思考强度标签）                                                                                                                                            |
+| `localize.ts`                         | ~111 | 中英文国际化（含 `default/low/medium/high/xhigh/max` 思考强度标签）                                                                                                                                    |
 | `versionManager.ts`                   | ~35  | 扩展版本信息（使用正确扩展 ID `OnesoftQwQ.opencode-go-copilot-provider`）                                                                                                                              |
 | `openai/openaiApi.ts`                 | ~613 | OpenAI 格式 API 实现 (消息转换/请求构建/流式处理/图片代理)                                                                                                                                             |
 | `openai/openaiTypes.ts`               | ~75  | OpenAI 类型定义                                                                                                                                                                                        |
@@ -544,11 +545,15 @@ src/
 
 #### `buildCatalogModelInfo(providerId, modelId): LanguageModelChatInformation`
 
-构建模型选择器条目。Zen 模型名前缀 `[Zen]`，deprecated 模型前缀 `[Depr]`。推理强度枚举由 `buildReasoningEnum()` 生成：`disabled` 档在前、`none`/`disabled` effort 值归一为 `禁用思考` 档（已由 `resolveFromCatalog` 过滤，避免重复档）；`defaultReasoningEffort` 不在枚举内时回退到最高档（如 adaptive 模型的 `enabled` → `adaptive`）。当模型为 Responses 原生协议且未声明关闭档位（`supportsDisablingReasoning=false`）时不注入 `disabled` 档，避免用户选择无效的禁用项。
+构建模型选择器条目。Zen 模型名前缀 `[Zen]`，deprecated 模型前缀 `[Depr]`。推理强度枚举由 `buildReasoningEnum()` 生成：effort 型模型先注入 `default`（服务端原生默认）档，再按协议能力注入 `disabled`，最后追加目录声明的真实强度；`none`/`disabled` effort 值归一为 `禁用思考` 档（已由 `resolveFromCatalog` 过滤，避免重复档）。`defaultReasoningEffort` 不在枚举内时回退到末档（如 adaptive 模型的 `enabled` → `adaptive`）。当模型为 Responses 原生协议且未声明关闭档位（`supportsDisablingReasoning=false`）时不注入 `disabled` 档，避免用户选择无效的禁用项；`default` 始终可选。GLM-5.2 通过覆盖表继续以 `high` 为选择器默认值。
 
 #### `getCatalogModelConfig(modelId): OpenCodeGoModelItem`
 
-构建请求配置（provider.ts 与 Git 提交生成共用）。含 `baseUrl`（取自服务商 `api` 字段）、`thinking_budget`（`budget_tokens` 的 max）、`reasoning_effort`（仅真实强度档，`enabled`/`adaptive` 不发送）、`extra`（仅覆盖表）。
+构建请求配置（provider.ts 与 Git 提交生成共用）。含 `baseUrl`（取自服务商 `api` 字段）、`thinking_budget`（`budget_tokens` 的 max）、`reasoning_effort`（仅真实强度档；`default`/`enabled`/`adaptive` 不发送）、`extra`（仅覆盖表）。用户在选择器中显式选择 `default` 时，provider 还会清除覆盖表可能预设的 effort，使请求真正回到服务端默认。
+
+#### `applyReasoningEffortSelection(config, effort): void`
+
+将模型选择器的推理档应用到已解析请求配置：`disabled` 在非 always 模型上关闭思考，`default` 开启思考并清除预设 effort，`enabled` 保留基础配置，其余真实档位直接写入 `reasoning_effort`。provider 通过此纯函数统一处理选择器值，测试可直接验证 GLM-5.2 从 `high` 切换到 `default` 后确实省略 effort。
 
 ### 4.3b `src/modelOverrides.ts`
 
@@ -770,7 +775,7 @@ API 实现的抽象基类。
 
 #### `inferThinkingMode(entry) / inferSupportsDisablingReasoning(entry) / inferReasoningEfforts(entry) / inferDefaultReasoningEffort(entry) / inferVision(entry) / inferThinkingBudget(entry)`
 
-从目录条目推断：思考模式（`reasoning_options` 非空 → switchable，空但 `reasoning=true` → always；与 Chat/Anthropic 协议关闭思考的方式 `thinking` 标志解耦）、思考强度列表（`effort` 类型 values）、默认强度（最高档）、视觉能力（`attachment`/`modalities`）、思考预算（`budget_tokens` 的 min/max）。`inferSupportsDisablingReasoning()` 判断目录是否声明 `none`/`disabled` effort 档（或 toggle 型开关），**仅**由 Responses 协议适配器用于决定是否发送 `reasoning.effort="none"`：未声明关闭档位的 Responses 模型不发该值，避免端点拒绝；Chat/Anthropic 协议不受影响。
+从目录条目推断：思考模式（`reasoning_options` 非空 → switchable，空但 `reasoning=true` → always；与 Chat/Anthropic 协议关闭思考的方式 `thinking` 标志解耦）、思考强度列表（`effort` 类型 values）、默认强度（effort 型返回 `default` 并省略请求 effort；无显式 effort 时返回 `enabled`）、视觉能力（`attachment`/`modalities`）、思考预算（`budget_tokens` 的 min/max）。这样 hy3、Muse 等模型不会在每次工具调用前自动使用 `high`/`xhigh`；需要历史默认的模型可由 `MODEL_OVERRIDES` 指定真实档位（当前 GLM-5.2 为 `high`）。`inferSupportsDisablingReasoning()` 判断目录是否声明 `none`/`disabled` effort 档（或 toggle 型开关），**仅**由 Responses 协议适配器用于决定是否发送 `reasoning.effort="none"`：未声明关闭档位的 Responses 模型不发该值，避免端点拒绝；Chat/Anthropic 协议不受影响。`scripts/test-api-mode.mjs` 同时验证 hy3/Muse 的 `default` 枚举与空请求 effort、GLM 覆盖兼容；`scripts/test-eager-tool-streaming.mjs` 验证两种 OpenAI 协议的默认/显式 effort 请求体。
 
 #### `clearModelsDevCache(): void`
 

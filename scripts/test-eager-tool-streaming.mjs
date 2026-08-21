@@ -130,6 +130,43 @@ try {
     const { OpenaiApi } = require("../out/openai/openaiApi.js");
     const { ResponsesApi } = require("../out/openai/responsesApi.js");
 
+    const hyDefaultBody = new OpenaiApi("hy3").prepareRequestBody(
+        { model: "hy3", messages: [], stream: true },
+        { id: "hy3", owned_by: "opencode", enable_thinking: true },
+    );
+    assert.equal("reasoning_effort" in hyDefaultBody, false);
+    assert.deepEqual(hyDefaultBody.thinking, { type: "enabled" });
+
+    const hyHighBody = new OpenaiApi("hy3").prepareRequestBody(
+        { model: "hy3", messages: [], stream: true },
+        { id: "hy3", owned_by: "opencode", enable_thinking: true, reasoning_effort: "high" },
+    );
+    assert.equal(hyHighBody.reasoning_effort, "high");
+
+    const museDefaultBody = new ResponsesApi("muse-spark-1.2-contributor").prepareRequestBody(
+        { model: "muse-spark-1.2-contributor", input: [], stream: true, store: false },
+        {
+            id: "muse-spark-1.2-contributor",
+            owned_by: "opencode",
+            supportsReasoning: true,
+            enable_thinking: true,
+        },
+    );
+    assert.deepEqual(museDefaultBody.reasoning, { summary: "auto" });
+    assert.equal("effort" in museDefaultBody.reasoning, false);
+
+    const museExtraHighBody = new ResponsesApi("muse-spark-1.2-contributor").prepareRequestBody(
+        { model: "muse-spark-1.2-contributor", input: [], stream: true, store: false },
+        {
+            id: "muse-spark-1.2-contributor",
+            owned_by: "opencode",
+            supportsReasoning: true,
+            enable_thinking: true,
+            reasoning_effort: "xhigh",
+        },
+    );
+    assert.deepEqual(museExtraHighBody.reasoning, { effort: "xhigh", summary: "auto" });
+
     {
         const controlled = createControlledSseStream();
         const parts = [];

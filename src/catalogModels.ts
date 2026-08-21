@@ -187,12 +187,13 @@ function buildReasoningEnum(meta: ModelMeta): {
         meta.apiMode !== "openai-responses" || meta.supportsDisablingReasoning !== false;
     let enumValues: string[];
     if (hasEfforts) {
+        const effortValues = ["default", ...meta.supportedReasoningEfforts];
         if (meta.thinkingMode === "switchable") {
             enumValues = canShowDisabled
-                ? ["disabled", ...meta.supportedReasoningEfforts]
-                : [...meta.supportedReasoningEfforts];
+                ? ["default", "disabled", ...meta.supportedReasoningEfforts]
+                : effortValues;
         } else {
-            enumValues = [...meta.supportedReasoningEfforts];
+            enumValues = effortValues;
         }
     } else {
         if (meta.thinkingMode === "switchable") {
@@ -212,6 +213,7 @@ function buildReasoningEnum(meta: ModelMeta): {
 
     const getLabel = (e: string): string => {
         switch (e) {
+            case 'default': return l10n("Default");
             case 'disabled': return l10n("Disabled");
             case 'adaptive': return l10n("Adaptive");
             case 'enabled': return l10n("Thinking");
@@ -225,6 +227,7 @@ function buildReasoningEnum(meta: ModelMeta): {
     };
     const getDesc = (e: string): string => {
         switch (e) {
+            case 'default': return l10n("Use the model's default reasoning effort");
             case 'disabled': return l10n("Do not enable thinking");
             case 'adaptive': return l10n("Automatically decide when to think");
             case 'enabled': return l10n("Enable thinking");
@@ -374,9 +377,15 @@ export function getCatalogModelConfig(modelId: string): OpenCodeGoModelItem {
         cost: meta.cost,
     };
 
-    // Only send an explicit effort when it is a real effort value
-    // ("enabled"/"adaptive" are handled via the thinking flags instead).
-    if (meta.defaultReasoningEffort && meta.defaultReasoningEffort !== "enabled" && meta.defaultReasoningEffort !== "adaptive") {
+    // Only send an explicit effort when it is a real effort value. "default"
+    // deliberately defers to the provider; "enabled"/"adaptive" are handled
+    // via the thinking flags instead.
+    if (
+        meta.defaultReasoningEffort &&
+        meta.defaultReasoningEffort !== "default" &&
+        meta.defaultReasoningEffort !== "enabled" &&
+        meta.defaultReasoningEffort !== "adaptive"
+    ) {
         config.reasoning_effort = meta.defaultReasoningEffort;
     }
     if (meta.thinkingBudget?.max !== undefined) {
@@ -387,4 +396,31 @@ export function getCatalogModelConfig(modelId: string): OpenCodeGoModelItem {
     }
 
     return config;
+}
+
+/** Apply a reasoning-effort picker value to a resolved request config. */
+export function applyReasoningEffortSelection(
+    config: OpenCodeGoModelItem,
+    effort: string | undefined
+): void {
+    if (!effort) return;
+
+    if (effort === "disabled") {
+        if (config.thinkingMode !== "always") {
+            config.enable_thinking = false;
+            config.include_reasoning_in_request = false;
+            config.reasoning_effort = undefined;
+        }
+        return;
+    }
+
+    config.enable_thinking = true;
+    config.include_reasoning_in_request = true;
+    if (effort === "default") {
+        // Clear catalog/override defaults (for example GLM-5.2 defaults to
+        // high) when the user explicitly asks for provider-native behaviour.
+        config.reasoning_effort = undefined;
+    } else if (effort !== "enabled") {
+        config.reasoning_effort = effort;
+    }
 }

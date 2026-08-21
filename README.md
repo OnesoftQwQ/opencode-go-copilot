@@ -96,7 +96,7 @@ Available in `settings.json`:
 | `opencodego.visionProxyThinking` | `false` | Enable thinking/reasoning in the vision proxy model when answering image queries. |
 
 > [!NOTE]
-> Models with switchable thinking (e.g., DeepSeek, Qwen) provide reasoning effort levels such as `Disabled`/`High`/`Maximum`.
+> Models with switchable thinking (e.g., DeepSeek, Qwen) provide reasoning effort levels such as `Default`/`Disabled`/`High`/`Maximum`. Effort-based models default to `Default`, which lets the provider choose its native reasoning level instead of forcing the highest advertised tier.
 
 ### Build
 
@@ -200,7 +200,7 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 | `opencodego.visionProxyThinking` | `false` | 在视觉代理模型回答图片查询时启用思考/推理功能。 |
 
 > [!NOTE]
-> 支持切换思考模式的模型（如 DeepSeek、Qwen）提供`禁用思考`/`高`/`极高`等推理强度选项。
+> 支持切换思考模式的模型（如 DeepSeek、Qwen）提供`默认`/`禁用思考`/`高`/`最高`等推理强度选项。effort 型模型默认使用`默认`，由服务端决定原生推理强度，而不是自动强制最高档。
 
 ### 编译
 
