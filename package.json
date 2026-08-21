@@ -413,9 +413,10 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
-		"test": "npm run compile && node scripts/test-api-mode.mjs && node scripts/test-responses-api.mjs && node scripts/test-vision-history.mjs && node scripts/test-anthropic-tool-result-merge.mjs",
+		"test": "npm run compile && node scripts/test-api-mode.mjs && node scripts/test-responses-api.mjs && node scripts/test-eager-tool-streaming.mjs && node scripts/test-vision-history.mjs && node scripts/test-anthropic-tool-result-merge.mjs",
 		"test:api-mode": "npm run compile && node scripts/test-api-mode.mjs",
 		"test:responses-api": "npm run compile && node scripts/test-responses-api.mjs",
+		"test:eager-tools": "npm run compile && node scripts/test-eager-tool-streaming.mjs",
 		"test:vision-history": "npm run compile && node scripts/test-vision-history.mjs",
 		"lint": "eslint",
 		"watch": "tsc -watch -p ./",

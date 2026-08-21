@@ -662,7 +662,7 @@ API 实现的抽象基类。
 
 #### `protected tryEmitBufferedToolCall(index, progress): Promise<void>`
 
-当工具调用的名称和 JSON 参数都可用时，尝试发射缓冲的工具调用。跳过 `ask_image` 和 `ask_with_multi_image` 工具（由 provider 处理）。
+当工具调用的名称和 JSON 参数都可用时，立即发射缓冲的工具调用，无需等待 SSE 终止事件；`scripts/test-eager-tool-streaming.mjs` 使用保持打开的可控流验证 OpenAI Chat 与 Responses 两种协议都会在终止前上报 `read_file`，且默认 `readFileLines=0` 不改写参数。跳过 `ask_image` 和 `ask_with_multi_image` 工具（由 provider 处理）。
 
 #### `protected flushToolCallBuffers(progress, throwOnInvalid): Promise<void>`
 
