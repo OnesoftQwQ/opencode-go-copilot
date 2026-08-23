@@ -863,7 +863,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
                     // Inject tools (VS Code + ask_image + ask_with_multi_image)
                     const anthropicToolList: Array<{ name: string; description?: string; input_schema?: object }> = [];
-                    const toolConfig = convertToolsToOpenAI(params.options);
+                    const toolConfig = convertToolsToOpenAI(params.options, params.um?.id ?? params.model.id);
                     if (toolConfig.tools) {
                         for (const tool of toolConfig.tools) {
                             anthropicToolList.push({
@@ -1018,7 +1018,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
                     // Inject tools (VS Code + ask_image + ask_with_multi_image)
                     const openaiToolList: any[] = [];
-                    const toolConfig = convertToolsToOpenAI(params.options);
+                    const toolConfig = convertToolsToOpenAI(params.options, params.um?.id ?? params.model.id);
                     if (toolConfig.tools) {
                         openaiToolList.push(...toolConfig.tools);
                     }

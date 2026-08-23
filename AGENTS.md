@@ -856,7 +856,7 @@ API 实现的抽象基类。
 
 将 VS Code 消息角色映射为字符串角色。
 
-#### `convertToolsToOpenAI(options?): { tools?, tool_choice? }`
+#### `convertToolsToOpenAI(options?, modelId?): { tools?, tool_choice? }`
 
 将 VS Code 工具定义转换为 OpenAI 函数工具定义。
 
@@ -1680,6 +1680,12 @@ type 取值：`feat` | `fix` | `refactor` | `docs` | `chore` | `improve` 等。
 | 常量     | UPPER_SNAKE_CASE | `BASE_TOKENS_PER_MESSAGE`, `DEFAULT_CONTEXT_LENGTH` |
 | 私有属性 | `_` 前缀         | `_lastRequestTime`, `_toolCallBuffers`              |
 | 文件     | camelCase        | `provider.ts`, `commitMessageGenerator.ts`          |
+
+### Compatibility safeguards
+
+- Runtime `LanguageModelDataPart.mimeType` values are treated as unknown at the MIME boundary; missing values must not reach string methods or crash token counting.
+- Tool selection reads the official `ProvideLanguageModelChatResponseOptions.toolMode` and keeps `modelOptions.toolMode` as a legacy fallback.
+- OpenCode Zen free model IDs downgrade forced `required` tool selection to `auto` for endpoint compatibility.
 
 ### 6.7 VS Code API 使用约束
 

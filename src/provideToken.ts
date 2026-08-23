@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { LanguageModelChatRequestMessage, LanguageModelChatTool } from "vscode";
 import { tokenizerManager } from "./tokenizer/tokenizerManager";
 import { getImageDimensions } from "./tokenizer/imageUtils";
-import { createDataUrl } from "./utils";
+import { createDataUrl, isImageMimeType } from "./utils";
 import { VISION_TOOL_HISTORY_MIME } from "./vision/historyCodec";
 import { RESPONSES_REASONING_MIME } from "./openai/responsesState";
 
@@ -25,7 +25,7 @@ export async function countMessageTokens(
                 if (part.mimeType === VISION_TOOL_HISTORY_MIME || part.mimeType === RESPONSES_REASONING_MIME) {
                     // These private parts are protocol replay state, not user-visible
                     // binary input. API-reported usage remains authoritative.
-                } else if (part.mimeType.startsWith("image/")) {
+                } else if (isImageMimeType(part.mimeType)) {
                     totalTokens += calculateImageTokenCost(createDataUrl(part));
                 } else if (part.mimeType === "cache_control") {
                     /* ignore */

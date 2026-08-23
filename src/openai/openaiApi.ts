@@ -381,7 +381,7 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
         }
 
         // tools
-        const toolConfig = convertToolsToOpenAI(options);
+        const toolConfig = convertToolsToOpenAI(options, um?.id ?? this._modelId);
         const toolsList: any[] = [];
         if (toolConfig.tools) {
             toolsList.push(...toolConfig.tools);

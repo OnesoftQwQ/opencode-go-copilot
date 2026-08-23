@@ -9,7 +9,9 @@ const originalFetch = globalThis.fetch;
 class DataPart {
     constructor(data, mimeType) {
         this.data = data;
-        this.mimeType = mimeType;
+        if (mimeType !== undefined) {
+            this.mimeType = mimeType;
+        }
     }
 }
 class TextPart {
@@ -44,6 +46,7 @@ const vscodeShim = {
     LanguageModelToolResultPart: ToolResultPart,
     LanguageModelThinkingPart: ThinkingPart,
     LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
+    LanguageModelChatToolMode: { Auto: 1, Required: 2 },
     extensions: { getExtension: () => undefined },
     version: "test",
     workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }) },
@@ -78,10 +81,45 @@ const makeStream = (events) => {
 try {
     const { logger } = require("../out/logger.js");
     logger.init();
+    const { convertToolsToOpenAI, isImageMimeType } = require("../out/utils.js");
+    const { countMessageTokens } = require("../out/provideToken.js");
     const { ResponsesApi } = require("../out/openai/responsesApi.js");
     const { RESPONSES_REASONING_MIME } = require("../out/openai/responsesState.js");
 
     const api = new ResponsesApi("gpt-5.6-luna");
+    assert.equal(isImageMimeType(undefined), false);
+    assert.equal(isImageMimeType("image/png"), true);
+    assert.equal(
+        await countMessageTokens(
+            { role: 1, content: [new DataPart(new Uint8Array([1, 2]), undefined)] },
+            { includeReasoningInRequest: false },
+        ),
+        6,
+    );
+
+    const toolDefinitions = [{ name: "read_file", description: "Read a file", inputSchema: { type: "object" } }];
+    assert.equal(
+        convertToolsToOpenAI(
+            { tools: toolDefinitions, toolMode: vscodeShim.LanguageModelChatToolMode.Required },
+            "gpt-5.6-luna",
+        ).tool_choice,
+        "required",
+    );
+    assert.equal(
+        convertToolsToOpenAI(
+            { tools: toolDefinitions, toolMode: vscodeShim.LanguageModelChatToolMode.Required },
+            "ox-alpha-free",
+        ).tool_choice,
+        "auto",
+    );
+    assert.equal(
+        convertToolsToOpenAI(
+            { tools: toolDefinitions, modelOptions: { toolMode: "required" } },
+            "gpt-5.6-luna",
+        ).tool_choice,
+        "required",
+    );
+
     const messages = [
         { role: 3, content: [new TextPart("System rules")] },
         { role: 1, content: [new TextPart("Inspect this"), new DataPart(new Uint8Array([1, 2]), "image/png")] },
