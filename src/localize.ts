@@ -39,7 +39,7 @@ const zhCN: Record<string, string> = {
 	"No models configured for commit message generation. Please set 'useForCommitGeneration' to true for at least one model in your configuration.":
 		"未配置用于生成提交消息的模型。请在配置中将至少一个模型的 'useForCommitGeneration' 设为 true。",
 	"{0} is no longer available as a free model. Please use a different model.": "{0} 已结束免费使用，请使用其他模型。",
-"Failed to generate commit message:": "生成提交消息失败：",
+	"Failed to generate commit message:": "生成提交消息失败：",
 	"[Commit Generation Failed]": "[提交生成失败]",
 	"empty API response": "API 返回为空",
 
@@ -74,6 +74,9 @@ const zhCN: Record<string, string> = {
 
 	// deprecated model marker (shown when opencodego.showDeprecatedModels is enabled)
 	"[Depr] ": "[已弃用] ",
+
+	// Zen model tooltip warning (free but may collect data for training)
+	"Free models are available on OpenCode for a limited time. Data may be collected for training. See https://opencode.ai/docs/zen for details.": "OpenCode Zen 模型在有限时间内免费使用，可能会收集数据用于训练。详情请参见 https://opencode.ai/docs/zen。",
 
 	// vision proxy
 	"Querying vision model: \"{0}\"": "正在根据图片提问：{0}",
