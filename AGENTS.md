@@ -50,6 +50,12 @@
 | 私有属性 | `_` 前缀 | `_lastRequestTime`, `_toolCallBuffers` |
 | 文件 | camelCase | `provider.ts`, `commitMessageGenerator.ts` |
 
+### 3.1 兼容性保障
+
+- 在 MIME 边界将运行时 `LanguageModelDataPart.mimeType` 视为未知类型；缺失值不得进入字符串方法或导致 Token 计数崩溃
+- 工具选择优先读取官方 `ProvideLanguageModelChatResponseOptions.toolMode`，同时保留 `modelOptions.toolMode` 作为旧版兼容回退
+- OpenCode Zen 免费模型收到强制 `required` 工具选择时降级为 `auto`，以兼容服务端点
+
 ## 4. VS Code API 使用约束
 
 - `LanguageModelChatProvider` — 必须实现 `provideLanguageModelChatResponse()` 和 `provideLanguageModelChatInformation()`

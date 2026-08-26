@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import type { OpenCodeGoModelItem, RetryConfig } from "./types";
 import type { StoredImage } from "./vision/types";
+import { isZenFreeModelId } from "./catalogModels";
 import { OpenAIFunctionToolDef } from "./openai/openaiTypes";
 import type { ResponsesFunctionToolDef } from "./openai/responsesTypes";
 import { CancellationToken } from "vscode";
@@ -94,11 +95,29 @@ export function mapRole(message: vscode.LanguageModelChatRequestMessage): "user"
     return "system";
 }
 
+function resolveToolMode(options?: vscode.ProvideLanguageModelChatResponseOptions): string | undefined {
+    const officialToolMode = (options as unknown as { toolMode?: unknown })?.toolMode;
+    const toolModeEnum = (vscode as typeof vscode & {
+        LanguageModelChatToolMode?: { Auto?: unknown; Required?: unknown };
+    }).LanguageModelChatToolMode;
+
+    if (officialToolMode === toolModeEnum?.Required || officialToolMode === "required") {
+        return "required";
+    }
+    if (officialToolMode === toolModeEnum?.Auto || officialToolMode === "auto") {
+        return "auto";
+    }
+
+    const legacyToolMode = (options?.modelOptions as Record<string, unknown> | undefined)?.toolMode;
+    return typeof legacyToolMode === "string" ? legacyToolMode : undefined;
+}
+
 /**
  * Convert VS Code tool definitions to OpenAI function tool definitions.
  */
 export function convertToolsToOpenAI(
-    options?: vscode.ProvideLanguageModelChatResponseOptions
+    options?: vscode.ProvideLanguageModelChatResponseOptions,
+    modelId?: string
 ): { tools?: OpenAIFunctionToolDef[]; tool_choice?: string } {
     if (!options?.tools || options.tools.length === 0) {
         return {};
@@ -122,12 +141,11 @@ export function convertToolsToOpenAI(
     });
 
     // Determine tool_choice mode
-    const toolMode = (options?.modelOptions as Record<string, unknown> | undefined)
-        ?.toolMode as string | undefined;
+    const toolMode = resolveToolMode(options);
 
     let toolChoice: string | undefined;
     if (toolMode === "required") {
-        toolChoice = "required";
+        toolChoice = modelId && isZenFreeModelId(modelId) ? "auto" : "required";
     } else if (toolMode === "none") {
         toolChoice = "none";
     } else if (toolMode === "auto") {
@@ -152,9 +170,10 @@ export function convertOpenAIToolToResponses(tool: OpenAIFunctionToolDef): Respo
 
 /** Convert VS Code tool definitions to the flat OpenAI Responses format. */
 export function convertToolsToResponses(
-    options?: vscode.ProvideLanguageModelChatResponseOptions
+    options?: vscode.ProvideLanguageModelChatResponseOptions,
+    modelId?: string
 ): { tools?: ResponsesFunctionToolDef[]; tool_choice?: string } {
-    const chatTools = convertToolsToOpenAI(options);
+    const chatTools = convertToolsToOpenAI(options, modelId);
     return {
         tools: chatTools.tools?.map(convertOpenAIToolToResponses),
         tool_choice: chatTools.tool_choice,
@@ -245,8 +264,8 @@ function isRetryableError(error: Error, retryableStatusCodes: number[]): boolean
 /**
  * Check if a mime type is an image type.
  */
-export function isImageMimeType(mimeType: string): boolean {
-    return mimeType.startsWith("image/");
+export function isImageMimeType(mimeType: unknown): boolean {
+    return typeof mimeType === "string" && mimeType.startsWith("image/");
 }
 
 /**

@@ -54,7 +54,7 @@ npm run build
 | 脚本 | 说明 |
 | --- | --- |
 | `scripts/test-vision-history.mjs` | 视觉工具历史编解码与三 API 转换器顺序闭环测试（含 DeepSeek 空 `reasoning_content` 回归用例） |
-| `scripts/test-responses-api.mjs` | OpenAI Responses 消息、请求体、SSE、工具调用、usage 与 encrypted reasoning 回放测试 |
+| `scripts/test-responses-api.mjs` | OpenAI Responses 消息、请求体、SSE、工具调用、usage、encrypted reasoning 回放、缺失 MIME 与工具模式兼容测试 |
 | `scripts/test-api-mode.mjs` | models.dev 适配器到三种 API 协议的映射与旧目录兼容测试 |
 | `scripts/test-anthropic-tool-result-merge.mjs` | Anthropic 多条工具结果合并行为验证（issue #87） |
 | `scripts/update-hardcoded-catalog.mjs` | 刷新硬编码目录快照（发布构建自动执行，失败保留旧快照不阻断） |

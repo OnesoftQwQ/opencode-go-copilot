@@ -489,9 +489,17 @@ API 实现的抽象基类。
 
 将 VS Code 消息角色映射为字符串角色。
 
-#### `convertToolsToOpenAI(options?): { tools?, tool_choice? }`
+#### `resolveToolMode(options?): string | undefined`
 
-将 VS Code 工具定义转换为 OpenAI 函数工具定义。
+优先读取官方 `ProvideLanguageModelChatResponseOptions.toolMode`，并在缺失时回退到旧版 `modelOptions.toolMode`。
+
+#### `convertToolsToOpenAI(options?, modelId?): { tools?, tool_choice? }`
+
+将 VS Code 工具定义转换为 OpenAI 函数工具定义。传入 Zen 免费模型 ID 时，将不兼容的强制 `required` 工具选择降级为 `auto`。
+
+#### `convertToolsToResponses(options?, modelId?): { tools?, tool_choice? }`
+
+将 VS Code 工具定义转换为 OpenAI Responses 扁平函数工具定义，并沿用相同的工具选择兼容逻辑。
 
 #### `createRetryConfig(): RetryConfig`
 
@@ -505,9 +513,9 @@ API 实现的抽象基类。
 
 判断错误是否可重试（网络错误 + 指定 HTTP 状态码）。
 
-#### `isImageMimeType(mimeType): boolean`
+#### `isImageMimeType(mimeType: unknown): boolean`
 
-判断 MIME 类型是否为图片。
+安全判断未知 MIME 类型是否为图片；缺失或非字符串值返回 `false`。
 
 #### `RESOURCE_LINK_MIME` / `isResourceLinkMimeType(mimeType): boolean`
 
