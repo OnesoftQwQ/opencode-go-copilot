@@ -1,0 +1,36 @@
+name: Sync Master to Dev
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-master-to-dev
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Fast-forward dev to master
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout dev
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Fast-forward dev to master
+        run: |
+          git fetch origin master dev
+          git checkout -B dev origin/dev
+
+          if ! git merge --ff-only origin/master; then
+            echo "::error::dev cannot be fast-forwarded to master because the branches have diverged."
+            exit 1
+          fi
+
+          git push origin HEAD:dev

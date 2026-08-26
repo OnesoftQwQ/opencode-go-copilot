@@ -4,7 +4,7 @@ import { CancellationToken, LanguageModelChatInformation, PrepareLanguageModelCh
 import { logger } from "./logger";
 import { getApiModelIds, clearApiModelCache } from "./apiModelList";
 import { ensureModelsDevLoaded, clearModelsDevCache, getCatalogProviderModelIds } from "./modelsDev";
-import { buildCatalogModelInfo, isModelDeprecated, isZenFreeModelId } from "./catalogModels";
+import { buildCatalogModelInfo, isModelDeprecated, isZenFreeModelId, resolveProviderForModelId } from "./catalogModels";
 import { delay } from "./utils";
 
 const GO_PROVIDER_ID = "opencode-go";
@@ -49,6 +49,12 @@ async function runCatalogPass(secrets: vscode.SecretStorage): Promise<LanguageMo
             availableIds = catalogIds.filter((id) => apiModelIds.has(id));
         }
     }
+
+    // Keep the Go list consistent with request routing: only show ids that
+    // resolveProviderForModelId() maps to Go. A "-free" suffixed id (e.g.
+    // ox-alpha-free) is routed to Zen at request time, so it must not appear
+    // in the Go picker — otherwise selecting it 401s on the Zen endpoint.
+    availableIds = availableIds.filter((id) => resolveProviderForModelId(id) === GO_PROVIDER_ID);
 
     // Drop deprecated models from the picker unless the user opts in to see them
     const showDeprecated = vscode.workspace.getConfiguration().get<boolean>("opencodego.showDeprecatedModels", false);

@@ -44,8 +44,9 @@ const FALLBACK_BASE_URLS: Record<ProviderId, string> = {
 
 /** Per-provider display metadata (family grouping, name suffix). */
 const PROVIDER_LABELS: Record<ProviderId, { family: string; detail: string; nameSuffix: string }> = {
+    // implied to be go models, no suffix
     "opencode-go": { family: "OpenCodeGo", detail: "OpenCode Go", nameSuffix: "" },
-    "opencode": { family: "OpenCode Zen", detail: "OpenCode Zen", nameSuffix: " Free" },
+    "opencode": { family: "OpenCode Zen", detail: "OpenCode Zen", nameSuffix: " (Zen)" },
 };
 
 const DEFAULT_CONTEXT_LENGTH = 128000;
@@ -310,16 +311,22 @@ export function buildCatalogModelInfo(providerId: ProviderId, modelId: string): 
     const label = PROVIDER_LABELS[providerId];
     // Deprecated models keep a visible marker when shown (opt-in setting)
     const deprecatedPrefix = meta.status === "deprecated" ? l10n("[Depr] ") : "";
-    // Zen free models: append " Free" only when the catalog name doesn't already carry it
-    const nameSuffix = label.nameSuffix && !/\bfree\b/i.test(meta.displayName) ? label.nameSuffix : "";
+    // Explicitly mark the provider so models are unambiguous in surfaces that
+    // only show the name (e.g. custom-agent model selection). Zen models are
+    // typically free but may collect data for training, so the marker matters.
+    const nameSuffix = label.nameSuffix;
     const name = `${deprecatedPrefix}${meta.displayName}${nameSuffix}`;
+    // Surface the free model and implications in the tooltip. 
+    const tooltip = providerId === "opencode"
+        ? l10n("Free models are available on OpenCode for a limited time. Data may be collected for training. See https://opencode.ai/docs/zen for details.")
+        : label.detail;
     const { enumValues, enumItemLabels, enumDescriptions, defaultEffort } = buildReasoningEnum(meta);
 
     return {
         id: modelId,
         name,
         detail: label.detail,
-        tooltip: label.detail,
+        tooltip,
         family: label.family,
         version: "1.0.0",
         maxInputTokens: meta.contextLength,

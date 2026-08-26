@@ -257,7 +257,7 @@ export class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequest
             rb.include = ["reasoning.encrypted_content"];
         }
 
-        const toolConfig = convertToolsToResponses(options);
+        const toolConfig = convertToolsToResponses(options, um?.id ?? this._modelId);
         const tools = [...(toolConfig.tools ?? [])];
         if (this._hasImages) {
             tools.push(convertOpenAIToolToResponses(ASK_IMAGE_TOOL_DEF as OpenAIFunctionToolDef));
