@@ -591,7 +591,7 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 
 #### `callVisionModel(imageData, mimeType, visionModelId, query, token, progress?): Promise<string>`
 
-调用视觉模型回答关于图片的查询。使用 `vscode.lm.selectChatModels()` 查找模型，发送图片+查询文本，收集流式回答返回，并可通过 `progress` 实时转发 `LanguageModelTextPart`。与旧版 `describe_image` 不同，`query` 参数来自模型的 `ask_image` 工具调用，允许针对性提问（如"按钮是什么颜色？"）。支持 thinking 模式配置，通过 `opencodego.visionProxyThinking` 设置控制，开启时发送 `reasoning_effort="high"`，关闭时发送 `reasoning_effort="disabled"`。
+调用视觉模型回答关于图片的查询。先通过 `vscode.lm.selectChatModels()` 按完整模型 ID（`vendor/id`，如 `opencodego/qwen3.8-plus`）精确匹配视觉代理模型，失败时按裸 ID 后缀回退匹配（兼容 `opencodego.visionProxyModel` 配置的裸 ID，如 `qwen3.8-plus`），多提供者同名时优先本扩展的 `opencodego` 模型。发送图片+查询文本，收集流式回答返回，并可通过 `progress` 实时转发 `LanguageModelTextPart`。与旧版 `describe_image` 不同，`query` 参数来自模型的 `ask_image` 工具调用，允许针对性提问（如"按钮是什么颜色？"）。支持 thinking 模式配置，通过 `opencodego.visionProxyThinking` 设置控制，开启时发送 `reasoning_effort="high"`，关闭时发送 `reasoning_effort="disabled"`。
 
 #### `callVisionModelMulti(images, visionModelId, query, token, progress?): Promise<string>`
 
