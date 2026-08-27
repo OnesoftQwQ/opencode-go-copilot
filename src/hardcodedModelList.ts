@@ -8,7 +8,7 @@
  * (limit, cost, reasoning_options, attachment, modalities, ...), so the
  * fallback behaves like the real catalog instead of a bare ID list.
  *
- * Snapshot taken from the official models.dev catalog on 2026-08-20.
+ * Snapshot taken from the official models.dev catalog on 2026-08-27.
  */
 
 import type { CatalogProvider, ModelsDevEntry } from "./modelsDev";
@@ -243,10 +243,10 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "cache_read": 0.0028
           }
         },
-        "grok-4.5": {
-          "id": "grok-4.5",
-          "name": "Grok 4.5",
-          "description": "xAI's Grok model for chat, coding, agentic tools, and lower hallucination risk",
+        "grok-4.6": {
+          "id": "grok-4.6",
+          "name": "Grok 4.6",
+          "description": "xAI's frontier model for long-running agents, coding, knowledge work, and visual projects",
           "family": "grok",
           "attachment": true,
           "reasoning": true,
@@ -256,15 +256,17 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
               "values": [
                 "low",
                 "medium",
-                "high"
+                "high",
+                "xhigh"
               ]
             }
           ],
           "tool_call": true,
           "structured_output": true,
           "temperature": true,
-          "release_date": "2026-07-08",
-          "last_updated": "2026-07-08",
+          "knowledge": "2026-02-01",
+          "release_date": "2026-08-12",
+          "last_updated": "2026-08-12",
           "modalities": {
             "input": [
               "text",
@@ -301,6 +303,68 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
               "input": 4,
               "output": 12,
               "cache_read": 1
+            }
+          }
+        },
+        "grok-4.5": {
+          "id": "grok-4.5",
+          "name": "Grok 4.5",
+          "description": "xAI's Grok model for chat, coding, agentic tools, and lower hallucination risk",
+          "family": "grok",
+          "attachment": true,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "effort",
+              "values": [
+                "low",
+                "medium",
+                "high"
+              ]
+            }
+          ],
+          "tool_call": true,
+          "structured_output": true,
+          "temperature": true,
+          "release_date": "2026-07-08",
+          "last_updated": "2026-07-08",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": false,
+          "limit": {
+            "context": 500000,
+            "output": 500000
+          },
+          "status": "deprecated",
+          "provider": {
+            "npm": "@ai-sdk/openai"
+          },
+          "cost": {
+            "input": 2,
+            "output": 6,
+            "cache_read": 0.3,
+            "tiers": [
+              {
+                "input": 4,
+                "output": 12,
+                "cache_read": 0.6,
+                "tier": {
+                  "type": "context",
+                  "size": 200000
+                }
+              }
+            ],
+            "context_over_200k": {
+              "input": 4,
+              "output": 12,
+              "cache_read": 0.6
             }
           }
         },
@@ -745,6 +809,52 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             }
           }
         },
+        "ox-alpha-free": {
+          "id": "ox-alpha-free",
+          "name": "Ox Alpha Free (Unlimited)",
+          "description": "Stealth reasoning model for coding, agentic tasks, and tool use",
+          "attachment": true,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "effort",
+              "values": [
+                "low",
+                "high",
+                "max"
+              ]
+            }
+          ],
+          "tool_call": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "structured_output": true,
+          "temperature": true,
+          "release_date": "2026-08-21",
+          "last_updated": "2026-08-21",
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": false,
+          "limit": {
+            "context": 1000000,
+            "output": 131072
+          },
+          "status": "deprecated",
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0
+          }
+        },
         "glm-5.3": {
           "id": "glm-5.3",
           "name": "GLM-5.3",
@@ -943,6 +1053,44 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "input": 0.4,
             "output": 2,
             "cache_read": 0.08
+          }
+        },
+        "longcat-2.0": {
+          "id": "longcat-2.0",
+          "name": "LongCat-2.0",
+          "description": "Meituan LongCat-2.0, a reasoning model with tool calling and a 1M-token context window",
+          "family": "longcat",
+          "attachment": false,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "toggle"
+            }
+          ],
+          "tool_call": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "temperature": true,
+          "release_date": "2026-06-30",
+          "last_updated": "2026-06-30",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": false,
+          "limit": {
+            "context": 1000000,
+            "output": 131072
+          },
+          "cost": {
+            "input": 0.3,
+            "output": 1.2,
+            "cache_read": 0.006
           }
         },
         "qwen3.6-plus": {
@@ -1201,6 +1349,101 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "input": 0.95,
             "output": 4,
             "cache_read": 0.16
+          }
+        },
+        "deepseek-v4-flash-vision-exp": {
+          "id": "deepseek-v4-flash-vision-exp",
+          "name": "DeepSeek V4 Flash Vision Exp",
+          "description": "Experimental multimodal DeepSeek V4 Flash model for image understanding, coding, and agentic work",
+          "family": "deepseek-flash",
+          "attachment": true,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "toggle"
+            },
+            {
+              "type": "effort",
+              "values": [
+                "low",
+                "high",
+                "max"
+              ]
+            }
+          ],
+          "tool_call": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "structured_output": true,
+          "temperature": true,
+          "release_date": "2026-08-21",
+          "last_updated": "2026-08-21",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": false,
+          "limit": {
+            "context": 1000000,
+            "output": 384000
+          },
+          "cost": {
+            "input": 0.22,
+            "output": 0.66,
+            "cache_read": 0.007
+          }
+        },
+        "glm-5.3-flash": {
+          "id": "glm-5.3-flash",
+          "name": "GLM-5.3-Flash (2x usage)",
+          "description": "Native multimodal GLM model for efficient coding and long-horizon agent tasks",
+          "family": "glm",
+          "attachment": true,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "effort",
+              "values": [
+                "low",
+                "high",
+                "max"
+              ]
+            }
+          ],
+          "tool_call": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "structured_output": true,
+          "temperature": true,
+          "release_date": "2026-08-26",
+          "last_updated": "2026-08-26",
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video",
+              "pdf"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": false,
+          "limit": {
+            "context": 1000000,
+            "output": 131072
+          },
+          "cost": {
+            "input": 0.075,
+            "output": 0.25,
+            "cache_read": 0.015
           }
         }
       }
@@ -1947,6 +2190,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "context": 200000,
             "output": 128000
           },
+          "status": "deprecated",
           "cost": {
             "input": 0,
             "output": 0,
@@ -2205,16 +2449,16 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "npm": "@ai-sdk/openai"
           },
           "cost": {
-            "input": 2.5,
-            "output": 15,
-            "cache_read": 0.25,
-            "cache_write": 3.125,
+            "input": 2,
+            "output": 10,
+            "cache_read": 0.2,
+            "cache_write": 2.5,
             "tiers": [
               {
-                "input": 5,
-                "output": 22.5,
-                "cache_read": 0.5,
-                "cache_write": 6.25,
+                "input": 4,
+                "output": 15,
+                "cache_read": 0.4,
+                "cache_write": 5,
                 "tier": {
                   "type": "context",
                   "size": 272000
@@ -2222,10 +2466,10 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
               }
             ],
             "context_over_200k": {
-              "input": 5,
-              "output": 22.5,
-              "cache_read": 0.5,
-              "cache_write": 6.25
+              "input": 4,
+              "output": 15,
+              "cache_read": 0.4,
+              "cache_write": 5
             }
           }
         },
@@ -2417,12 +2661,12 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
           "cost": {
             "input": 2,
             "output": 6,
-            "cache_read": 0.5,
+            "cache_read": 0.3,
             "tiers": [
               {
                 "input": 4,
                 "output": 12,
-                "cache_read": 1,
+                "cache_read": 0.6,
                 "tier": {
                   "type": "context",
                   "size": 200000
@@ -2432,7 +2676,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "context_over_200k": {
               "input": 4,
               "output": 12,
-              "cache_read": 1
+              "cache_read": 0.6
             }
           }
         },
@@ -3400,6 +3644,52 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
           "provider": {
             "npm": "@ai-sdk/openai"
           },
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0
+          }
+        },
+        "x-preview-f-free": {
+          "id": "x-preview-f-free",
+          "name": "Ox Alpha Free (Unlimited)",
+          "description": "Stealth reasoning model for coding, agentic tasks, and tool use",
+          "attachment": true,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "effort",
+              "values": [
+                "low",
+                "high",
+                "max"
+              ]
+            }
+          ],
+          "tool_call": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "structured_output": true,
+          "temperature": true,
+          "release_date": "2026-08-21",
+          "last_updated": "2026-08-21",
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": false,
+          "limit": {
+            "context": 1000000,
+            "output": 131072
+          },
+          "status": "deprecated",
           "cost": {
             "input": 0,
             "output": 0,
@@ -4528,7 +4818,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
           ],
           "tool_call": true,
           "structured_output": true,
-          "temperature": false,
+          "temperature": true,
           "knowledge": "2025-08-31",
           "release_date": "2026-03-05",
           "last_updated": "2026-03-05",
