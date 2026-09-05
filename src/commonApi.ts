@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import * as vscode from "vscode";
 import {
     LanguageModelResponsePart,
@@ -428,12 +429,17 @@ export abstract class CommonApi<TMessage, TRequestBody> {
      * @param apiKey The API key to use.
      * @param apiMode The apiMode (affects header format).
      * @param customHeaders Optional custom headers from model config.
+     * @param sessionId Optional stable per-conversation session ID. OpenCode Go
+     * rejects inference requests without `x-opencode-session` since 2026-09-05
+     * (used for routing and prompt-cache optimization). When omitted, a random
+     * UUID is generated so every inference request still carries the header.
      * @returns Headers object.
      */
     public static prepareHeaders(
         apiKey: string,
         apiMode: ApiMode,
-        customHeaders?: Record<string, string>
+        customHeaders?: Record<string, string>,
+        sessionId?: string
     ): Record<string, string> {
         // Internal override for testing or contingency (e.g. if the API ever gates access by User-Agent again).
         const customUserAgent = process.env.OPENCODEGO_USER_AGENT ?? "";
@@ -444,6 +450,7 @@ export abstract class CommonApi<TMessage, TRequestBody> {
             "User-Agent": userAgent,
             "Accept": "*/*",
             "Accept-Encoding": "gzip, deflate, br, zstd",
+            "x-opencode-session": sessionId?.trim() || crypto.randomUUID(),
         };
         logger.debug("prepareHeaders", {
             apiMode: apiMode,

@@ -171,6 +171,12 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   │
   ├── 9. 创建 undici fetch (自定义 bodyTimeout)
   │
+  ├── 9a. 构建请求头 → CommonApi.prepareHeaders()
+  │      └── 始终注入 x-opencode-session（OpenCode Go 自 2026-09-05 起强制要求，
+  │          服务端用于会话路由与 prompt 缓存优化）：由 deriveOpencodeSessionId()
+  │          按 模型 ID + 首条含文本用户消息 的 SHA-256 确定性派生（同会话跨轮次
+  │          稳定），无文本锚点时回退随机 UUID；视觉代理后续轮次复用同一请求头
+  │
   ├── 9b. 获取 Response body reader 后，注册取消回调
   │      └── `token.onCancellationRequested` / `signal.addEventListener("abort")`
   │      └── 调用 `reader.cancel()` 立即中断流，使 `reader.read()` 返回 `{ done: true }`
