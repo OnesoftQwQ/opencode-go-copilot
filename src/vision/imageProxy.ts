@@ -2,6 +2,10 @@ import * as vscode from "vscode";
 import { DEFAULT_VISION_PROMPT } from "./types";
 import type { StoredImage } from "./types";
 
+// Vendor id this extension registers its chat provider under (see extension.ts
+// and the "vendor" contribution in package.json).
+const OPENCODEGO_VENDOR = "opencodego";
+
 /**
  * Build a standard set of request options for vision model calls.
  */
@@ -20,6 +24,37 @@ function buildVisionOptions(): vscode.LanguageModelChatRequestOptions {
 }
 
 /**
+ * Resolve the LanguageModelChat instance for the configured vision model ID.
+ *
+ * The `opencodego.visionProxyModel` setting stores a bare model ID (e.g.
+ * "qwen3.8-plus"), but the `id` exposed on `LanguageModelChat` by VS Code is
+ * the vendor-prefixed full identifier (e.g. "opencodego/qwen3.8-plus"), so an
+ * exact `selectChatModels({ id })` lookup never matches a bare ID. Resolution
+ * order:
+ * 1. Exact full-id match — users may configure "vendor/id" explicitly.
+ * 2. Bare-ID suffix match, preferring models registered by this extension's
+ *    own vendor to deterministically disambiguate same-named models from other
+ *    providers (e.g. "tokenrhythm/kimi-k2.6" vs "opencodego/kimi-k2.6").
+ *
+ * @returns The matched chat model, or `undefined` when nothing matches.
+ */
+async function resolveVisionModel(visionModelId: string): Promise<vscode.LanguageModelChat | undefined> {
+    const exact = await vscode.lm.selectChatModels({ id: visionModelId });
+    if (exact && exact.length > 0) {
+        return exact[0];
+    }
+    const all = await vscode.lm.selectChatModels();
+    const candidates = all.filter((model) => {
+        const bare = model.id.slice(model.id.lastIndexOf("/") + 1);
+        return bare === visionModelId;
+    });
+    if (candidates.length === 0) {
+        return undefined;
+    }
+    return candidates.find((model) => model.vendor === OPENCODEGO_VENDOR) ?? candidates[0];
+}
+
+/**
  * Send a message to a vision model, stream output via progress, and return the full text.
  * progress.onThinking is called for thinking/reasoning chunks, progress.onText for text chunks.
  */
@@ -32,11 +67,10 @@ async function sendToVisionModel(
         onText?: (text: string) => void;
     }
 ): Promise<string> {
-    const models = await vscode.lm.selectChatModels({ id: visionModelId });
-    if (!models || models.length === 0) {
+    const visionModel = await resolveVisionModel(visionModelId);
+    if (!visionModel) {
         throw new Error(`Vision model "${visionModelId}" not found. Check the opencodego.visionProxyModel setting.`);
     }
-    const visionModel = models[0];
     const response = await visionModel.sendRequest([msg], buildVisionOptions(), token);
     let result = "";
     for await (const chunk of response.stream) {
