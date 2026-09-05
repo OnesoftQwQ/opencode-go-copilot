@@ -122,6 +122,10 @@ src/
 
 创建 undici fetch 实例，设置自定义 `bodyTimeout` 防止流式响应中 TCP 空闲连接被提前关闭。回退到全局 `fetch`。
 
+#### `deriveOpencodeSessionId(modelId, messages): string`（模块级函数）
+
+派生稳定的会话 ID 用于 `x-opencode-session` 请求头。OpenCode Go 自 2026-09-05 起要求所有推理请求携带该头部（服务端用于路由与 prompt 缓存优化），缺失时请求报错。由于 VS Code 不向 Language Model Provider 暴露会话标识，该 ID 由目标模型 ID + 会话首条含文本的用户消息经 SHA-256 哈希确定性派生（格式化为标准 UUID）：同一会话每一轮都会重发相同历史，因此派生 ID 跨轮次稳定，不同会话得到不同 ID；跳过图片等二进制 DataPart。整个会话无用户文本锚点时（如纯图片请求）回退为随机 UUID。
+
 #### `provideLanguageModelChatInformation(options, _token): Promise<LanguageModelChatInformation[]>`
 
 获取可用的语言模型列表。参数类型为 `PrepareLanguageModelChatModelOptions`，委托给 `prepareLanguageModelChatInformation()`。
@@ -337,9 +341,9 @@ API 实现的抽象基类。
 
 处理普通文本内容，发射到进度报告器。
 
-#### `static prepareHeaders(apiKey, apiMode, customHeaders?): Record<string, string>`
+#### `static prepareHeaders(apiKey, apiMode, customHeaders?, sessionId?): Record<string, string>`
 
-准备 HTTP 请求头。读取 `OPENCODEGO_USER_AGENT` 环境变量覆盖 User-Agent（回退到 `VersionManager.getUserAgent()`；内部测试/应急用，非用户设置项）。Anthropic 模式使用 `x-api-key`，OpenAI 模式使用 `Bearer` 令牌。
+准备 HTTP 请求头。读取 `OPENCODEGO_USER_AGENT` 环境变量覆盖 User-Agent（回退到 `VersionManager.getUserAgent()`；内部测试/应急用，非用户设置项）。Anthropic 模式使用 `x-api-key`，OpenAI 模式使用 `Bearer` 令牌。始终注入 `x-opencode-session`：传入 `sessionId` 时使用之，否则生成随机 UUID，确保所有推理请求都携带 OpenCode Go 要求的会话标识。
 
 ---
 
