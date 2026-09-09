@@ -8,7 +8,7 @@
  * (limit, cost, reasoning_options, attachment, modalities, ...), so the
  * fallback behaves like the real catalog instead of a bare ID list.
  *
- * Snapshot taken from the official models.dev catalog on 2026-09-05.
+ * Snapshot taken from the official models.dev catalog on 2026-09-09.
  */
 
 import type { CatalogProvider, ModelsDevEntry } from "./modelsDev";
@@ -947,7 +947,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
               "text"
             ]
           },
-          "open_weights": false,
+          "open_weights": true,
           "limit": {
             "context": 1000000,
             "output": 131072
@@ -2846,6 +2846,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
           "tool_call": true,
           "structured_output": true,
           "temperature": false,
+          "knowledge": "2026-04-30",
           "release_date": "2026-09-04",
           "last_updated": "2026-09-04",
           "modalities": {
@@ -4374,7 +4375,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
               "text"
             ]
           },
-          "open_weights": false,
+          "open_weights": true,
           "limit": {
             "context": 1000000,
             "output": 131072
