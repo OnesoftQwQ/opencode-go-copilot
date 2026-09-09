@@ -4,6 +4,7 @@
 	"command.setApiKey": "Set OpenCode Go API Key",
 	"command.getApiKey": "Get OpenCode Go API Key",
 	"command.openSettings": "Open OpenCode Go Settings",
+	"command.resetSessionRouting": "Reset Session Routing (New Session IDs)",
 	"command.generateCommit": "Generate Commit Message with OpenCodeGo",
 	"command.abortCommit": "Generate Commit Message with OpenCodeGo - Stop",
 	"command.updateModelList": "Update OpenCode Go Model List (forced)",

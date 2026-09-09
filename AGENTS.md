@@ -85,6 +85,8 @@
 
 - `request.start/end` — 请求开始/结束
 - `request.error/timeout/delay` — 请求错误/超时/延迟
+- `request.sessionRotated` — 上游提供方错误后会话 ID 轮换（warn，含 modelId）
+- `sessionRouting.reset` — 会话路由登记清空（命令触发，info，含 cleared）
 - `extension.activate` — 扩展激活（含版本号）
 - `models.loaded` — 模型加载
 - `modelsDev.fetch.*` — 目录拉取明细：`fetch.official`/`fetch.mirror`（成功，含 durationMs/bytes）、`fetch.officialFailed`/`fetch.mirrorFailed`/`fetch.timeout`/`fetch.hardcoded`（失败或回退原因）

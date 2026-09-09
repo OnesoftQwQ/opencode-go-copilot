@@ -9,6 +9,7 @@ import { VersionManager } from "./versionManager";
 import { abortCommitGeneration, generateCommitMsg } from "./gitCommit/commitMessageGenerator";
 import { TokenizerManager } from "./tokenizer/tokenizerManager";
 import { prepareLanguageModelChatInformation, resetAutoDiscoveryState } from "./provideModel";
+import { resetSessionRouting } from "./sessionRouting";
 
 // ---- Walkthrough / Welcome constants ----
 
@@ -104,6 +105,19 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand("opencodego.openSettings", () => {
             vscode.commands.executeCommand("workbench.action.openSettings", "@ext:OnesoftQwQ.opencode-go-copilot-provider");
+        })
+    );
+
+    // Command to drop all registered session IDs so the next request of every
+    // conversation is routed as a fresh session (escape hatch when session
+    // affinity pins a conversation to a degraded backend).
+    context.subscriptions.push(
+        vscode.commands.registerCommand("opencodego.resetSessionRouting", () => {
+            const cleared = resetSessionRouting();
+            logger.info("sessionRouting.reset", { cleared });
+            vscode.window.showInformationMessage(
+                l10nFormat("Session routing reset. The next request of each conversation will use a new session ID. ({0} cleared)", cleared)
+            );
         })
     );
 
