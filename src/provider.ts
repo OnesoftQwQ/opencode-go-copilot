@@ -241,11 +241,16 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             const apiMode = um?.apiMode || "openai";
             const baseUrl = um?.baseUrl || getCatalogProviderBaseUrl("opencode-go", "https://opencode.ai/zen/go/v1/");
 
+            // Resolve the conversation's session ID early so it can be traced
+            // in request logs (see sessionRouting.ts).
+            const session = resolveSessionId(model.id, messages);
             logger.info("request.start", {
                 modelId: model.id,
                 messageCount: messages.length,
                 apiMode,
                 baseUrl,
+                sessionId: session.sessionId,
+                sessionRegistered: session.registered,
             });
 
             // Prepare model configuration
@@ -326,11 +331,15 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             // comes from the registry when the re-sent history identifies a
             // known conversation, otherwise a fresh UUID is used and registered
             // once this turn's output is complete (see sessionRouting.ts).
-            const session = resolveSessionId(model.id, messages);
             const requestHeaders = CommonApi.prepareHeaders(modelApiKey, apiMode, um?.headers, session.sessionId);
             const rotateSession = (): void => {
+                const previousSessionId = requestHeaders["x-opencode-session"];
                 requestHeaders["x-opencode-session"] = rotateSessionId(model.id, messages);
-                logger.warn("request.sessionRotated", { modelId: model.id });
+                logger.warn("request.sessionRotated", {
+                    modelId: model.id,
+                    previousSessionId,
+                    newSessionId: requestHeaders["x-opencode-session"],
+                });
             };
             logger.debug("request.headers", {
                 headers: logger.sanitizeHeaders(requestHeaders as Record<string, string>),
@@ -729,8 +738,14 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
         );
         const maxRounds = config.get<number>("opencodego.visionMaxRounds", 5);
         const rotateSession = (): void => {
+            const previousSessionId = params.requestHeaders["x-opencode-session"];
             params.requestHeaders["x-opencode-session"] = rotateSessionId(params.model.id, params.messages);
-            logger.warn("request.sessionRotated", { modelId: params.model.id, visionRound: true });
+            logger.warn("request.sessionRotated", {
+                modelId: params.model.id,
+                visionRound: true,
+                previousSessionId,
+                newSessionId: params.requestHeaders["x-opencode-session"],
+            });
         };
 
         // Accumulate messages across rounds
