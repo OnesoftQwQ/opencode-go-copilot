@@ -20,6 +20,7 @@ src/
 ├── modelsDev.ts                          # models.dev 目录拉取与查询
 ├── provideModel.ts                       # 模型信息提供函数（目录驱动）
 ├── provider.ts                           # Chat 模型提供商 (核心主文件)
+├── sessionRouting.ts                     # x-opencode-session 会话 ID 登记/轮换
 ├── provideToken.ts                       # Token 计数函数
 ├── statusBar.ts                          # 状态栏管理
 ├── types.ts                              # TypeScript 类型定义
@@ -122,9 +123,13 @@ src/
 
 创建 undici fetch 实例，设置自定义 `bodyTimeout` 防止流式响应中 TCP 空闲连接被提前关闭。回退到全局 `fetch`。
 
-#### `deriveOpencodeSessionId(modelId, messages): string`（模块级函数）
+#### `private async _sendWithSessionFallback(send, rotateSession): Promise<Response>`
 
-派生稳定的会话 ID 用于 `x-opencode-session` 请求头。OpenCode Go 自 2026-09-05 起要求所有推理请求携带该头部（服务端用于路由与 prompt 缓存优化），缺失时请求报错。由于 VS Code 不向 Language Model Provider 暴露会话标识，该 ID 由目标模型 ID + 会话首条含文本的用户消息经 SHA-256 哈希确定性派生（格式化为标准 UUID）：同一会话每一轮都会重发相同历史，因此派生 ID 跨轮次稳定，不同会话得到不同 ID；跳过图片等二进制 DataPart。整个会话无用户文本锚点时（如纯图片请求）回退为随机 UUID。
+发送请求，当失败为上游提供方错误（`isUpstreamProviderFailureError()` 判定，#123：会话亲和路由可能把会话钉死在故障后端）时轮换 `x-opencode-session` 并用新会话 ID 重试一次；轮换后的 ID 由 `rotateSessionId()` 持久化，后续轮次自动使用。非上游错误原样抛出。主请求（三种 apiMode）与图片代理的每一轮 fetch 均经此包装。
+
+#### 会话 ID 生命周期（由 `src/sessionRouting.ts` 提供）
+
+`provideLanguageModelChatResponse()` 中：请求前 `resolveSessionId()` 解析会话 ID（已登记会话复用，否则新随机 UUID，**不立即登记**——登记键需包含 assistant 输出，请求前尚不存在）；响应成功结束后，若本轮使用的是未登记 ID，调用 `registerSessionId()` 按下一轮查表键登记；上游错误时经 `_sendWithSessionFallback()` 轮换。视觉代理轮次复用同一请求头对象，轮换自动生效。
 
 #### `provideLanguageModelChatInformation(options, _token): Promise<LanguageModelChatInformation[]>`
 
@@ -344,6 +349,40 @@ API 实现的抽象基类。
 #### `static prepareHeaders(apiKey, apiMode, customHeaders?, sessionId?): Record<string, string>`
 
 准备 HTTP 请求头。读取 `OPENCODEGO_USER_AGENT` 环境变量覆盖 User-Agent（回退到 `VersionManager.getUserAgent()`；内部测试/应急用，非用户设置项）。Anthropic 模式使用 `x-api-key`，OpenAI 模式使用 `Bearer` 令牌。始终注入 `x-opencode-session`：传入 `sessionId` 时使用之，否则生成随机 UUID，确保所有推理请求都携带 OpenCode Go 要求的会话标识。
+
+---
+
+### 2.6b `src/sessionRouting.ts`
+
+`x-opencode-session` 会话 ID 登记表（OpenCode Go 自 2026-09-05 起强制要求该头部，服务端用于会话亲和路由与 prompt 缓存优化）。核心思路：VS Code 不向 Language Model Provider 暴露会话标识，且会话首轮请求中没有任何足以无碰撞派生 ID 的信息——因此首轮请求使用随机 UUID，输出完成后以 `hash(模型 ID + 首条用户文本 + 本轮 assistant 输出)` 为键登记；后续轮次 Copilot Chat 会原样重发完整历史，从历史中提取相同键即可查回同一 UUID（跨轮次稳定、同开场白的不同会话自然分流）。登记表持久化于 `globalState`（键 `opencodego.sessionRouting.v1`，激活时经 `initSessionRouting()` 恢复），条目按最后使用时间做 3 天滑动 TTL（活跃会话持续续期，超 3 天未用的条目在加载或查表时失效），插入序 LRU，上限 512 条。
+
+#### `interface SessionResolution { sessionId: string; registered: boolean }`
+
+会话 ID 解析结果：`sessionId` 为本次请求应携带的 ID；`registered` 为 true 时表示来自登记表（无需在本轮结束后重新登记）。
+
+#### `initSessionRouting(storage): void`
+
+激活时从 `globalState` 恢复登记表（须在任何请求解析会话 ID 之前调用），超过 3 天 TTL 的条目在加载时丢弃，记录 `sessionRouting.init` 日志（含 restored/expired 数量）。之后的每次写入（登记/查表 touch/轮换/清空）自动异步持久化。
+
+#### `resolveSessionId(modelId, messages): SessionResolution`
+
+解析本次请求的会话 ID。历史中已有首条用户文本 + 首条 assistant 文本（即第二轮及以后）时按锚点查表复用；否则（首轮、无用户文本）返回新随机 UUID 且 `registered: false`。
+
+#### `registerSessionId(modelId, messages, turnOutput, sessionId): void`
+
+将本轮使用的会话 ID 登记到**下一轮查表将提取的同一键**下（`hash(模型 ID + 首条用户文本 + 首条 assistant 文本)`）：本轮历史中已有 assistant 消息时（重启/LRU 逐出后的未命中重建）用历史首条 assistant 文本，真第一轮时用本轮输出（它即下一轮历史的首条 assistant）。仅在 `resolveSessionId()` 未命中（`registered === false`）的本轮成功结束后调用。
+
+#### `rotateSessionId(modelId, messages): string`
+
+生成新随机 UUID 并（当历史已可识别会话时）重新登记，用于上游提供方错误后的轮换重试——会话亲和可能把会话钉死在故障后端（#123），换 ID 即换后端。首轮（历史中尚无 assistant 输出）无法预先登记，由本轮结束后的 `registerSessionId()` 兜底。
+
+#### `resetSessionRouting(): number`
+
+清空全部登记（返回清除条数），由 `opencodego.resetSessionRouting` 命令触发，作为用户逃离劣化后端的手动逃生口。
+
+#### `isUpstreamProviderFailureError(err): boolean`
+
+从请求派发抛出的错误中判定上游提供方故障：HTTP 5xx，或 400 且响应体含 `api_error` 且含 `upstream`/`error from provider`（#123 观测到的签名）。401（鉴权）、429（限流）、内容审核拒绝等不匹配，维持既有处理路径。
 
 ---
 

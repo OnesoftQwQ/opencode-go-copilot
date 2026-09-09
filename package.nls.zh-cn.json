@@ -4,6 +4,7 @@
 	"command.setApiKey": "设置 OpenCode Go API 密钥",
 	"command.getApiKey": "获取 OpenCode Go API 密钥",
 	"command.openSettings": "打开 OpenCode Go 设置",
+	"command.resetSessionRouting": "重置会话路由(使用新会话 ID)",
 	"command.generateCommit": "使用 OpenCodeGo 生成提交消息",
 	"command.abortCommit": "使用 OpenCodeGo 生成提交消息 - 停止",
 	"command.updateModelList": "更新 OpenCode Go 模型列表 (强制)",

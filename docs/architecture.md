@@ -173,9 +173,20 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   │
   ├── 9a. 构建请求头 → CommonApi.prepareHeaders()
   │      └── 始终注入 x-opencode-session（OpenCode Go 自 2026-09-05 起强制要求，
-  │          服务端用于会话路由与 prompt 缓存优化）：由 deriveOpencodeSessionId()
-  │          按 模型 ID + 首条含文本用户消息 的 SHA-256 确定性派生（同会话跨轮次
-  │          稳定），无文本锚点时回退随机 UUID；视觉代理后续轮次复用同一请求头
+  │          服务端用于会话亲和路由与 prompt 缓存优化）：会话 ID 由 sessionRouting.ts
+  │          登记表管理——首轮请求用随机 UUID（不立即登记，键含 assistant 输出、请求
+  │          前不存在），输出完成后按下一轮查表键 hash(模型 ID + 首条用户文本 +
+  │          首条 assistant 文本) 登记；后续轮次从重发历史中提取相同键查回同一 UUID
+  │          （同开场白的不同会话因 assistant 输出不同自然分流）；登记表持久化于
+  │          globalState（激活时恢复，3 天滑动 TTL，重启不丢亲和）；视觉代理后续
+  │          轮次复用同一请求头对象
+  │
+  ├── 9c. 上游提供方错误会话轮换（#123 兜底）:
+  │      └── _sendWithSessionFallback() 包装全部请求派发（主请求三种 apiMode +
+  │          视觉代理各轮）：失败为上游错误（5xx 或 400+api_error+upstream 签名）时
+  │          rotateSessionId() 换新会话 ID 重试一次（亲和路由可能把会话钉死在故障
+  │          后端），轮换结果持久化进登记表；用户可用 opencodego.resetSessionRouting
+  │          命令手动清空全部登记逃生
   │
   ├── 9b. 获取 Response body reader 后，注册取消回调
   │      └── `token.onCancellationRequested` / `signal.addEventListener("abort")`

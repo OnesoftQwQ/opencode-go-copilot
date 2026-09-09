@@ -8,6 +8,7 @@ const zhCN: Record<string, string> = {
 
 	// extension.ts - API key prompts
 	"OpenCode Go Provider API Key": "OpenCode Go 提供商 API 密钥",
+	"Session routing reset. The next request of each conversation will use a new session ID. ({0} cleared)": "会话路由已重置,各会话的下一次请求将使用新的会话 ID。(已清除 {0} 条)",
 	"Update your OpenCode Go API key": "更新您的 OpenCode Go API 密钥",
 	"Enter your OpenCode Go API key": "输入您的 OpenCode Go API 密钥",
 	"OpenCode Go API key cleared.": "OpenCode Go API 密钥已清除。",

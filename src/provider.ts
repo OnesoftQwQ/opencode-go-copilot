@@ -11,9 +11,15 @@ import {
 } from "vscode";
 
 import * as path from "path";
-import * as crypto from "crypto";
 
 import type { ApiMode, ModelPreset, OpenCodeGoModelItem } from "./types";
+
+import {
+    isUpstreamProviderFailureError,
+    registerSessionId,
+    resolveSessionId,
+    rotateSessionId,
+} from "./sessionRouting";
 
 import { createRetryConfig, executeWithRetry, convertToolsToOpenAI } from "./utils";
 import { getCatalogProviderBaseUrl } from "./modelsDev";
@@ -81,51 +87,6 @@ function getRequestedReasoningEffort(options: ProvideLanguageModelChatResponseOp
 
     const modelOptionsEffort = modelOptions?.reasoning_effort ?? modelOptions?.reasoningEffort;
     return typeof modelOptionsEffort === "string" ? modelOptionsEffort : undefined;
-}
-
-/**
- * Derive a stable per-conversation session ID for the `x-opencode-session` header.
- *
- * OpenCode Go requires a stable per-conversation ID on every inference request
- * (used server-side for routing and prompt-cache optimization; requests without
- * it error since 2026-09-05). VS Code does not expose a conversation identifier
- * to language model providers, so the ID is derived deterministically from the
- * target model ID plus the conversation's first user message text: chat clients
- * re-send the same history on every turn of a conversation, so the derived ID
- * stays stable across turns while differing between conversations.
- *
- * @param modelId The model ID the request targets (keeps sessions distinct per model).
- * @param messages The request messages from VS Code.
- * @returns A UUID-formatted session ID, or a random UUID when the conversation has no user text anchor (e.g. image-only requests).
- */
-function deriveOpencodeSessionId(
-    modelId: string,
-    messages: readonly LanguageModelChatRequestMessage[]
-): string {
-    for (const message of messages) {
-        if (message.role !== vscode.LanguageModelChatMessageRole.User) {
-            continue;
-        }
-        // Collect text parts only — binary data parts (images) are skipped so the
-        // hash stays cheap and the ID does not depend on image bytes.
-        const anchorText = message.content
-            .map((part) => {
-                if (typeof part === "string") return part;
-                if (part instanceof vscode.LanguageModelTextPart) return part.value;
-                return "";
-            })
-            .join("");
-        if (!anchorText.trim()) {
-            continue;
-        }
-        const hash = crypto.createHash("sha256");
-        hash.update(modelId);
-        hash.update(anchorText);
-        // Format the digest as a canonical UUID (8-4-4-4-12).
-        const hex = hash.digest("hex").slice(0, 32);
-        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
-    }
-    return crypto.randomUUID();
 }
 
 /**
@@ -280,11 +241,16 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             const apiMode = um?.apiMode || "openai";
             const baseUrl = um?.baseUrl || getCatalogProviderBaseUrl("opencode-go", "https://opencode.ai/zen/go/v1/");
 
+            // Resolve the conversation's session ID early so it can be traced
+            // in request logs (see sessionRouting.ts).
+            const session = resolveSessionId(model.id, messages);
             logger.info("request.start", {
                 modelId: model.id,
                 messageCount: messages.length,
                 apiMode,
                 baseUrl,
+                sessionId: session.sessionId,
+                sessionRegistered: session.registered,
             });
 
             // Prepare model configuration
@@ -361,13 +327,20 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             // Create undici fetch with custom bodyTimeout (extends TCP idle timeout during streaming)
             dispatchFetch = this._createFetchWithTimeout(requestTimeoutMs);
 
-            // Prepare headers with custom headers if specified
-            const requestHeaders = CommonApi.prepareHeaders(
-                modelApiKey,
-                apiMode,
-                um?.headers,
-                deriveOpencodeSessionId(model.id, messages)
-            );
+            // Prepare headers with custom headers if specified. The session ID
+            // comes from the registry when the re-sent history identifies a
+            // known conversation, otherwise a fresh UUID is used and registered
+            // once this turn's output is complete (see sessionRouting.ts).
+            const requestHeaders = CommonApi.prepareHeaders(modelApiKey, apiMode, um?.headers, session.sessionId);
+            const rotateSession = (): void => {
+                const previousSessionId = requestHeaders["x-opencode-session"];
+                requestHeaders["x-opencode-session"] = rotateSessionId(model.id, messages);
+                logger.warn("request.sessionRotated", {
+                    modelId: model.id,
+                    previousSessionId,
+                    newSessionId: requestHeaders["x-opencode-session"],
+                });
+            };
             logger.debug("request.headers", {
                 headers: logger.sanitizeHeaders(requestHeaders as Record<string, string>),
             });
@@ -403,7 +376,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     ? `${normalizedBaseUrl}/messages`
                     : `${normalizedBaseUrl}/v1/messages`;
                 logger.debug("request.body", { url, requestBody });
-                const response = await executeWithRetry(async () => {
+                const response = await this._sendWithSessionFallback(async () => executeWithRetry(async () => {
                     const res = await dispatchFetch(url, {
                         method: "POST",
                         headers: requestHeaders,
@@ -424,7 +397,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     }
 
                     return res;
-                }, retryConfig);
+                }, retryConfig), rotateSession);
 
                 if (!response.body) {
                     throw new Error("No response body from Anthropic API");
@@ -439,6 +412,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     apiMode: "anthropic",
                     model: model,
                     um: um,
+                    messages: messages,
                     modelApiKey: modelApiKey,
                     baseUrl: BASE_URL,
                     dispatchFetch: dispatchFetch,
@@ -473,7 +447,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
                 const url = `${BASE_URL.replace(/\/+$/, "")}/responses`;
                 logger.debug("request.body", { url, requestBody });
-                const response = await executeWithRetry(async () => {
+                const response = await this._sendWithSessionFallback(async () => executeWithRetry(async () => {
                     const res = await dispatchFetch(url, {
                         method: "POST",
                         headers: requestHeaders,
@@ -493,7 +467,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     }
 
                     return res;
-                }, retryConfig);
+                }, retryConfig), rotateSession);
 
                 if (!response.body) {
                     throw new Error("No response body from Responses API");
@@ -506,6 +480,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     apiMode: "openai-responses",
                     model: model,
                     um: um,
+                    messages: messages,
                     modelApiKey: modelApiKey,
                     baseUrl: BASE_URL,
                     dispatchFetch: dispatchFetch,
@@ -545,7 +520,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 // Send chat request with retry
                 const url = `${BASE_URL.replace(/\/+$/, "")}/chat/completions`;
                 logger.debug("request.body", { url, requestBody });
-                const response = await executeWithRetry(async () => {
+                const response = await this._sendWithSessionFallback(async () => executeWithRetry(async () => {
                     const res = await dispatchFetch(url, {
                         method: "POST",
                         headers: requestHeaders,
@@ -566,7 +541,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     }
 
                     return res;
-                }, retryConfig);
+                }, retryConfig), rotateSession);
 
                 if (!response.body) {
                     throw new Error("No response body from API");
@@ -582,6 +557,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     apiMode: "openai",
                     model: model,
                     um: um,
+                    messages: messages,
                     modelApiKey: modelApiKey,
                     baseUrl: BASE_URL,
                     dispatchFetch: dispatchFetch,
@@ -592,6 +568,15 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     token: token,
                     options: options,
                 });
+            }
+
+            // Persist the session ID for conversations that used a fresh UUID
+            // this turn (first turn, or registry miss after restart): keyed by
+            // model + first user text + this turn's output, which every later
+            // turn re-sends as history. Rotated sessions re-register inside
+            // rotateSessionId() and are skipped here.
+            if (!session.registered) {
+                registerSessionId(model.id, messages, collectedOutputText.join(""), requestHeaders["x-opencode-session"]);
             }
 
             // Fallback: if API did not return usage data, use client-side calculation for native indicator
@@ -685,6 +670,33 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
     }
 
     /**
+     * Send a request, retrying once with a rotated `x-opencode-session` when
+     * the failure is an upstream-provider error: session affinity can pin a
+     * conversation to a broken backend (#123), and a fresh session ID gets
+     * routed elsewhere. The rotated ID is persisted for later turns inside
+     * `rotateSessionId()`.
+     *
+     * @param send Dispatches the request (with its own retry policy); reads
+     *             the request headers at call time so rotation takes effect.
+     * @param rotateSession Replaces the session ID in the shared headers.
+     * @returns The successful response.
+     */
+    private async _sendWithSessionFallback(
+        send: () => Promise<Response>,
+        rotateSession: () => void
+    ): Promise<Response> {
+        try {
+            return await send();
+        } catch (err) {
+            if (!isUpstreamProviderFailureError(err)) {
+                throw err;
+            }
+            rotateSession();
+            return await send();
+        }
+    }
+
+    /**
      * Handle an ask_image tool call interception by calling the vision model
      * with the model's specific query and making a second round API request
      * with the tool call + result. Unlike the old describe_image approach,
@@ -695,6 +707,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
         apiMode: ApiMode;
         model: LanguageModelChatInformation;
         um: OpenCodeGoModelItem | undefined;
+        messages: readonly LanguageModelChatRequestMessage[];
         modelApiKey: string;
         baseUrl: string;
         dispatchFetch: typeof fetch;
@@ -724,6 +737,16 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             config.get<string>("opencodego.visionProxyModel", "qwen-plus-latest")
         );
         const maxRounds = config.get<number>("opencodego.visionMaxRounds", 5);
+        const rotateSession = (): void => {
+            const previousSessionId = params.requestHeaders["x-opencode-session"];
+            params.requestHeaders["x-opencode-session"] = rotateSessionId(params.model.id, params.messages);
+            logger.warn("request.sessionRotated", {
+                modelId: params.model.id,
+                visionRound: true,
+                previousSessionId,
+                newSessionId: params.requestHeaders["x-opencode-session"],
+            });
+        };
 
         // Accumulate messages across rounds
         let currentMessages: any[] = [...storedMessages];
@@ -953,7 +976,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                         ? `${normalizedUrl}/messages`
                         : `${normalizedUrl}/v1/messages`;
 
-                    const response = await executeWithRetry(async () => {
+                    const response = await this._sendWithSessionFallback(async () => executeWithRetry(async () => {
                         const res = await params.dispatchFetch(url, {
                             method: "POST",
                             headers: params.requestHeaders,
@@ -965,7 +988,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                             throw new Error(`Anthropic API error: [${res.status}] ${res.statusText}${errorText ? `\n${errorText}` : ""}`);
                         }
                         return res;
-                    }, params.retryConfig);
+                    }, params.retryConfig), rotateSession);
 
                     if (response.body) {
                         await api.processStreamingResponse(response.body, params.trackingProgress, params.token);
@@ -996,7 +1019,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     body = responsesApi.prepareRequestBody(body, params.um, params.options);
 
                     const url = `${params.baseUrl.replace(/\/+$/, "")}/responses`;
-                    const response = await executeWithRetry(async () => {
+                    const response = await this._sendWithSessionFallback(async () => executeWithRetry(async () => {
                         const res = await params.dispatchFetch(url, {
                             method: "POST",
                             headers: params.requestHeaders,
@@ -1008,7 +1031,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                             throw new Error(`Responses API error: [${res.status}] ${res.statusText}${errorText ? `\n${errorText}` : ""}`);
                         }
                         return res;
-                    }, params.retryConfig);
+                    }, params.retryConfig), rotateSession);
 
                     if (response.body) {
                         await responsesApi.processStreamingResponse(response.body, params.trackingProgress, params.token);
@@ -1088,7 +1111,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     }
 
                     const url = `${params.baseUrl.replace(/\/+$/, "")}/chat/completions`;
-                    const response = await executeWithRetry(async () => {
+                    const response = await this._sendWithSessionFallback(async () => executeWithRetry(async () => {
                         const res = await params.dispatchFetch(url, {
                             method: "POST",
                             headers: params.requestHeaders,
@@ -1100,7 +1123,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                             throw new Error(`API error: [${res.status}] ${res.statusText}${errorText ? `\n${errorText}` : ""}`);
                         }
                         return res;
-                    }, params.retryConfig);
+                    }, params.retryConfig), rotateSession);
 
                     if (response.body) {
                         await api.processStreamingResponse(response.body, params.trackingProgress, params.token);
