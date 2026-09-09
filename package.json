@@ -61,6 +61,11 @@
 				"title": "%command.openSettings%"
 			},
 			{
+				"command": "opencodego.resetSessionRouting",
+				"category": "%commandCategory%",
+				"title": "%command.resetSessionRouting%"
+			},
+			{
 				"command": "opencodego.generateGitCommitMessage",
 				"title": "%command.generateCommit%",
 				"category": "%commandCategory%",
