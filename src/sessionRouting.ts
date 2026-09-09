@@ -1,6 +1,7 @@
 import * as crypto from "crypto";
 import * as vscode from "vscode";
 import type { LanguageModelChatRequestMessage } from "vscode";
+import { logger } from "./logger";
 
 /**
  * Session ID registry for the `x-opencode-session` header.
@@ -28,13 +29,75 @@ import type { LanguageModelChatRequestMessage } from "vscode";
  * 3. Upstream-provider failures: session affinity can pin a conversation to a
  *    broken backend (#123). `rotateSessionId()` re-registers a fresh UUID so
  *    in-request retries and later turns escape it.
+ *
+ * The registry persists in extension globalState with a sliding 3-day TTL
+ * (entries unused for 3 days expire), so restarting VS Code keeps
+ * conversation affinity.
  */
 
 /** Upper bound on remembered sessions; insertion-order LRU eviction. */
 const MAX_SESSION_ENTRIES = 512;
 
-/** Conversation anchor (sha256 hex) → session ID. */
-const _sessions = new Map<string, string>();
+/** Sessions unused for longer than this are considered expired (sliding TTL). */
+const SESSION_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+
+/** globalState key holding the serialized registry across restarts. */
+const STORAGE_KEY = "opencodego.sessionRouting.v1";
+
+/** One remembered conversation: its session ID and when it was last used. */
+interface StoredSessionEntry {
+    sessionId: string;
+    /** Epoch ms of the last resolve/registration, drives the TTL. */
+    lastUsedAt: number;
+}
+
+/** Conversation anchor (sha256 hex) → session entry. */
+const _sessions = new Map<string, StoredSessionEntry>();
+
+/** Persistence backend (extension globalState), set during activation. */
+let _storage: vscode.Memento | undefined;
+
+/**
+ * Restore the registry from extension globalState. Must be called during
+ * activation, before any request can resolve a session ID. Entries unused for
+ * more than the 3-day TTL are dropped on load.
+ *
+ * @param storage The extension's globalState memento.
+ */
+export function initSessionRouting(storage: vscode.Memento): void {
+    _storage = storage;
+    const stored = storage.get<Record<string, StoredSessionEntry>>(STORAGE_KEY, {});
+    const now = Date.now();
+    let restored = 0;
+    let expired = 0;
+    for (const [anchor, entry] of Object.entries(stored ?? {})) {
+        if (!entry || typeof entry.sessionId !== "string" || typeof entry.lastUsedAt !== "number") {
+            continue;
+        }
+        if (now - entry.lastUsedAt > SESSION_TTL_MS) {
+            expired++;
+            continue;
+        }
+        _sessions.set(anchor, entry);
+        restored++;
+    }
+    logger.info("sessionRouting.init", { restored, expired });
+}
+
+/**
+ * Serialize the registry to globalState. Fire-and-forget: a lost write only
+ * costs one registry miss (a fresh UUID) later.
+ */
+function persist(): void {
+    if (!_storage) {
+        return;
+    }
+    const snapshot: Record<string, StoredSessionEntry> = {};
+    for (const [anchor, entry] of _sessions) {
+        snapshot[anchor] = entry;
+    }
+    void Promise.resolve(_storage.update(STORAGE_KEY, snapshot)).catch(() => { });
+}
 
 /** Result of resolving a session ID for an outgoing request. */
 export interface SessionResolution {
@@ -103,12 +166,12 @@ function anchorHash(modelId: string, userText: string, assistantText: string): s
 }
 
 /**
- * Store a session ID under an anchor, refreshing LRU position and evicting
- * the oldest entries beyond the cap.
+ * Store a session ID under an anchor, refreshing LRU position and the TTL
+ * timestamp, evicting the oldest entries beyond the cap, and persisting.
  */
 function store(anchor: string, sessionId: string): void {
     _sessions.delete(anchor);
-    _sessions.set(anchor, sessionId);
+    _sessions.set(anchor, { sessionId, lastUsedAt: Date.now() });
     while (_sessions.size > MAX_SESSION_ENTRIES) {
         const oldest = _sessions.keys().next().value;
         if (oldest === undefined) {
@@ -116,6 +179,7 @@ function store(anchor: string, sessionId: string): void {
         }
         _sessions.delete(oldest);
     }
+    persist();
 }
 
 /**
@@ -143,8 +207,14 @@ export function resolveSessionId(
     const anchor = anchorHash(modelId, userText, assistantText);
     const existing = _sessions.get(anchor);
     if (existing) {
-        store(anchor, existing);
-        return { sessionId: existing, registered: true };
+        if (Date.now() - existing.lastUsedAt > SESSION_TTL_MS) {
+            // Slid past the TTL while the window stayed open — treat as miss.
+            _sessions.delete(anchor);
+            persist();
+            return { sessionId: crypto.randomUUID(), registered: false };
+        }
+        store(anchor, existing.sessionId);
+        return { sessionId: existing.sessionId, registered: true };
     }
     return { sessionId: crypto.randomUUID(), registered: false };
 }
@@ -211,6 +281,7 @@ export function rotateSessionId(
 export function resetSessionRouting(): number {
     const cleared = _sessions.size;
     _sessions.clear();
+    persist();
     return cleared;
 }
 

@@ -177,8 +177,9 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   │          登记表管理——首轮请求用随机 UUID（不立即登记，键含 assistant 输出、请求
   │          前不存在），输出完成后按下一轮查表键 hash(模型 ID + 首条用户文本 +
   │          首条 assistant 文本) 登记；后续轮次从重发历史中提取相同键查回同一 UUID
-  │          （同开场白的不同会话因 assistant 输出不同自然分流）；视觉代理后续轮次
-  │          复用同一请求头对象
+  │          （同开场白的不同会话因 assistant 输出不同自然分流）；登记表持久化于
+  │          globalState（激活时恢复，3 天滑动 TTL，重启不丢亲和）；视觉代理后续
+  │          轮次复用同一请求头对象
   │
   ├── 9c. 上游提供方错误会话轮换（#123 兜底）:
   │      └── _sendWithSessionFallback() 包装全部请求派发（主请求三种 apiMode +

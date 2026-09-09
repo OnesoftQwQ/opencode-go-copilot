@@ -354,11 +354,15 @@ API 实现的抽象基类。
 
 ### 2.6b `src/sessionRouting.ts`
 
-`x-opencode-session` 会话 ID 登记表（OpenCode Go 自 2026-09-05 起强制要求该头部，服务端用于会话亲和路由与 prompt 缓存优化）。核心思路：VS Code 不向 Language Model Provider 暴露会话标识，且会话首轮请求中没有任何足以无碰撞派生 ID 的信息——因此首轮请求使用随机 UUID，输出完成后以 `hash(模型 ID + 首条用户文本 + 本轮 assistant 输出)` 为键登记；后续轮次 Copilot Chat 会原样重发完整历史，从历史中提取相同键即可查回同一 UUID（跨轮次稳定、同开场白的不同会话自然分流）。登记表为插入序 LRU，上限 512 条。
+`x-opencode-session` 会话 ID 登记表（OpenCode Go 自 2026-09-05 起强制要求该头部，服务端用于会话亲和路由与 prompt 缓存优化）。核心思路：VS Code 不向 Language Model Provider 暴露会话标识，且会话首轮请求中没有任何足以无碰撞派生 ID 的信息——因此首轮请求使用随机 UUID，输出完成后以 `hash(模型 ID + 首条用户文本 + 本轮 assistant 输出)` 为键登记；后续轮次 Copilot Chat 会原样重发完整历史，从历史中提取相同键即可查回同一 UUID（跨轮次稳定、同开场白的不同会话自然分流）。登记表持久化于 `globalState`（键 `opencodego.sessionRouting.v1`，激活时经 `initSessionRouting()` 恢复），条目按最后使用时间做 3 天滑动 TTL（活跃会话持续续期，超 3 天未用的条目在加载或查表时失效），插入序 LRU，上限 512 条。
 
 #### `interface SessionResolution { sessionId: string; registered: boolean }`
 
 会话 ID 解析结果：`sessionId` 为本次请求应携带的 ID；`registered` 为 true 时表示来自登记表（无需在本轮结束后重新登记）。
+
+#### `initSessionRouting(storage): void`
+
+激活时从 `globalState` 恢复登记表（须在任何请求解析会话 ID 之前调用），超过 3 天 TTL 的条目在加载时丢弃，记录 `sessionRouting.init` 日志（含 restored/expired 数量）。之后的每次写入（登记/查表 touch/轮换/清空）自动异步持久化。
 
 #### `resolveSessionId(modelId, messages): SessionResolution`
 

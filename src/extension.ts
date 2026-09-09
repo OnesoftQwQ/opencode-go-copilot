@@ -9,7 +9,7 @@ import { VersionManager } from "./versionManager";
 import { abortCommitGeneration, generateCommitMsg } from "./gitCommit/commitMessageGenerator";
 import { TokenizerManager } from "./tokenizer/tokenizerManager";
 import { prepareLanguageModelChatInformation, resetAutoDiscoveryState } from "./provideModel";
-import { resetSessionRouting } from "./sessionRouting";
+import { initSessionRouting, resetSessionRouting } from "./sessionRouting";
 
 // ---- Walkthrough / Welcome constants ----
 
@@ -29,6 +29,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     const tokenCountStatusBarItem: vscode.StatusBarItem = initStatusBar(context, context.secrets);
     const provider = new OpenCodeGoChatModelProvider(context.secrets, tokenCountStatusBarItem);
+
+    // Restore the persisted session ID registry (3-day TTL) before any
+    // request can resolve a session ID.
+    initSessionRouting(context.globalState);
 
     // Register the OpenCode Go provider under the vendor id used in package.json
     vscode.lm.registerLanguageModelChatProvider("opencodego", provider);
