@@ -8,7 +8,7 @@
  * (limit, cost, reasoning_options, attachment, modalities, ...), so the
  * fallback behaves like the real catalog instead of a bare ID list.
  *
- * Snapshot taken from the official models.dev catalog on 2026-09-09.
+ * Snapshot taken from the official models.dev catalog on 2026-09-11.
  */
 
 import type { CatalogProvider, ModelsDevEntry } from "./modelsDev";
@@ -159,9 +159,9 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "output": 384000
           },
           "cost": {
-            "input": 0.22,
-            "output": 0.66,
-            "cache_read": 0.007
+            "input": 0.15,
+            "output": 0.6,
+            "cache_read": 0.003
           }
         },
         "qwen3.6-plus": {
@@ -523,9 +523,9 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "output": 384000
           },
           "cost": {
-            "input": 0.22,
-            "output": 0.66,
-            "cache_read": 0.007
+            "input": 0.15,
+            "output": 0.6,
+            "cache_read": 0.003
           }
         },
         "kimi-k2.7-code": {
@@ -674,6 +674,52 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "cache_read": 0
           }
         },
+        "deepseek-v4.1-flash": {
+          "id": "deepseek-v4.1-flash",
+          "name": "DeepSeek V4.1 Flash",
+          "description": "DeepSeek V4.1 Flash model for reasoning and agentic coding",
+          "family": "deepseek-flash",
+          "attachment": true,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "effort",
+              "values": [
+                "low",
+                "high",
+                "max"
+              ]
+            }
+          ],
+          "tool_call": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "structured_output": true,
+          "temperature": true,
+          "knowledge": "2025-05",
+          "release_date": "2026-09-10",
+          "last_updated": "2026-09-10",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": true,
+          "limit": {
+            "context": 1000000,
+            "output": 384000
+          },
+          "cost": {
+            "input": 0.15,
+            "output": 0.6,
+            "cache_read": 0.003
+          }
+        },
         "hy3": {
           "id": "hy3",
           "name": "Hy3",
@@ -791,6 +837,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "context": 500000,
             "output": 128000
           },
+          "status": "deprecated",
           "cost": {
             "input": 0.2,
             "output": 0.66,
@@ -913,7 +960,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
         },
         "glm-5.3-flash": {
           "id": "glm-5.3-flash",
-          "name": "GLM-5.3-Flash (2x usage)",
+          "name": "GLM-5.3-Flash",
           "description": "Native multimodal GLM model for efficient coding and long-horizon agent tasks",
           "family": "glm",
           "attachment": true,
@@ -953,9 +1000,9 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "output": 131072
           },
           "cost": {
-            "input": 0.075,
-            "output": 0.25,
-            "cache_read": 0.015
+            "input": 0.15,
+            "output": 0.5,
+            "cache_read": 0.03
           }
         },
         "muse-spark-1.3-contributor": {
