@@ -26,6 +26,8 @@ npm run build
 # 等效于: npx @vscode/vsce package -o extension.vsix
 ```
 
+> 打包内容由 `.vscodeignore` 控制：排除源码、测试脚本、开发配置、文档与本地产物（如 `*.log`、`.pi-subagents/`），仅保留运行所需的 `out/`、`resources/`、`assets/`、`node_modules/` 与扩展元数据文件。
+
 ## 2. 编译配置 (tsconfig.json)
 
 | 选项 | 值 |
@@ -57,5 +59,6 @@ npm run build
 | `scripts/test-responses-api.mjs` | OpenAI Responses 消息、请求体、SSE、工具调用、usage、encrypted reasoning 回放、缺失 MIME 与工具模式兼容测试 |
 | `scripts/test-api-mode.mjs` | models.dev 适配器到三种 API 协议的映射与旧目录兼容测试 |
 | `scripts/test-anthropic-tool-result-merge.mjs` | Anthropic 多条工具结果合并行为验证（issue #87） |
+| `scripts/test-base-url.mjs` | 推理 Base URL 覆盖读取与 HTTP 安全检查（localhost/私网 http、远程 https、非法输入）验证 |
 | `scripts/update-hardcoded-catalog.mjs` | 刷新硬编码目录快照（发布构建自动执行，失败保留旧快照不阻断） |
 | `scripts/check-new-models.mjs` | 检查 models.dev 目录中的新模型 |
