@@ -7,6 +7,7 @@ import { ResponsesApi } from "../openai/responsesApi";
 import { AnthropicApi } from "../anthropic/anthropicApi";
 import { getCatalogModelConfig } from "../catalogModels";
 import { getCatalogProviderBaseUrl } from "../modelsDev";
+import { getInferenceBaseUrlOverride, validateBaseUrl } from "../utils";
 import { logger } from "../logger";
 import { l10n } from "../localize";
 import type { OpenCodeGoModelItem } from "../types";
@@ -245,22 +246,13 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
             throw new Error(l10n("OpenCode Go API key not found"));
         }
 
-        const baseUrl = selectedModel.baseUrl || getCatalogProviderBaseUrl("opencode-go", "https://opencode.ai/zen/go/v1/");
-        if (!baseUrl || !baseUrl.startsWith("http")) {
-            throw new Error(l10n("Invalid base URL configuration."));
-        }
-        {
-            const url = new URL(baseUrl);
-            if (url.protocol === "http:") {
-                const host = url.hostname.toLowerCase();
-                const isLocal = host === "localhost" || host === "127.0.0.1" || host === "::1"
-                    || host.startsWith("192.168.") || host.startsWith("10.")
-                    || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
-                    || host === "0.0.0.0";
-                if (!isLocal) {
-                    throw new Error(l10n("Plain HTTP is only allowed for localhost or private network addresses. Use HTTPS for remote endpoints."));
-                }
-            }
+        // User-configured proxy base URL wins over the catalog URL.
+        const baseUrl = getInferenceBaseUrlOverride()
+            || selectedModel.baseUrl
+            || getCatalogProviderBaseUrl("opencode-go", "https://opencode.ai/zen/go/v1/");
+        const baseUrlError = validateBaseUrl(baseUrl);
+        if (baseUrlError) {
+            throw new Error(baseUrlError);
         }
 
         // Apply language instruction: auto mode lets the model infer from style reference

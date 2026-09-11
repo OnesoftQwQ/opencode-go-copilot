@@ -52,8 +52,8 @@ src/
 
 | 文件 | 行数 | 职责 |
 | --- | --- | --- |
-| `extension.ts` | ~210 | 扩展激活/停用，注册 Provider 和 7 条命令，首次安装欢迎页引导 |
-| `provider.ts` | ~900 | 实现 `LanguageModelChatProvider`，处理聊天请求全流程及图片代理多轮循环处理 |
+| `extension.ts` | ~350 | 扩展激活/停用，注册 Provider 和 10 条命令，首次安装欢迎页引导 |
+| `provider.ts` | ~1150 | 实现 `LanguageModelChatProvider`，处理聊天请求全流程及图片代理多轮循环处理 |
 | `catalogModels.ts` | ~230 | 统一模型解析/构建层：`ModelMeta` 合并链（`MODEL_OVERRIDES` > 目录条目 > 默认值）、`buildCatalogModelInfo()`、`getCatalogModelConfig()`、`resolveProviderForModelId()`/`isZenFreeModelId()`（`-free` 后缀 + 硬编码集合分流 Zen/Go） |
 | `hardcodedModelList.ts` | ~4880 | 硬编码兜底目录快照：opencode-go（24 个）与 opencode（85 个）模型的完整元数据（2026-08-04），官方目录与镜像均不可达时作为最后防线，与运行时 JSON 相同方式断言为 `HardcodedCatalogData` |
 | `modelOverrides.ts` | ~50 | 每模型覆盖表 `MODEL_OVERRIDES`（全部可选字段）+ `ModelMetaOverride` 类型；仅维护 models.dev 无法表达的内容（Anthropic apiMode、adaptive、`reasoning_split` 等） |
@@ -64,10 +64,10 @@ src/
 | `commonApi.ts` | ~467 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截、User-Agent 配置读取） |
 | `provideModel.ts` | ~180 | 模型信息提供函数：以 catalog 的 `opencode-go` provider 全量构建列表（可选按 API 列表过滤），Zen 免费模型从 `opencode` provider 按 `isZenFreeModelId()`（`-free` 后缀 + 硬编码 `big-pickle`）过滤；1 分钟间隔缓存与并发去重 |
 | `provideToken.ts` | ~100 | Token 用量计算 |
-| `utils.ts` | ~490 | 工具函数（重试、角色映射、OpenAI Chat/Responses 工具格式转换等） |
+| `utils.ts` | ~570 | 工具函数（重试、角色映射、Base URL 覆盖/校验、OpenAI Chat/Responses 工具格式转换等） |
 | `statusBar.ts` | ~317 | 状态栏创建、更新、累计计数器、Go 用量轮询与 tooltip 区块渲染 |
 | `logger.ts` | ~55 | 日志输出 (LogOutputChannel) |
-| `localize.ts` | ~109 | 中英文国际化（含 `low/medium/high/xhigh/max` 思考强度标签） |
+| `localize.ts` | ~140 | 中英文国际化（含 `low/medium/high/xhigh/max` 思考强度标签、Base URL 代理设置文案） |
 | `versionManager.ts` | ~35 | 扩展版本信息（使用正确扩展 ID `OnesoftQwQ.opencode-go-copilot-provider`） |
 | `openai/openaiApi.ts` | ~613 | OpenAI 格式 API 实现 (消息转换/请求构建/流式处理/图片代理) |
 | `openai/openaiTypes.ts` | ~75 | OpenAI 类型定义 |
@@ -76,7 +76,7 @@ src/
 | `openai/responsesTypes.ts` | ~125 | OpenAI Responses 请求、输入 Item、工具、usage 与流事件类型定义 |
 | `anthropic/anthropicApi.ts` | ~535 | Anthropic 格式 API 实现 (消息转换/请求构建/流式处理/图片代理) |
 | `anthropic/anthropicTypes.ts` | ~130 | Anthropic 类型定义 |
-| `gitCommit/commitMessageGenerator.ts` | ~295 | Git 提交消息生成逻辑 |
+| `gitCommit/commitMessageGenerator.ts` | ~320 | Git 提交消息生成逻辑 |
 | `gitCommit/gitUtils.ts` | ~260 | Git 命令封装 |
 | `tokenizer/tokenizerManager.ts` | ~115 | o200k_base 分词器管理 (含 LRU 缓存) |
 | `tokenizer/imageUtils.ts` | ~130 | 图片尺寸解析 (PNG/GIF/JPEG/WebP) |
@@ -93,7 +93,11 @@ src/
 
 #### `activate(context: vscode.ExtensionContext): void`
 
-扩展激活入口。初始化日志、分词器、状态栏；注册 `LanguageModelChatProvider`；注册七条命令（设置 API Key、获取 API Key 网址、打开扩展设置、生成 Git 提交消息、中止生成、设置模型预设、查询/刷新 Go 套餐用量）；激活时非阻塞预热模型发现（fire-and-forget 调用 `prepareLanguageModelChatInformation()`，每次激活刷新模型列表，先拉取 models.dev 目录再拉取模型列表，失败仅记录日志）；首次安装时调用 `showWelcomeIfNeeded()` 显示欢迎页引导。
+扩展激活入口。初始化日志、分词器、状态栏；注册 `LanguageModelChatProvider`；注册十条命令（设置 API Key、获取 API Key 网址、打开扩展设置、更新模型列表、重置会话路由、生成 Git 提交消息、中止生成、设置模型预设、查询/刷新 Go 套餐用量、设置代理 Base URL）；激活时非阻塞预热模型发现（fire-and-forget 调用 `prepareLanguageModelChatInformation()`，每次激活刷新模型列表，先拉取 models.dev 目录再拉取模型列表，失败仅记录日志）；首次安装时调用 `showWelcomeIfNeeded()` 显示欢迎页引导。
+
+#### `opencodego.setInferenceBaseUrl` 命令流程（代理 Base URL 覆盖）
+
+将推理请求（聊天与 Git 提交消息生成）的 Base URL 覆盖为本地代理地址。先以 QuickPick（命令框）显示兼容性要求（本功能仅用于接入本地代理、并非接入第三方提供商；协议、路径、模型 ID、请求头必须与官方端点一致；若使用代理后遇到问题，提 Issue 前请先排除代理因素）和「我已知晓」/「取消」选项，选择「我已知晓」后才显示输入框（Esc/取消则直接返回）。输入框实时调用 `validateBaseUrl()` 校验；留空表示清除覆盖。设置写入 `opencodego.inferenceBaseUrl`（machine 作用域，不随设置同步），仅影响推理请求，用量查询与模型列表仍访问官方地址。
 
 #### `showWelcomeIfNeeded(context: vscode.ExtensionContext): Promise<void>`
 
@@ -141,7 +145,7 @@ src/
 
 #### `provideLanguageModelChatResponse(model, messages, options, progress, token): Promise<void>`
 
-核心方法：处理聊天请求，流式返回响应。包括模型配置获取（统一 `getCatalogModelConfig`，按 `-free` 后缀 + 硬编码集合自动分流 Zen/Go）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理，以及按 `apiMode` 精确路由到 `/chat/completions`、`/responses`、`/v1/messages`。三种协议分别由 `OpenaiApi`、`ResponsesApi`、`AnthropicApi` 转换请求和解析流，之后统一处理图片代理拦截与错误。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。模型配置通过 `{ ...um }` 浅拷贝后再修改 thinking/temperature，防止并发会话间互相泄漏设置。
+核心方法：处理聊天请求，流式返回响应。包括模型配置获取（统一 `getCatalogModelConfig`，按 `-free` 后缀 + 硬编码集合自动分流 Zen/Go）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理，以及按 `apiMode` 精确路由到 `/chat/completions`、`/responses`、`/v1/messages`。Base URL 解析优先级为 `opencodego.inferenceBaseUrl` 用户覆盖（代理）> 模型目录 baseUrl > 官方默认。三种协议分别由 `OpenaiApi`、`ResponsesApi`、`AnthropicApi` 转换请求和解析流，之后统一处理图片代理拦截与错误。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。模型配置通过 `{ ...um }` 浅拷贝后再修改 thinking/temperature，防止并发会话间互相泄漏设置。
 
 #### `private async _handleInterceptedToolCall(params): Promise<void>`
 
@@ -162,7 +166,7 @@ src/
 
 #### Base URL HTTP 安全检查
 
-在发送请求前验证 base URL：拒绝非 HTTP 协议；针对 `http:` 协议仅允许 localhost、127.0.0.1、::1、192.168.*、10.*、0.0.0.0 等本地/私有网络地址，远程端点强制使用 HTTPS。
+在发送请求前调用 `utils.ts` 的 `validateBaseUrl()` 验证 base URL：拒绝无法解析或非 HTTP(S) 协议的 URL；针对 `http:` 协议仅允许 localhost、127.0.0.1、::1、192.168.*、10.*、0.0.0.0 等本地/私有网络地址，远程端点强制使用 HTTPS。Provider 与 Git 提交生成共用同一校验逻辑，`opencodego.setInferenceBaseUrl` 命令的输入框也使用该函数实时校验。
 
 ---
 
@@ -547,6 +551,14 @@ API 实现的抽象基类。
 #### `createRetryConfig(): RetryConfig`
 
 从 VS Code 设置中读取重试配置。
+
+#### `getInferenceBaseUrlOverride(): string`
+
+读取 `opencodego.inferenceBaseUrl`（trim 后），返回空字符串表示未配置。Provider 与 Git 提交生成在解析 base URL 时以此优先于模型目录 baseUrl。
+
+#### `validateBaseUrl(baseUrl): string | undefined`
+
+校验 base URL 的 HTTP 安全性（被 Provider、Git 提交生成与设置命令共用）：URL 无法解析或协议非 HTTP(S) 时返回「无效的 Base URL 配置」错误消息；`http:` 协议仅允许 localhost、127.0.0.1、::1/[::1]、192.168.*、10.*、172.16-31.*、0.0.0.0 等本地/私有地址，远程端点返回「请使用 HTTPS」错误消息；合法时返回 `undefined`。由 `scripts/test-base-url.mjs` 验证。
 
 #### `executeWithRetry<T>(fn, retryConfig): Promise<T>`
 
@@ -1054,7 +1066,7 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 
 #### `performCommitMsgGeneration(secrets, gitDiff, inputBox, repoPath?): Promise<void>`
 
-核心生成逻辑。构建 prompt（含自定义提示词、最近提交风格、用户输入、diff 内容），支持 `auto` 语言模式（由模型根据历史 commit 风格自动推断），根据 catalog 的 `apiMode` 创建 OpenAI Chat、OpenAI Responses 或 Anthropic API 实例，流式输出提交消息到 InputBox。支持通过配置 `opencodego.commitIncludeCommitDiff` 控制风格参考中是否包含历史提交的实际代码变更（默认关闭）。支持通过配置 `opencodego.commitAttachContextFiles`（默认开启）控制是否将仓库根目录的 `AGENTS.md` 和 `README.md` 内容附加到 prompt 中作为额外上下文。在选择模型配置后浅拷贝（`{ ...config }`）再修改 `enable_thinking` 和 `max_completion_tokens`，防止对共享的自动发现配置缓存的突变；只有 catalog 声明 `none`/`disabled` 档位时才为提交生成关闭 reasoning。
+核心生成逻辑。构建 prompt（含自定义提示词、最近提交风格、用户输入、diff 内容），支持 `auto` 语言模式（由模型根据历史 commit 风格自动推断），根据 catalog 的 `apiMode` 创建 OpenAI Chat、OpenAI Responses 或 Anthropic API 实例，流式输出提交消息到 InputBox。Base URL 与聊天请求共用解析逻辑：`opencodego.inferenceBaseUrl` 用户覆盖（代理）> 模型目录 baseUrl > 官方默认，发送前经 `validateBaseUrl()` 校验。支持通过配置 `opencodego.commitIncludeCommitDiff` 控制风格参考中是否包含历史提交的实际代码变更（默认关闭）。支持通过配置 `opencodego.commitAttachContextFiles`（默认开启）控制是否将仓库根目录的 `AGENTS.md` 和 `README.md` 内容附加到 prompt 中作为额外上下文。在选择模型配置后浅拷贝（`{ ...config }`）再修改 `enable_thinking` 和 `max_completion_tokens`，防止对共享的自动发现配置缓存的突变；只有 catalog 声明 `none`/`disabled` 档位时才为提交生成关闭 reasoning。
 
 #### `abortCommitGeneration(): void`
 

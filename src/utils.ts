@@ -5,6 +5,7 @@ import { isZenFreeModelId } from "./catalogModels";
 import { OpenAIFunctionToolDef } from "./openai/openaiTypes";
 import type { ResponsesFunctionToolDef } from "./openai/responsesTypes";
 import { CancellationToken } from "vscode";
+import { l10n } from "./localize";
 
 const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_INTERVAL_MS = 1000;
@@ -198,6 +199,64 @@ export function createRetryConfig(): RetryConfig {
         maxIntervalMs: RETRY_MAX_INTERVAL_MS,
         statusCodes: [...RETRYABLE_STATUS_CODES, ...additionalStatusCodes],
     };
+}
+
+/**
+ * Read the user-configured inference base URL override (proxy).
+ *
+ * When set (via the `opencodego.setInferenceBaseUrl` command or the
+ * `opencodego.inferenceBaseUrl` setting), all inference requests — chat
+ * requests and Git commit message generation — are sent to this address
+ * instead of the official endpoint. Usage and model list requests keep
+ * using the official endpoint.
+ *
+ * @returns The trimmed override URL, or an empty string when not configured.
+ */
+export function getInferenceBaseUrlOverride(): string {
+    return vscode.workspace.getConfiguration().get<string>("opencodego.inferenceBaseUrl", "").trim();
+}
+
+/**
+ * Validate a base URL for HTTP safety.
+ *
+ * Used both by the input box of the `opencodego.setInferenceBaseUrl` command
+ * and by the request paths before dispatching (provider and Git commit
+ * generation). Rejects non-HTTP(S) URLs; for plain `http:` only localhost and
+ * private network addresses are allowed, remote endpoints must use HTTPS.
+ *
+ * @returns A localized error message when the URL is unacceptable, or
+ * `undefined` when it is valid.
+ */
+export function validateBaseUrl(baseUrl: string): string | undefined {
+    const trimmed = baseUrl.trim();
+    if (!trimmed) {
+        return l10n("Invalid base URL configuration.");
+    }
+
+    let url: URL;
+    try {
+        url = new URL(trimmed);
+    } catch {
+        return l10n("Invalid base URL configuration.");
+    }
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+        return l10n("Invalid base URL configuration.");
+    }
+
+    if (url.protocol === "http:") {
+        const host = url.hostname.toLowerCase();
+        const isLocal = host === "localhost" || host === "127.0.0.1"
+            || host === "::1" || host === "[::1]"
+            || host.startsWith("192.168.") || host.startsWith("10.")
+            || host === "0.0.0.0"
+            || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+        if (!isLocal) {
+            return l10n("Plain HTTP is only allowed for localhost or private network addresses. Use HTTPS for remote endpoints.");
+        }
+    }
+
+    return undefined;
 }
 
 /**

@@ -83,6 +83,11 @@
 				"title": "%command.setModelPreset%"
 			},
 			{
+				"command": "opencodego.setInferenceBaseUrl",
+				"category": "%commandCategory%",
+				"title": "%command.setInferenceBaseUrl%"
+			},
+			{
 				"command": "opencodego.updateModelList",
 				"category": "%commandCategory%",
 				"title": "%command.updateModelList%"
@@ -314,6 +319,12 @@
 					"default": "",
 					"markdownDescription": "%config.modelsDevMirrorToken.desc%"
 				},
+				"opencodego.inferenceBaseUrl": {
+					"type": "string",
+					"default": "",
+					"scope": "machine",
+					"markdownDescription": "%config.inferenceBaseUrl.desc%"
+				},
 				"opencodego.modelPresets": {
 					"type": "array",
 					"default": [
@@ -418,10 +429,11 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
-		"test": "npm run compile && node scripts/test-api-mode.mjs && node scripts/test-responses-api.mjs && node scripts/test-vision-history.mjs && node scripts/test-anthropic-tool-result-merge.mjs",
+		"test": "npm run compile && node scripts/test-api-mode.mjs && node scripts/test-responses-api.mjs && node scripts/test-vision-history.mjs && node scripts/test-anthropic-tool-result-merge.mjs && node scripts/test-base-url.mjs",
 		"test:api-mode": "npm run compile && node scripts/test-api-mode.mjs",
 		"test:responses-api": "npm run compile && node scripts/test-responses-api.mjs",
 		"test:vision-history": "npm run compile && node scripts/test-vision-history.mjs",
+		"test:base-url": "npm run compile && node scripts/test-base-url.mjs",
 		"lint": "eslint",
 		"watch": "tsc -watch -p ./",
 		"build": "npx @vscode/vsce package -o extension.vsix",

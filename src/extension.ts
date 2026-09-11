@@ -10,6 +10,7 @@ import { abortCommitGeneration, generateCommitMsg } from "./gitCommit/commitMess
 import { TokenizerManager } from "./tokenizer/tokenizerManager";
 import { prepareLanguageModelChatInformation, resetAutoDiscoveryState } from "./provideModel";
 import { initSessionRouting, resetSessionRouting } from "./sessionRouting";
+import { validateBaseUrl } from "./utils";
 
 // ---- Walkthrough / Welcome constants ----
 
@@ -246,6 +247,70 @@ export function activate(context: vscode.ExtensionContext) {
                     }
                 }
             }
+        })
+    );
+
+    // Command to set a custom inference Base URL (proxy). The compatibility
+    // notice is shown as the QuickPick prompt (wrapped text above the list);
+    // only after explicitly selecting "I Understand" does the Base URL input
+    // box appear.
+    context.subscriptions.push(
+        vscode.commands.registerCommand("opencodego.setInferenceBaseUrl", async () => {
+            interface BaseUrlNoticeItem extends vscode.QuickPickItem {
+                ack?: boolean;
+            }
+
+            const ackItem: BaseUrlNoticeItem = {
+                label: l10n("I Understand"),
+                ack: true,
+            };
+            const cancelItem: BaseUrlNoticeItem = {
+                label: l10n("Cancel"),
+            };
+
+            const picked = await vscode.window.showQuickPick<BaseUrlNoticeItem>(
+                [ackItem, cancelItem],
+                {
+                    title: l10n("Set Proxy Base URL"),
+                    placeHolder: l10n("Select 'I Understand' to continue, or press Esc to cancel"),
+                    prompt: l10n("This feature is not for connecting to third-party providers — it is for routing requests through a local proxy service. All inference requests (chat and Git commit generation) are sent to this address. The proxy must be fully compatible with the official endpoint: same protocols and paths (/chat/completions, /responses, /v1/messages), same model IDs and headers (Authorization, x-opencode-session). Streaming (SSE) responses must pass through unchanged. Usage and model list requests still use the official endpoint. If you encounter problems after using a proxy, make sure the problem is not caused by the proxy before submitting an issue."),
+                    ignoreFocusOut: true,
+                }
+            );
+            if (!picked?.ack) {
+                return; // user canceled or dismissed the notice
+            }
+
+            const config = vscode.workspace.getConfiguration();
+            const current = config.get<string>("opencodego.inferenceBaseUrl", "");
+            const input = await vscode.window.showInputBox({
+                title: l10n("Set Proxy Base URL"),
+                prompt: l10n("Enter the proxy base URL (e.g. https://proxy.example.com/zen/go/v1). Leave empty to clear the override and use the official endpoint."),
+                value: current,
+                ignoreFocusOut: true,
+                validateInput: (value: string) => {
+                    const trimmed = value.trim();
+                    if (!trimmed) {
+                        return undefined; // empty input clears the override
+                    }
+                    return validateBaseUrl(trimmed);
+                },
+            });
+            if (input === undefined) {
+                return; // user canceled
+            }
+
+            const trimmed = input.trim();
+            if (!trimmed) {
+                await config.update("opencodego.inferenceBaseUrl", undefined, vscode.ConfigurationTarget.Global);
+                logger.info("settings.inferenceBaseUrl.cleared", {});
+                vscode.window.showInformationMessage(l10n("Inference base URL override cleared. The official endpoint will be used."));
+                return;
+            }
+
+            await config.update("opencodego.inferenceBaseUrl", trimmed, vscode.ConfigurationTarget.Global);
+            logger.info("settings.inferenceBaseUrl.set", { baseUrl: trimmed });
+            vscode.window.showInformationMessage(l10nFormat("Inference base URL set to: {0}", trimmed));
         })
     );
 
