@@ -94,6 +94,7 @@ Available in `settings.json`:
 | `opencodego.commitAttachContextFiles` | `true` | Attach the content of AGENTS.md and README.md from the repository root as additional context for commit message generation, helping the model better understand the project. |
 | `opencodego.visionProxyModel` | `qwen3.6-plus` | Vision model used by the `ask_image` tool when the selected model does not support vision. |
 | `opencodego.visionProxyThinking` | `false` | Enable thinking/reasoning in the vision proxy model when answering image queries. |
+| `opencodego.inferenceBaseUrl` | `""` | Advanced: route all inference requests (chat and Git commit generation) through a self-hosted proxy/gateway. The proxy must be fully compatible with the official endpoint (protocols, paths, model IDs, headers). Set it via the `OpenCodeGo: Set Proxy Base URL` command, which shows a compatibility notice first. Usage and model list requests always use the official endpoint. Leave empty to disable. |
 
 > [!NOTE]
 > Models with switchable thinking (e.g., DeepSeek, Qwen) provide reasoning effort levels such as `Disabled`/`High`/`Maximum`.
@@ -198,6 +199,7 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 | `opencodego.commitAttachContextFiles` | `true` | 将仓库根目录的 AGENTS.md 和 README.md 作为额外上下文附加到提交消息生成中，帮助模型更好地理解项目。 |
 | `opencodego.visionProxyModel` | `qwen3.6-plus` | 用于 ask_image 工具的视觉模型 ID。当所选模型不支持视觉时，该模型用于回答图片相关问题。 |
 | `opencodego.visionProxyThinking` | `false` | 在视觉代理模型回答图片查询时启用思考/推理功能。 |
+| `opencodego.inferenceBaseUrl` | `""` | 高级设置：将所有推理请求（聊天与 Git 提交生成）通过自建代理/网关转发。代理必须与官方端点完全兼容（协议、路径、模型 ID、请求头）。建议使用「OpenCodeGo: 设置代理 Base URL」命令设置，该命令会先在命令框显示兼容性要求，选择「我已知晓」后才进入输入框。用量与模型列表请求始终走官方地址。留空禁用。 |
 
 > [!NOTE]
 > 支持切换思考模式的模型（如 DeepSeek、Qwen）提供`禁用思考`/`高`/`极高`等推理强度选项。

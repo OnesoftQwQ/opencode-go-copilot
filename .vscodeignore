@@ -10,5 +10,13 @@ vsc-extension-quickstart.md
 .github/**
 .prettierignore
 .eslint*
+eslint.config.mjs
 **/tsconfig.tsbuildinfo
 scripts/
+# Local/development-only files that must not ship
+*.log
+.pi-subagents/**
+docs/**
+AGENTS.md
+pnpm-lock.yaml
+package-lock.json

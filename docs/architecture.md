@@ -35,6 +35,7 @@
 | **重试机制** | 可配置的指数退避重试策略，应对网络抖动和限流 (429) |
 | **请求延迟** | 可配置的请求间隔延迟，避免触发 API 限流 |
 | **超时控制** | 可配置的请求超时时间（默认 10 分钟） |
+| **推理 Base URL 覆盖 (代理)** | 通过 `opencodego.setInferenceBaseUrl` 命令将推理请求（聊天与 Git 提交消息生成）的 Base URL 覆盖为自建代理/网关地址（可观测性、多 Key 路由、压缩等）。命令先在命令框（QuickPick）中显示兼容性要求（协议、路径、模型 ID、请求头必须与官方端点完全一致）与「我已知晓」/「取消」选项，选择「我已知晓」后才进入输入框；留空可清除覆盖。设置写入 machine 作用域的 `opencodego.inferenceBaseUrl`（不随设置同步），仅影响推理请求，用量查询与模型列表仍访问官方地址 |
 | **HTTP 安全检查** | 始终强制校验 Base URL：拒绝非 HTTP 协议；针对 `http:` 协议仅允许 localhost、127.0.0.1、::1、192.168.*、10.*、0.0.0.0 等本地/私有网络地址，远程端点强制使用 HTTPS |
 | **立即取消** | 取消请求时通过 `reader.cancel()` 立即中断流式读取，停止后台接收 |
 | **视觉代理配置** | 支持通过设置 `opencodego.visionProxyModel`、`opencodego.visionProxyThinking` 配置图片代理所使用的视觉模型和思考模式。`opencodego.visionProxyThinking` 默认关闭，关闭时内部请求通过 `modelOptions.thinking={ type: false }` / `reasoning_effort="disabled"` 禁用视觉模型思考，最终 OpenAI 兼容请求体发送 `thinking: { type: false }` |
@@ -124,6 +125,9 @@ activate(context)
   │   ├── opencodego.setApiKey                ← 设置 API Key
   │   ├── opencodego.getApiKey                ← 打开 OpenCode AI 官网获取 Key
   │   ├── opencodego.openSettings             ← 打开扩展设置页
+  │   ├── opencodego.updateModelList          ← 强制更新模型列表
+  │   ├── opencodego.resetSessionRouting      ← 重置会话路由（使用新会话 ID）
+  │   ├── opencodego.setInferenceBaseUrl      ← 设置代理 Base URL（先在命令框确认兼容性，再输入地址）
   │   ├── opencodego.generateGitCommitMessage ← 生成提交消息
   │   ├── opencodego.abortGitCommitMessage    ← 中止生成
   │   ├── opencodego.setModelPreset           ← 设置模型预设
@@ -157,6 +161,9 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   │
   ├── 3. 确定 API 模式 (apiMode: "openai" | "openai-responses" | "anthropic")
   │       模型 provider.npm > 服务商 npm > 旧目录 family 兜底
+  │
+  ├── 3b. 解析推理 Base URL: opencodego.inferenceBaseUrl 用户覆盖（代理）> 模型目录 baseUrl > 官方默认
+  │        └── 发送前经 validateBaseUrl() 校验（HTTP 仅限本地/私网，远程强制 HTTPS）
   │
   ├── 4. 记录请求开始日志
   │
@@ -357,6 +364,7 @@ generateCommitMsg(secrets, scm?)
   │   ├── 用户当前输入 (SCM InputBox)
   │   └── Git Diff 内容
   ├── 调用 API:
+  │   ├── 解析 Base URL: opencodego.inferenceBaseUrl 用户覆盖（代理）> 模型目录 baseUrl > 官方默认
   │   ├── 按 models.dev 的 apiMode 选择 OpenaiApi / ResponsesApi / AnthropicApi.createMessage()
   │   └── 流式输出到 SCM InputBox
   └── 清理: 移除 ``` 标记和 <think> 标签

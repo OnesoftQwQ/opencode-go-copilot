@@ -102,6 +102,16 @@ const zhCN: Record<string, string> = {
 	"Set to temperature: {0} ({1})": "已设为温度 {0} ({1})",
 	"Set to temperature: {0} (custom)": "已设为温度 {0} (自定义)",
 	"Set to temp: {0}, top_p: {1} (custom)": "已设为温度 {0}, top_p {1} (自定义)",
+
+	// extension.ts - inference base URL override (setInferenceBaseUrl command)
+	"I Understand": "我已知晓",
+	"Cancel": "取消",
+	"Select 'I Understand' to continue, or press Esc to cancel": "选择「我已知晓」继续，按 Esc 取消",
+	"This feature is not for connecting to third-party providers — it is for routing requests through a local proxy service. All inference requests (chat and Git commit generation) are sent to this address. The proxy must be fully compatible with the official endpoint: same protocols and paths (/chat/completions, /responses, /v1/messages), same model IDs and headers (Authorization, x-opencode-session). Streaming (SSE) responses must pass through unchanged. Usage and model list requests still use the official endpoint. If you encounter problems after using a proxy, make sure the problem is not caused by the proxy before submitting an issue.": "本功能不是用于接入第三方提供商，而是用于接入本地代理服务。所有推理请求（聊天与 Git 提交生成）都会发送到该地址。代理必须与官方端点完全兼容：协议与路径一致（/chat/completions、/responses、/v1/messages），模型 ID 与请求头一致（Authorization、x-opencode-session），流式（SSE）响应原样透传、不得改写或丢弃。用量查询与模型列表仍访问官方地址。若你在使用代理后遇到问题，在提交 Issue 前请确保该问题不是由代理引发的。",
+	"Set Proxy Base URL": "设置代理 Base URL",
+	"Enter the proxy base URL (e.g. https://proxy.example.com/zen/go/v1). Leave empty to clear the override and use the official endpoint.": "输入代理服务的 Base URL（例如 https://proxy.example.com/zen/go/v1）。留空可清除覆盖，恢复使用官方端点。",
+	"Inference base URL override cleared. The official endpoint will be used.": "已清除推理 Base URL 覆盖，将使用官方端点。",
+	"Inference base URL set to: {0}": "推理 Base URL 已设置为：{0}",
 };
 
 /**

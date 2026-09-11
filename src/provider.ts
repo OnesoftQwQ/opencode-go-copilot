@@ -21,7 +21,7 @@ import {
     rotateSessionId,
 } from "./sessionRouting";
 
-import { createRetryConfig, executeWithRetry, convertToolsToOpenAI } from "./utils";
+import { createRetryConfig, executeWithRetry, convertToolsToOpenAI, getInferenceBaseUrlOverride, validateBaseUrl } from "./utils";
 import { getCatalogProviderBaseUrl } from "./modelsDev";
 
 import { prepareLanguageModelChatInformation } from "./provideModel";
@@ -239,7 +239,11 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
             // Determine API mode from model config (default: openai)
             const apiMode = um?.apiMode || "openai";
-            const baseUrl = um?.baseUrl || getCatalogProviderBaseUrl("opencode-go", "https://opencode.ai/zen/go/v1/");
+            // User-configured proxy base URL wins over the catalog URL.
+            const baseUrlOverride = getInferenceBaseUrlOverride();
+            const baseUrl = baseUrlOverride
+                || um?.baseUrl
+                || getCatalogProviderBaseUrl("opencode-go", "https://opencode.ai/zen/go/v1/");
 
             // Resolve the conversation's session ID early so it can be traced
             // in request logs (see sessionRouting.ts).
@@ -249,6 +253,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 messageCount: messages.length,
                 apiMode,
                 baseUrl,
+                baseUrlOverride: Boolean(baseUrlOverride),
                 sessionId: session.sessionId,
                 sessionRegistered: session.registered,
             });
@@ -293,20 +298,9 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
             // Send chat request — validate base URL (reject plain HTTP for remote addresses)
             const BASE_URL = baseUrl;
-            if (!BASE_URL || !BASE_URL.startsWith("http")) {
-                throw new Error(l10n("Invalid base URL configuration."));
-            }
-            {
-                const url = new URL(BASE_URL);
-                if (url.protocol === "http:") {
-                    const host = url.hostname.toLowerCase();
-                    const isLocal = host === "localhost" || host === "127.0.0.1" || host === "::1"
-                        || host.startsWith("192.168.") || host.startsWith("10.") || host === "0.0.0.0"
-                        || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
-                    if (!isLocal) {
-                        throw new Error(l10n("Plain HTTP is only allowed for localhost or private network addresses. Use HTTPS for remote endpoints."));
-                    }
-                }
+            const baseUrlError = validateBaseUrl(BASE_URL);
+            if (baseUrlError) {
+                throw new Error(baseUrlError);
             }
 
             // Get retry config
