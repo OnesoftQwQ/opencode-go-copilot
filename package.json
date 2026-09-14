@@ -429,8 +429,9 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
-		"test": "npm run compile && node scripts/test-api-mode.mjs && node scripts/test-responses-api.mjs && node scripts/test-vision-history.mjs && node scripts/test-anthropic-tool-result-merge.mjs && node scripts/test-base-url.mjs",
+		"test": "npm run compile && node scripts/test-api-mode.mjs && node scripts/test-thinking-param.mjs && node scripts/test-responses-api.mjs && node scripts/test-vision-history.mjs && node scripts/test-anthropic-tool-result-merge.mjs && node scripts/test-base-url.mjs",
 		"test:api-mode": "npm run compile && node scripts/test-api-mode.mjs",
+		"test:thinking-param": "npm run compile && node scripts/test-thinking-param.mjs",
 		"test:responses-api": "npm run compile && node scripts/test-responses-api.mjs",
 		"test:vision-history": "npm run compile && node scripts/test-vision-history.mjs",
 		"test:base-url": "npm run compile && node scripts/test-base-url.mjs",

@@ -69,6 +69,8 @@ export interface ModelMeta {
     maxOutputTokens: number;
     apiMode: ApiMode;
     supportsTemperature: boolean;
+    /** Whether the Chat Completions request body may include a top-level `thinking` field. */
+    supportsThinkingParam: boolean;
     toolCalling: boolean;
     baseUrl: string;
     thinkingBudget?: { min?: number; max?: number };
@@ -129,6 +131,7 @@ function resolveFromCatalog(providerId: ProviderId, modelId: string): ModelMeta 
         maxOutputTokens: entry?.limit?.output ?? DEFAULT_MAX_TOKENS,
         apiMode: deduceApiModeFromCatalog(modelId, adapterNpm, entry),
         supportsTemperature: entry?.temperature ?? true,
+        supportsThinkingParam: true,
         toolCalling: entry?.tool_call ?? true,
         baseUrl: getCatalogProviderBaseUrl(providerId, FALLBACK_BASE_URLS[providerId]),
         thinkingBudget: entry ? inferThinkingBudget(entry) : undefined,
@@ -154,6 +157,7 @@ function applyOverride(meta: ModelMeta, override?: ModelMetaOverride): ModelMeta
         maxOutputTokens: override.maxOutputTokens ?? meta.maxOutputTokens,
         apiMode: override.apiMode ?? meta.apiMode,
         supportsTemperature: override.supportsTemperature ?? meta.supportsTemperature,
+        supportsThinkingParam: override.supportsThinkingParam ?? meta.supportsThinkingParam,
         toolCalling: override.toolCalling ?? meta.toolCalling,
         baseUrl: override.baseUrl ?? meta.baseUrl,
         thinkingBudget: override.thinkingBudget ?? meta.thinkingBudget,
@@ -179,13 +183,16 @@ function buildReasoningEnum(meta: ModelMeta): {
     defaultEffort: string;
 } {
     const hasEfforts = meta.supportedReasoningEfforts.length > 0;
-    // A Responses-native model that does not declare an off effort value cannot
-    // accept `reasoning.effort: "none"`; hide the "disabled" option for it so
-    // users do not pick an ineffective off switch. Other protocols disable
-    // thinking via `thinking: { type: "disabled" }` regardless of the effort
-    // list, so they keep the "disabled" option.
+    // A model whose schema rejects the `thinking` field entirely has no off
+    // switch either (e.g. glm-5.3/glm-5.3-flash on OpenCode Go) — hide the
+    // "disabled" option. A Responses-native model that does not declare an off
+    // effort value cannot accept `reasoning.effort: "none"` for the same
+    // reason. Other protocols disable thinking via
+    // `thinking: { type: "disabled" }` regardless of the effort list, so they
+    // keep the "disabled" option.
     const canShowDisabled =
-        meta.apiMode !== "openai-responses" || meta.supportsDisablingReasoning !== false;
+        meta.supportsThinkingParam !== false &&
+        (meta.apiMode !== "openai-responses" || meta.supportsDisablingReasoning !== false);
     let enumValues: string[];
     if (hasEfforts) {
         if (meta.thinkingMode === "switchable") {
@@ -370,6 +377,7 @@ export function getCatalogModelConfig(modelId: string): OpenCodeGoModelItem {
         baseUrl: meta.baseUrl,
         vision: meta.vision,
         supportsTemperature: meta.supportsTemperature,
+        supportsThinkingParam: meta.supportsThinkingParam,
         context_length: meta.contextLength,
         max_completion_tokens: meta.maxOutputTokens,
         apiMode: meta.apiMode,

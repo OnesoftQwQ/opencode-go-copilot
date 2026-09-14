@@ -919,14 +919,18 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     if (systemContent) {
                         body.system = systemContent;
                     }
-                    if (params.um?.enable_thinking === true) {
-                        if (params.um?.reasoning_effort === 'adaptive') {
-                            body.thinking = { type: "adaptive" };
+                    // Routes whose schema rejects the `thinking` field
+                    // (supportsThinkingParam=false) must not receive it.
+                    if (params.um?.supportsThinkingParam !== false) {
+                        if (params.um?.enable_thinking === true) {
+                            if (params.um?.reasoning_effort === 'adaptive') {
+                                body.thinking = { type: "adaptive" };
+                            } else {
+                                body.thinking = { type: "enabled", budget_tokens: 8192 };
+                            }
                         } else {
-                            body.thinking = { type: "enabled", budget_tokens: 8192 };
+                            body.thinking = { type: "disabled" as const };
                         }
-                    } else {
-                        body.thinking = { type: "disabled" as const };
                     }
 
                     // Inject tools (VS Code + ask_image + ask_with_multi_image)
@@ -1078,10 +1082,16 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     if (params.um?.enable_thinking !== false && params.um?.reasoning_effort !== undefined && params.um.reasoning_effort !== 'adaptive') {
                         body.reasoning_effort = params.um.reasoning_effort;
                     }
-                    if (params.um?.enable_thinking === true) {
-                        body.thinking = { type: "enabled" };
-                    } else {
-                        body.thinking = { type: "disabled" };
+                    // Routes whose schema rejects the `thinking` field
+                    // (supportsThinkingParam=false) must not receive it: thinking
+                    // is mandatory there and only controllable through
+                    // `reasoning_effort`.
+                    if (params.um?.supportsThinkingParam !== false) {
+                        if (params.um?.enable_thinking === true) {
+                            body.thinking = { type: "enabled" };
+                        } else {
+                            body.thinking = { type: "disabled" };
+                        }
                     }
 
                     // Inject tools (VS Code + ask_image + ask_with_multi_image)

@@ -158,7 +158,7 @@ src/
 - 第二轮及后续轮次请求体中显式设置 `tool_choice` 为 `"auto"`（OpenAI）或 `{ type: "auto" }`（Anthropic），确保模型可继续调用工具。
 - Responses 模式的第二轮及后续请求继续使用 `store:false`、`/responses` 与扁平工具定义，并在 function call 前放回上一轮 encrypted reasoning item。
 - 使用 `_resetStreamState()` 重置流状态，避免 `_completedToolCallIndices` 等状态在轮次间残留导致工具调用被跳过。
-- `thinking` 字段值统一使用字符串（`"enabled"` / `"disabled"`），与 `prepareRequestBody` 保持一致。
+- `thinking` 字段值统一使用字符串（`"enabled"` / `"disabled"`），与 `prepareRequestBody` 保持一致；`supportsThinkingParam=false` 的模型（如 glm-5.3/glm-5.3-flash）在视觉轮次中同样省略该字段。
 
 #### `private async ensureApiKey(): Promise<string | undefined>`
 
@@ -174,7 +174,7 @@ src/
 
 #### `interface ModelMeta`
 
-解析后的模型元数据。models.dev 可提供的字段全部为**必选**（含保守默认值）：`displayName`、`vision`、`reasoning`、`supportsDisablingReasoning`、`thinkingMode`、`supportedReasoningEfforts`、`defaultReasoningEffort`、`contextLength`、`maxOutputTokens`、`apiMode`、`supportsTemperature`、`toolCalling`、`baseUrl`、`cost`；可选字段：`thinkingBudget`、`status`。
+解析后的模型元数据。models.dev 可提供的字段全部为**必选**（含保守默认值）：`displayName`、`vision`、`reasoning`、`supportsDisablingReasoning`、`thinkingMode`、`supportedReasoningEfforts`、`defaultReasoningEffort`、`contextLength`、`maxOutputTokens`、`apiMode`、`supportsTemperature`、`supportsThinkingParam`、`toolCalling`、`baseUrl`、`cost`；可选字段：`thinkingBudget`、`status`。
 
 #### `isZenFreeModelId(modelId): boolean`
 
@@ -190,21 +190,21 @@ src/
 
 #### `buildCatalogModelInfo(providerId, modelId): LanguageModelChatInformation`
 
-构建模型选择器条目。模型名显式追加服务商后缀：Go 模型为 ` (Go)`，Zen 免费模型为 ` (Zen)`（deprecated 模型额外前缀 `[Depr]`）。Zen 模型 tooltip 额外提示「免费模型，可能会收集数据用于训练」。推理强度枚举由 `buildReasoningEnum()` 生成：`disabled` 档在前、`none`/`disabled` effort 值归一为 `禁用思考` 档（已由 `resolveFromCatalog` 过滤，避免重复档）；`defaultReasoningEffort` 不在枚举内时回退到最高档（如 adaptive 模型的 `enabled` → `adaptive`）。当模型为 Responses 原生协议且未声明关闭档位（`supportsDisablingReasoning=false`）时不注入 `disabled` 档，避免用户选择无效的禁用项。
+构建模型选择器条目。模型名显式追加服务商后缀：Go 模型为 ` (Go)`，Zen 免费模型为 ` (Zen)`（deprecated 模型额外前缀 `[Depr]`）。Zen 模型 tooltip 额外提示「免费模型，可能会收集数据用于训练」。推理强度枚举由 `buildReasoningEnum()` 生成：`disabled` 档在前、`none`/`disabled` effort 值归一为 `禁用思考` 档（已由 `resolveFromCatalog` 过滤，避免重复档）；`defaultReasoningEffort` 不在枚举内时回退到最高档（如 adaptive 模型的 `enabled` → `adaptive`）。当模型为 Responses 原生协议且未声明关闭档位（`supportsDisablingReasoning=false`）时不注入 `disabled` 档；当请求体不支持 `thinking` 字段（`supportsThinkingParam=false`，如 glm-5.3/glm-5.3-flash）时同样不注入 `disabled` 档，避免用户选择无效的禁用项。
 
 #### `getCatalogModelConfig(modelId): OpenCodeGoModelItem`
 
-构建请求配置（provider.ts 与 Git 提交生成共用）。含 `baseUrl`（取自服务商 `api` 字段）、`thinking_budget`（`budget_tokens` 的 max）、`reasoning_effort`（仅真实强度档，`enabled`/`adaptive` 不发送）、`extra`（仅覆盖表）。
+构建请求配置（provider.ts 与 Git 提交生成共用）。含 `baseUrl`（取自服务商 `api` 字段）、`supportsThinkingParam`（false 时 OpenAI 请求体省略 `thinking` 字段）、`thinking_budget`（`budget_tokens` 的 max）、`reasoning_effort`（仅真实强度档，`enabled`/`adaptive` 不发送）、`extra`（仅覆盖表）。
 
 ### 2.4 `src/modelOverrides.ts`
 
 #### `interface ModelMetaOverride`
 
-每模型覆盖项，**全部字段可选**（写什么覆盖什么）。在 `ModelMeta` 基础上额外提供 models.dev 无法表达的字段：`extra`（请求体参数，如 `reasoning_split`）、`thinkingBudget`、`includeReasoningInRequest`。
+每模型覆盖项，**全部字段可选**（写什么覆盖什么）。在 `ModelMeta` 基础上额外提供 models.dev 无法表达的字段：`extra`（请求体参数，如 `reasoning_split`）、`thinkingBudget`、`includeReasoningInRequest`、`supportsThinkingParam`（false 时请求体不发送 `thinking` 字段）。
 
 #### `const MODEL_OVERRIDES: Record<string, ModelMetaOverride>`
 
-覆盖表（当前 8 条）：`minimax-m3`（adaptive + anthropic + `reasoning_split`）、`minimax-m2.7`（anthropic + `reasoning_split`）、`minimax-m2.5`（anthropic）、`qwen3.7-max`/`qwen3.7-plus`/`qwen3.6-plus`/`qwen3.5-plus`（anthropic）、`glm-5.2`（默认 effort=high）。Zen 免费模型（`-free` 后缀）共用同一命名空间，需要时可在此追加。
+覆盖表（当前 10 条）：`minimax-m3`（adaptive + anthropic + `reasoning_split`）、`minimax-m2.7`（anthropic + `reasoning_split`）、`minimax-m2.5`（anthropic）、`qwen3.7-max`/`qwen3.7-plus`/`qwen3.6-plus`/`qwen3.5-plus`（anthropic）、`glm-5.2`（默认 effort=high）、`glm-5.3`/`glm-5.3-flash`（思考常开且上游拒绝 `thinking` 字段，仅发送 `reasoning_effort`）。Zen 免费模型（`-free` 后缀）共用同一命名空间，需要时可在此追加。
 
 ---
 
@@ -238,8 +238,9 @@ src/
 | `extra` | `Record<string, unknown>` (可选) | 额外请求体参数 |
 | `family` | `string` (可选) | 模型系列 |
 | `include_reasoning_in_request` | `boolean` (可选) | 是否在请求中包含推理内容 |
-| `thinkingMode` | `"switchable" \| "always"` (可选) | 思考模式类型 |
+| `thinkingMode` | `"switchable" \| "always" \| "adaptive"` (可选) | 思考模式类型 |
 | `supportsTemperature` | `boolean` (可选) | 是否支持设置 temperature/top_p，默认 true |
+| `supportsThinkingParam` | `boolean` (可选) | 请求体是否允许携带 `thinking` 字段，默认 true；false 时省略（如 glm-5.3/glm-5.3-flash） |
 | `useForCommitGeneration` | `boolean` (可选) | 是否用于提交消息生成 |
 | `delay` | `number` (可选) | 模型专属请求延迟 |
 | `apiMode` | `ApiMode` (可选) | API 模式：OpenAI Chat、Responses 或 Anthropic |
@@ -896,7 +897,7 @@ API 返回用量数据后重渲染状态栏（主文本 = Go 用量，tooltip = 
 
 #### `prepareRequestBody(rb, um?, options?): Record<string, unknown>`
 
-构建 OpenAI 请求体。设置 temperature、top_p、max_tokens、reasoning_effort（adaptive 模式时跳过）、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和关闭用 `{ type: false }`）、stop、tools、tool_choice 以及各种惩罚参数和 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。Extra 参数合并前过滤保留键（`model`, `messages`, `stream`, `temperature`, `top_p`, `max_tokens`, `max_completion_tokens`, `tools`, `tool_choice`, `stop`, `reasoning_effort`, `thinking`, `top_k`, `min_p`, `frequency_penalty`, `presence_penalty`, `repetition_penalty`, `stream_options`, `reasoning` 等），冲突时 `logger.warn()` 记录。
+构建 OpenAI 请求体。设置 temperature、top_p、max_tokens、reasoning_effort（adaptive 模式时跳过）、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和关闭用 `{ type: "disabled" }`；`supportsThinkingParam=false` 的模型省略该字段，思考强度仅由 `reasoning_effort` 控制）、stop、tools、tool_choice 以及各种惩罚参数和 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。Extra 参数合并前过滤保留键（`model`, `messages`, `stream`, `temperature`, `top_p`, `max_tokens`, `max_completion_tokens`, `tools`, `tool_choice`, `stop`, `reasoning_effort`, `thinking`, `top_k`, `min_p`, `frequency_penalty`, `presence_penalty`, `repetition_penalty`, `stream_options`, `reasoning` 等），冲突时 `logger.warn()` 记录。
 
 #### `processStreamingResponse(responseBody, progress, token): Promise<void>`
 
@@ -1006,7 +1007,7 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 
 #### `prepareRequestBody(rb, um?, options?): AnthropicRequestBody`
 
-构建 Anthropic 请求体。设置 max_tokens、system、temperature、top_p、top_k、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和 `{ type: "disabled" }`）、tools（转换为 Anthropic 格式）、tool_choice（auto/any/none）以及 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。Extra 参数合并前过滤保留键（`model`, `messages`, `stream` 等），冲突时 `logger.warn()` 记录。
+构建 Anthropic 请求体。设置 max_tokens、system、temperature、top_p、top_k、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和 `{ type: "disabled" }`；`supportsThinkingParam=false` 的模型省略该字段）、tools（转换为 Anthropic 格式）、tool_choice（auto/any/none）以及 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。Extra 参数合并前过滤保留键（`model`, `messages`, `stream` 等），冲突时 `logger.warn()` 记录。
 
 #### `processStreamingResponse(responseBody, progress, token): Promise<void>`
 
