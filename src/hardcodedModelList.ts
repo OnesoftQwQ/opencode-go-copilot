@@ -8,7 +8,7 @@
  * (limit, cost, reasoning_options, attachment, modalities, ...), so the
  * fallback behaves like the real catalog instead of a bare ID list.
  *
- * Snapshot taken from the official models.dev catalog on 2026-09-11.
+ * Snapshot taken from the official models.dev catalog on 2026-09-14.
  */
 
 import type { CatalogProvider, ModelsDevEntry } from "./modelsDev";
