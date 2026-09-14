@@ -343,18 +343,23 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
             rb.reasoning_effort = um.reasoning_effort;
         }
 
-        // Thinking mode (OpenAI-compatible format: {"thinking": {"type": "enabled"}})
-        if (um?.enable_thinking === true) {
-            if (um?.reasoning_effort === 'adaptive') {
-                rb.thinking = { type: "adaptive" };
-            } else {
-                rb.thinking = { type: "enabled" };
-                if (um?.thinking_budget !== undefined) {
-                    (rb.thinking as Record<string, unknown>).budget_tokens = um.thinking_budget;
+        // Thinking mode (OpenAI-compatible format: {"thinking": {"type": "enabled"}}).
+        // Routes whose schema rejects the field (supportsThinkingParam=false, e.g.
+        // glm-5.3/glm-5.3-flash on OpenCode Go) must never receive it — thinking
+        // is mandatory there and only controllable through `reasoning_effort`.
+        if (um?.supportsThinkingParam !== false) {
+            if (um?.enable_thinking === true) {
+                if (um?.reasoning_effort === 'adaptive') {
+                    rb.thinking = { type: "adaptive" };
+                } else {
+                    rb.thinking = { type: "enabled" };
+                    if (um?.thinking_budget !== undefined) {
+                        (rb.thinking as Record<string, unknown>).budget_tokens = um.thinking_budget;
+                    }
                 }
+            } else {
+                rb.thinking = { type: "disabled" };
             }
-        } else {
-            rb.thinking = { type: "disabled" };
         }
 
         // OpenRouter/OpenCode Go reasoning configuration

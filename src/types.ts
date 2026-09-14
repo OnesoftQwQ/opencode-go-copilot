@@ -57,6 +57,13 @@ export interface OpenCodeGoModelItem {
     thinkingMode?: "switchable" | "always" | "adaptive";
     /** Whether this model supports setting temperature/top_p. Default true. */
     supportsTemperature?: boolean;
+    /**
+     * Whether the OpenAI Chat request body may include a top-level `thinking`
+     * field. Default true; false for routes whose schema rejects it (e.g.
+     * glm-5.3/glm-5.3-flash on OpenCode Go, where thinking is mandatory and
+     * only `reasoning_effort` is accepted).
+     */
+    supportsThinkingParam?: boolean;
     /** Whether the catalog declares reasoning support. */
     supportsReasoning?: boolean;
     /** Whether the catalog declares an explicit off value for reasoning effort (`none`/`disabled`). Used by the OpenAI Responses adapter to avoid sending `reasoning.effort: "none"` to models that reject it. */

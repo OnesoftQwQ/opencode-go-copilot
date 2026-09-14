@@ -382,15 +382,20 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 			rb.top_k = um.top_k;
 		}
 
-		// Add thinking mode (Anthropic-compatible format)
-		if (um?.enable_thinking === true) {
-			if (um?.reasoning_effort === 'adaptive') {
-				rb.thinking = { type: "adaptive" };
+		// Add thinking mode (Anthropic-compatible format).
+		// Models whose schema rejects the `thinking` field entirely
+		// (supportsThinkingParam=false) must not receive it: thinking is
+		// mandatory there and only controllable through `reasoning_effort`.
+		if (um?.supportsThinkingParam !== false) {
+			if (um?.enable_thinking === true) {
+				if (um?.reasoning_effort === 'adaptive') {
+					rb.thinking = { type: "adaptive" };
+				} else {
+					rb.thinking = { type: "enabled", budget_tokens: 8192 };
+				}
 			} else {
-				rb.thinking = { type: "enabled", budget_tokens: 8192 };
+				rb.thinking = { type: "disabled" };
 			}
-		} else {
-			rb.thinking = { type: "disabled" };
 		}
 
 		// Add tools configuration

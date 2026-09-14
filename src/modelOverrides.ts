@@ -28,6 +28,13 @@ export interface ModelMetaOverride {
     maxOutputTokens?: number;
     apiMode?: ApiMode;
     supportsTemperature?: boolean;
+    /**
+     * Whether the request body may include a top-level `thinking` field
+     * (default true; false for routes whose schema rejects it, e.g.
+     * glm-5.3/glm-5.3-flash on OpenCode Go, where thinking is mandatory and
+     * only `reasoning_effort` is accepted).
+     */
+    supportsThinkingParam?: boolean;
     toolCalling?: boolean;
     /** Override whether the model accepts an explicit off effort value (`none`/`disabled`) on the Responses protocol. */
     supportsDisablingReasoning?: boolean;
@@ -72,4 +79,11 @@ export const MODEL_OVERRIDES: Record<string, ModelMetaOverride> = {
 
     // ── GLM ── keep default effort at "high" (matches historical built-in config)
     "glm-5.2": { defaultReasoningEffort: "high" },
+    // GLM-5.3 / GLM-5.3-Flash always think and their upstream schema rejects
+    // the Chat Completions `thinking` field entirely (400 'json: unknown field
+    // "thinking"'), so the field is omitted and the thinking strength is
+    // controlled only via `reasoning_effort` (low/high/max). thinkingMode
+    // "always" hides the unsupported "禁用思考" option in the picker.
+    "glm-5.3": { thinkingMode: "always", supportsThinkingParam: false },
+    "glm-5.3-flash": { thinkingMode: "always", supportsThinkingParam: false },
 };

@@ -60,5 +60,6 @@ npm run build
 | `scripts/test-api-mode.mjs` | models.dev 适配器到三种 API 协议的映射与旧目录兼容测试 |
 | `scripts/test-anthropic-tool-result-merge.mjs` | Anthropic 多条工具结果合并行为验证（issue #87） |
 | `scripts/test-base-url.mjs` | 推理 Base URL 覆盖读取与 HTTP 安全检查（localhost/私网 http、远程 https、非法输入）验证 |
+| `scripts/test-thinking-param.mjs` | `supportsThinkingParam=false`（glm-5.3/glm-5.3-flash）时 OpenAI/Anthropic 请求体省略 `thinking` 字段、保留 `reasoning_effort`，且模型选择器不提供「禁用思考」档的回归测试（issue #129） |
 | `scripts/update-hardcoded-catalog.mjs` | 刷新硬编码目录快照（发布构建自动执行，失败保留旧快照不阻断） |
 | `scripts/check-new-models.mjs` | 检查 models.dev 目录中的新模型 |
