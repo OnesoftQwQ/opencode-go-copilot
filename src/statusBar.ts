@@ -32,6 +32,15 @@ function isUsageTooltipEnabled(): boolean {
 }
 
 /**
+ * Whether the extension-provided Advanced Token indicator (the status bar
+ * item) is enabled. When disabled, no extension status bar element is shown;
+ * the native Copilot token indicator stays visible on its own.
+ */
+function isThirdPartyTokenIndicatorEnabled(): boolean {
+    return vscode.workspace.getConfiguration("opencodego").get<boolean>("enableThirdPartyTokenIndicator", true);
+}
+
+/**
  * Usage refresh interval in milliseconds (clamped to 1-60 minutes).
  */
 function getUsageRefreshIntervalMs(): number {
@@ -75,15 +84,32 @@ function stopUsagePolling(): void {
 
 function startUsagePolling(): void {
     stopUsagePolling();
-    // Polling always runs (when an API key exists) because the status bar
-    // main text shows the Go usage; showUsageInTooltip only gates the
-    // tooltip section.
+    // Polling runs while an API key exists and the Advanced Token indicator
+    // is enabled (the status bar main text shows the Go usage);
+    // showUsageInTooltip only gates the tooltip section.
     void refreshGoUsage();
     const intervalMs = getUsageRefreshIntervalMs();
     usagePollTimer = setInterval(() => {
         void refreshGoUsage();
     }, intervalMs);
     logger.debug("goUsage.poll.start", { intervalMs });
+}
+
+/**
+ * Apply `opencodego.enableThirdPartyTokenIndicator` to the status bar item:
+ * show and poll when enabled, hide and pause polling when disabled. Called
+ * on startup and whenever the setting changes at runtime.
+ */
+function applyThirdPartyTokenIndicatorSetting(statusBarItem: vscode.StatusBarItem): void {
+    if (isThirdPartyTokenIndicatorEnabled()) {
+        statusBarItem.show();
+        startUsagePolling();
+        updateStatusBarGoUsageText(statusBarItem);
+        updateCumulativeTooltip(statusBarItem);
+    } else {
+        stopUsagePolling();
+        statusBarItem.hide();
+    }
 }
 
 export function initStatusBar(context: vscode.ExtensionContext, secrets: vscode.SecretStorage): vscode.StatusBarItem {
@@ -97,19 +123,23 @@ export function initStatusBar(context: vscode.ExtensionContext, secrets: vscode.
     // Clicking the status bar refreshes the Go usage immediately
     tokenCountStatusBarItem.command = "opencodego.checkUsage";
     context.subscriptions.push(tokenCountStatusBarItem);
-    tokenCountStatusBarItem.show();
 
     // Go usage polling for the status bar text and tooltip section
     usageSecrets = secrets;
     usageStatusBarItem = tokenCountStatusBarItem;
-    startUsagePolling();
+    applyThirdPartyTokenIndicatorSetting(tokenCountStatusBarItem);
     context.subscriptions.push({ dispose: stopUsagePolling });
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration("opencodego.enableThirdPartyTokenIndicator")) {
+                applyThirdPartyTokenIndicatorSetting(tokenCountStatusBarItem);
+            }
             if (e.affectsConfiguration("opencodego.showUsageInTooltip") || e.affectsConfiguration("opencodego.usageRefreshInterval")) {
-                startUsagePolling();
-                updateStatusBarGoUsageText(tokenCountStatusBarItem);
-                updateCumulativeTooltip(tokenCountStatusBarItem);
+                if (isThirdPartyTokenIndicatorEnabled()) {
+                    startUsagePolling();
+                    updateStatusBarGoUsageText(tokenCountStatusBarItem);
+                    updateCumulativeTooltip(tokenCountStatusBarItem);
+                }
             }
         })
     );
