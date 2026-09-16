@@ -15,6 +15,8 @@
  * that small upstream changes degrade gracefully instead of breaking.
  */
 
+import * as path from "path";
+import * as vscode from "vscode";
 import { logger } from "./logger";
 import { ensureModelsDevLoaded, getCatalogProviderBaseUrl } from "./modelsDev";
 
@@ -97,6 +99,27 @@ function parseWindow(raw: unknown): GoUsageWindow | undefined {
 }
 
 /**
+ * Create the fetch implementation for usage requests.
+ *
+ * VS Code patches the extension host's global fetch to honor the local
+ * `http.proxy` setting; in Remote-SSH sessions with a local proxy every
+ * usage poll then fails ("fetch failed", status bar stuck at "Go --")
+ * while chat requests keep working because provider.ts uses VS Code's
+ * bundled undici instead - do the same here (#98). Falls back to the
+ * global fetch when undici is unavailable.
+ */
+function createUsageFetch(): typeof fetch {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const undici = require(path.join(vscode.env.appRoot, "node_modules", "undici"));
+        const agent = new undici.Agent({ bodyTimeout: FETCH_TIMEOUT_MS });
+        return (url: RequestInfo | URL, init?: RequestInit) => undici.fetch(url, { ...init, dispatcher: agent });
+    } catch {
+        return fetch;
+    }
+}
+
+/**
  * Fetch Go usage from the API's /usage endpoint.
  *
  * @param apiKey - The API key for authentication.
@@ -109,7 +132,8 @@ async function fetchGoUsage(apiKey: string): Promise<GoUsageResult> {
     const start = performance.now();
     let response: Response;
     try {
-        response = await fetch(url, {
+        const doFetch = createUsageFetch();
+        response = await doFetch(url, {
             headers: { Authorization: `Bearer ${apiKey}` },
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
@@ -197,10 +221,16 @@ export async function getGoUsageCached(apiKey: string | undefined, force?: boole
         // record per attempt, distinguishing 401 (no active Go plan).
         const status = err instanceof Error && (err as Error & { status?: number }).status;
         lastFetchStatus = status === 401 ? "unauthorized" : "error";
-        const detail = {
+        const detail: { status: UsageFetchStatus; error: string; cause?: string } = {
             status: lastFetchStatus,
             error: err instanceof Error ? err.message : String(err),
         };
+        // Surface the underlying network error (e.g. ECONNREFUSED from a
+        // mis-routed proxy) - a bare "fetch failed" hides the real cause (#98).
+        const cause = err instanceof Error ? (err as Error & { cause?: unknown }).cause : undefined;
+        if (cause !== undefined) {
+            detail.cause = cause instanceof Error ? cause.message : String(cause);
+        }
         if (status === 401) {
             logger.warn("goUsage.fetch.unauthorized", detail);
         } else {
