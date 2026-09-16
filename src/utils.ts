@@ -441,7 +441,8 @@ export function storeDataUriImages(text: string, imagesToStore: StoredImage[]): 
     let match: RegExpExecArray | null;
     while ((match = DATA_URI_IMAGE_RE.exec(text)) !== null) {
         const fullMatch = match[0];
-        const base64Data = match[1];
+        // Defensive: strip whitespace/line breaks that some sources embed.
+        const base64Data = match[1].replace(/\s+/g, "");
         count++;
 
         let mimeType = "image/png";
@@ -450,11 +451,11 @@ export function storeDataUriImages(text: string, imagesToStore: StoredImage[]): 
         else if (fullMatch.startsWith("data:image/webp")) mimeType = "image/webp";
         else if (fullMatch.startsWith("data:image/bmp")) mimeType = "image/bmp";
 
-        const binaryStr = atob(base64Data);
-        const bytes = new Uint8Array(binaryStr.length);
-        for (let i = 0; i < binaryStr.length; i++) {
-            bytes[i] = binaryStr.charCodeAt(i);
-        }
+        // Decode with Buffer: unlike atob it does not throw on payloads
+        // that are not strictly encoded (stray "=" padding, line breaks),
+        // which previously failed the whole storage pass (#68).
+        const buffer = Buffer.from(base64Data, "base64");
+        const bytes = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
         imagesToStore.push({ data: bytes, mimeType });
     }
     return count;
