@@ -8,7 +8,7 @@
  * (limit, cost, reasoning_options, attachment, modalities, ...), so the
  * fallback behaves like the real catalog instead of a bare ID list.
  *
- * Snapshot taken from the official models.dev catalog on 2026-09-14.
+ * Snapshot taken from the official models.dev catalog on 2026-09-17.
  */
 
 import type { CatalogProvider, ModelsDevEntry } from "./modelsDev";
@@ -25,6 +25,7 @@ export interface HardcodedCatalogData {
 // vary between entries (some omit cache_read, some add cache_write), which the
 // ModelsDevEntry type does not fully model.
 export const HARDCODED_CATALOG: HardcodedCatalogData = {
+
   "models": {},
   "providers": {
     "opencode-go": {
@@ -961,7 +962,7 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
           "id": "glm-5.3-flash",
           "name": "GLM-5.3-Flash",
           "description": "Native multimodal GLM model for efficient coding and long-horizon agent tasks",
-          "family": "glm",
+          "family": "glm-flash",
           "attachment": true,
           "reasoning": true,
           "reasoning_options": [
@@ -1052,6 +1053,39 @@ export const HARDCODED_CATALOG: HardcodedCatalogData = {
             "input": 0.1,
             "output": 0.2,
             "cache_read": 0.002
+          }
+        },
+        "union-alpha": {
+          "id": "union-alpha",
+          "name": "Union Alpha Free",
+          "description": "Stealth model built for agentic coding",
+          "attachment": true,
+          "reasoning": true,
+          "reasoning_options": [],
+          "tool_call": true,
+          "release_date": "2026-09-16",
+          "last_updated": "2026-09-16",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": false,
+          "limit": {
+            "context": 262144,
+            "output": 131072
+          },
+          "provider": {
+            "npm": "@ai-sdk/anthropic"
+          },
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0
           }
         },
         "mimo-v2-pro": {
