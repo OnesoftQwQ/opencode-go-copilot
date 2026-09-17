@@ -13,7 +13,7 @@
 > [!IMPORTANT]
 > **This is not affiliated with, officially maintained by, or endorsed by OpenCode or Anomaly.**
 
-Integrate [OpenCode Go](https://opencode.ai/go) and optional Zen free models into GitHub Copilot Chat as a VS Code extension.
+Integrate [OpenCode Go](https://opencode.ai/go) into GitHub Copilot Chat as a VS Code extension.
 
 The extension reads adapter metadata from models.dev and automatically routes each model through its declared OpenAI-compatible Chat Completions, OpenAI Responses, or Anthropic Messages protocol.
 
@@ -21,7 +21,7 @@ The extension reads adapter metadata from models.dev and automatically routes ea
 
 1. **Set API Key**: `Ctrl+Shift+P` → `OpenCodeGo: Set OpenCode Go API Key`
 2. **Show Models**: Click the settings icon in the model picker → **Language Models** panel → set your desired models to Visible
-3. **Select Model**: In the Copilot Chat bottom model picker, choose an "OpenCode Go" or "OpenCode Zen" model
+3. **Select Model**: In the Copilot Chat bottom model picker, choose an "OpenCode Go" model
 4. **Start chatting**
 
 ### Status Bar: Plan Usage & Token Indicator
@@ -64,10 +64,6 @@ You can also configure `opencodego.temperature` and `opencodego.top_p` directly 
 This extension adds **extended vision understanding** capability to **text-only models** that do not natively support vision. When you send a message with an image to these models, they can call a vision-capable model to describe the image, and then answer based on that description.
 
 You can configure the default vision model and whether to enable thinking when describing images. The default value `qwen-plus-latest` automatically selects the newest `qwen*-plus` model from the models.dev catalog.
-
-### OpenCode Zen Free Models
-
-Disabled by default. Enable via the `opencodego.enableZenFreeModels` setting. When enabled, free models from the OpenCode Zen provider are added to the model picker in the **OpenCode Zen** group with a ` (Zen)` name suffix (e.g. `DeepSeek V4 Flash Free (Zen)`). Reload VS Code after changing this setting. Zen free models are not supported for Git commit message generation.
 
 ### Model Catalog & Auto Discovery
 
@@ -127,7 +123,6 @@ Available in `settings.json`:
 | `opencodego.temperature` | `null` | Temperature (0.0 - 2.0) used when `modelPreset` is `custom`. |
 | `opencodego.top_p` | `null` | top_p (0.0 - 1.0) used when `modelPreset` is `custom`. |
 | `opencodego.modelPresets` | built-in presets | Preset definitions (`id`, `label`, `temperature`, optional `top_p`). |
-| `opencodego.enableZenFreeModels` | `false` | Add OpenCode Zen free models to the picker (` (Zen)` suffix). Not supported for Git commit generation. Reload required. |
 | `opencodego.enableAutoModelDiscovery` | `true` | Filter the model picker to models available on the API. |
 | `opencodego.showDeprecatedModels` | `false` | Show models marked as deprecated in the models.dev catalog. |
 | `opencodego.modelsDevUpdateInterval` | `60000` | Cache TTL (ms) for checking model updates. Minimum 30000. |
@@ -170,7 +165,7 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 > [!IMPORTANT]
 > **本插件与 OpenCode 官方或 Anomaly 无关，也未获得其官方维护或认可。**
 
-将 [OpenCode Go](https://opencode.ai/go) 以及可选的 Zen 免费模型集成到 GitHub Copilot Chat 的 VS Code 插件。
+将 [OpenCode Go](https://opencode.ai/go) 集成到 GitHub Copilot Chat 的 VS Code 插件。
 
 插件会读取 models.dev 的适配器元数据，自动按模型声明选择 OpenAI 兼容 Chat Completions、OpenAI Responses 或 Anthropic Messages 请求格式。
 
@@ -178,7 +173,7 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 
 1. **设置 API Key**：`Ctrl+Shift+P` → `OpenCodeGo: 设置 OpenCode Go API 密钥`
 2. **显示模型**：在模型选择器中点击设置图标 → **语言模型** 面板 → 将需要使用的模型显示
-3. **选择模型**：在 Copilot Chat 底部模型选择器中选择 "OpenCode Go" 或 "OpenCode Zen" 下的模型
+3. **选择模型**：在 Copilot Chat 底部模型选择器中选择 "OpenCode Go" 下的模型
 4. **开始对话**
 
 ### 状态栏：套餐用量与 Token 指示器
@@ -221,10 +216,6 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 本插件为**不支持视觉理解**的**纯文本模型**添加了**扩展视觉理解**功能，当你向这些模型发送带有图片的信息时，他们可以调用支持视觉理解的模型为图片输出描述，然后再回答。
 
 通过配置文件可更改默认使用的模型以及是否在描述图片时启用思考。默认值 `qwen-plus-latest` 会自动选择 models.dev 目录中最新的 `qwen*-plus` 模型。
-
-### 启用 OpenCode Zen 免费模型
-
-该功能默认关闭，通过 `opencodego.enableZenFreeModels` 设置启用。开启后，来自 OpenCode Zen 服务商的免费模型会以 ` (Zen)` 名称后缀加入模型选择器的 **OpenCode Zen** 分组（如 `DeepSeek V4 Flash Free (Zen)`）。更改设置后需重新加载 VS Code 生效。Zen 免费模型暂不支持用于 Git 提交消息生成。
 
 ### 模型目录与自动发现
 
@@ -284,7 +275,6 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 | `opencodego.temperature` | `null` | `modelPreset` 为 `custom` 时使用的温度（0.0 - 2.0）。 |
 | `opencodego.top_p` | `null` | `modelPreset` 为 `custom` 时使用的 top_p（0.0 - 1.0）。 |
 | `opencodego.modelPresets` | 内置预设 | 温度预设定义（`id`、`label`、`temperature`，可选 `top_p`）。 |
-| `opencodego.enableZenFreeModels` | `false` | 将 OpenCode Zen 免费模型加入模型选择器（` (Zen)` 后缀）。暂不支持 Git 提交生成，更改后需重载。 |
 | `opencodego.enableAutoModelDiscovery` | `true` | 按 API 实际可用的模型过滤模型选择器。 |
 | `opencodego.showDeprecatedModels` | `false` | 显示 models.dev 目录中标记为已弃用的模型。 |
 | `opencodego.modelsDevUpdateInterval` | `60000` | 模型更新检查的缓存 TTL（毫秒），最小 30000。 |

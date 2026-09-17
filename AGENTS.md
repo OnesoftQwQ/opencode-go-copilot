@@ -54,7 +54,6 @@
 
 - 在 MIME 边界将运行时 `LanguageModelDataPart.mimeType` 视为未知类型；缺失值不得进入字符串方法或导致 Token 计数崩溃
 - 工具选择优先读取官方 `ProvideLanguageModelChatResponseOptions.toolMode`，同时保留 `modelOptions.toolMode` 作为旧版兼容回退
-- OpenCode Zen 免费模型收到强制 `required` 工具选择时降级为 `auto`，以兼容服务端点
 
 ## 4. VS Code API 使用约束
 
@@ -91,7 +90,7 @@
 - `extension.activate` — 扩展激活（含版本号）
 - `models.loaded` — 模型加载
 - `modelsDev.fetch.*` — 目录拉取明细：`fetch.official`/`fetch.mirror`（成功，含 durationMs/bytes）、`fetch.officialFailed`/`fetch.mirrorFailed`/`fetch.timeout`/`fetch.hardcoded`（失败或回退原因）
-- `modelsDev.load` — 目录加载汇总（source/durationMs/providers/goModels/zenModels；官方源为 info，镜像/硬编码/失败为 warn）
+- `modelsDev.load` — 目录加载汇总（source/durationMs/providers/goModels；官方源为 info，镜像/硬编码/失败为 warn）
 - `goUsage.fetch.ok` — 用量拉取成功（info，含 url/durationMs/rolling/weekly/monthly/useBalance）
 - `goUsage.fetch.timeout` — 用量拉取超时（warn）
 - `goUsage.fetch.unauthorized` — 用量拉取 401，无有效 Go 套餐（warn）

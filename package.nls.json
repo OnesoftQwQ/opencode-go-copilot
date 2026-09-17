@@ -35,7 +35,6 @@
 	"config.modelPreset.desc": "Current model preset ID. Use the 'Set Model Preset' command to select a preset. Set to 'custom' to use manual values from 'opencodego.temperature' and 'opencodego.top_p'.",
 	"config.temperature.desc": "Model temperature (0.0 - 2.0). Paired with 'opencodego.top_p'. Only used when 'opencodego.modelPreset' is set to 'custom'.",
 	"config.top_p.desc": "Model top_p (0.0 - 1.0). Paired with 'opencodego.temperature'. Only used when 'opencodego.modelPreset' is set to 'custom'.",
-	"config.enableZenFreeModels.desc": "Enable OpenCode Zen free models in the model picker. When enabled, free models (IDs ending in -free) from the models.dev catalog's OpenCode Zen provider are shown (e.g. Big Pickle, DeepSeek V4 Flash Free, MiniMax M3 Free). Zen free models are currently NOT supported for git commit message generation. Requires a full reload of VS Code to take effect after changing this setting.",
 	"config.enableAutoModelDiscovery.desc": "Enable automatic model discovery. When enabled, the extension fetches the actual model list from the API and filters the model picker to show only models available on the server. Models not in the API list are hidden. The model list itself comes from the models.dev catalog, which is refreshed periodically. Disable to show all catalog models regardless of API availability.",
 	"config.showDeprecatedModels.desc": "Show deprecated models in the model picker. When disabled (default), models marked as deprecated in the models.dev catalog are hidden.",
 	"config.modelsDevUpdateInterval.desc": "Cache TTL in milliseconds for checking model updates from the API when 'opencodego.enableAutoModelDiscovery' is enabled. Default: 60000 (1 minute). Minimum: 30000 (30 seconds).",
@@ -69,5 +68,5 @@
 	"walkthrough.showModels.title": "Show OpenCode Go models",
 	"walkthrough.showModels.description": "If the models are hidden, open VS Code's Language Models manager and show the OpenCode Go models.\n[Open Language Models](command:workbench.action.chat.manage)",
 	"walkthrough.advancedSettings.title": "Explore advanced settings",
-	"walkthrough.advancedSettings.description": "Customize model presets, enable Zen free models, configure vision proxy, and more.\n[Open settings](command:opencodego.openSettings)"
+	"walkthrough.advancedSettings.description": "Customize model presets, configure vision proxy, and more.\n[Open settings](command:opencodego.openSettings)"
 }

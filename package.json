@@ -288,11 +288,6 @@
 					"maximum": 1,
 					"description": "%config.top_p.desc%"
 				},
-				"opencodego.enableZenFreeModels": {
-					"type": "boolean",
-					"default": false,
-					"description": "%config.enableZenFreeModels.desc%"
-				},
 				"opencodego.enableAutoModelDiscovery": {
 					"type": "boolean",
 					"default": true,

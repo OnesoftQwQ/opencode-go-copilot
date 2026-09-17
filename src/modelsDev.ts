@@ -257,7 +257,7 @@ function rebuildIndex(data: CatalogData): void {
 
 /**
  * Get a provider entry from the catalog by provider ID.
- * @param providerId - Provider ID (e.g. "opencode-go", "opencode")
+ * @param providerId - Provider ID (e.g. "opencode-go")
  */
 export function getCatalogProvider(providerId: string): CatalogProvider | undefined {
     return providersMap?.get(providerId);
@@ -265,7 +265,7 @@ export function getCatalogProvider(providerId: string): CatalogProvider | undefi
 
 /**
  * Get the API base URL for a provider from the catalog.
- * @param providerId - Provider ID (e.g. "opencode-go", "opencode")
+ * @param providerId - Provider ID (e.g. "opencode-go")
  * @param fallbackUrl - Fallback URL if catalog is not loaded or provider not found
  */
 export function getCatalogProviderBaseUrl(providerId: string, fallbackUrl: string): string {
@@ -280,7 +280,7 @@ export function getCatalogProviderBaseUrl(providerId: string, fallbackUrl: strin
  * Get provider-specific model metadata from the catalog.
  * Looks up the model in the specified provider's models section.
  *
- * @param providerId - Provider ID (e.g. "opencode-go", "opencode")
+ * @param providerId - Provider ID (e.g. "opencode-go")
  * @param modelId - Short model ID (e.g. "glm-5", "deepseek-v4-flash")
  * @returns The provider-specific model entry, or undefined if not found.
  */
@@ -295,7 +295,7 @@ export function getCatalogProviderModelEntry(
  * Get all model IDs served by a provider from the catalog.
  * Returns an empty array if the catalog is not loaded or the provider is unknown.
  *
- * @param providerId - Provider ID (e.g. "opencode-go", "opencode")
+ * @param providerId - Provider ID (e.g. "opencode-go")
  */
 export function getCatalogProviderModelIds(providerId: string): string[] {
     const models = providersMap?.get(providerId)?.models;
@@ -429,7 +429,6 @@ function logLoadSummary(source: CatalogSource | "failed", start: number, data: C
         durationMs: Date.now() - start,
         providers: data ? Object.keys(data.providers ?? {}).length : (providersMap?.size ?? 0),
         goModels: countProviderModels("opencode-go"),
-        zenModels: countProviderModels("opencode"),
     };
     if (source === "official") {
         logger.info("modelsDev.load", payload);

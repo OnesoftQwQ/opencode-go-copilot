@@ -25,7 +25,7 @@ import { createRetryConfig, executeWithRetry, convertToolsToOpenAI, getInference
 import { getCatalogProviderBaseUrl } from "./modelsDev";
 
 import { prepareLanguageModelChatInformation } from "./provideModel";
-import { getCatalogModelConfig, resolveProviderForModelId, resolveVisionProxyModelId } from "./catalogModels";
+import { getCatalogModelConfig, resolveVisionProxyModelId } from "./catalogModels";
 import { l10nFormat } from "./localize";
 import { countMessageTokens, textTokenLength } from "./provideToken";
 import { updateContextStatusBar, recordUsage, updateCumulativeTooltip, updateStatusBarWithApiPrompt } from "./statusBar";
@@ -179,7 +179,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
         let dispatchFetch: typeof fetch;
 
         try {
-            // Resolve model config from the unified catalog layer (Go or Zen by ID suffix).
+            // Resolve model config from the unified catalog layer.
             const config = vscode.workspace.getConfiguration();
             // Shallow copy to avoid mutating the shared resolved config.
             let um: OpenCodeGoModelItem | undefined = { ...getCatalogModelConfig(model.id) };
@@ -620,19 +620,6 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 throw new Error(l10n("Request timed out. The generation took too long. You can increase the timeout in settings (opencodego.requestTimeout)."));
             }
 
-            // Detect Zen free model expiration: a 401 from a Zen free model
-            // means the free promotion has ended (error text may vary - don't match on it)
-            if (errMessage.includes("[401]") && resolveProviderForModelId(model.id) === "opencode") {
-                const zenConfig = getCatalogModelConfig(model.id);
-                const zenModelName = zenConfig.displayName ?? model.id;
-                logger.error("request.error", {
-                    modelId: model.id,
-                    error: "zen_free_model_expired",
-                    errorMessage: errMessage,
-                });
-                throw new Error(l10nFormat("{0} is no longer available as a free model. Please use a different model.", zenModelName));
-            }
-
             // Detect image content moderation rejection from the API
             if (errMessage.includes("IMAGE_SENSITIVE:")) {
                 logger.error("request.error", {
@@ -935,7 +922,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
                     // Inject tools (VS Code + ask_image + ask_with_multi_image)
                     const anthropicToolList: Array<{ name: string; description?: string; input_schema?: object }> = [];
-                    const toolConfig = convertToolsToOpenAI(params.options, params.um?.id ?? params.model.id);
+                    const toolConfig = convertToolsToOpenAI(params.options);
                     if (toolConfig.tools) {
                         for (const tool of toolConfig.tools) {
                             anthropicToolList.push({
@@ -1096,7 +1083,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
 
                     // Inject tools (VS Code + ask_image + ask_with_multi_image)
                     const openaiToolList: any[] = [];
-                    const toolConfig = convertToolsToOpenAI(params.options, params.um?.id ?? params.model.id);
+                    const toolConfig = convertToolsToOpenAI(params.options);
                     if (toolConfig.tools) {
                         openaiToolList.push(...toolConfig.tools);
                     }

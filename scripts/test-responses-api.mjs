@@ -101,21 +101,12 @@ try {
     assert.equal(
         convertToolsToOpenAI(
             { tools: toolDefinitions, toolMode: vscodeShim.LanguageModelChatToolMode.Required },
-            "gpt-5.6-luna",
         ).tool_choice,
         "required",
     );
     assert.equal(
         convertToolsToOpenAI(
-            { tools: toolDefinitions, toolMode: vscodeShim.LanguageModelChatToolMode.Required },
-            "ox-alpha-free",
-        ).tool_choice,
-        "auto",
-    );
-    assert.equal(
-        convertToolsToOpenAI(
             { tools: toolDefinitions, modelOptions: { toolMode: "required" } },
-            "gpt-5.6-luna",
         ).tool_choice,
         "required",
     );
