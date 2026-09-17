@@ -41,7 +41,7 @@ jobs:
             echo "$CHECK_RESULT" | jq -r '
               "## New Model(s) Detected\n" +
               "\n" +
-              "The API server now offers **\(.newModelIds | length)** model(s) that are not yet in the hardcoded built-in model list or Zen free model list.\n" +
+              "The API server now offers **\(.newModelIds | length)** model(s) that are not yet in the hardcoded catalog snapshot.\n" +
               "\n" +
               "### New Models\n" +
               "\n" +
@@ -53,10 +53,10 @@ jobs:
               "\n\n" +
               "### How to Add\n" +
               "\n" +
-              "1. Add the model(s) to `src/models.ts` (built-in) or `src/zen/zenModels.ts` (Zen free)\n" +
-              "2. Configure `thinkingMode`, `apiMode`, `vision`, context length, max tokens etc.\n" +
+              "1. Refresh the snapshot with `node scripts/update-hardcoded-catalog.mjs`\n" +
+              "2. Add a `MODEL_OVERRIDES` entry if the catalog metadata needs correcting (apiMode, thinking mode, ...)\n" +
               "3. Run `npm run compile` to verify\n" +
-              "4. Update `AGENTS.md` if adding new model series"
+              "4. Update the model list in `docs/architecture.md` if the series is new"
             ' > /tmp/issue-body.md
 
             echo "=== Issue Body ==="

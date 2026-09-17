@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import type { OpenCodeGoModelItem, RetryConfig } from "./types";
 import type { StoredImage } from "./vision/types";
-import { isZenFreeModelId } from "./catalogModels";
 import { OpenAIFunctionToolDef } from "./openai/openaiTypes";
 import type { ResponsesFunctionToolDef } from "./openai/responsesTypes";
 import { CancellationToken } from "vscode";
@@ -117,8 +116,7 @@ function resolveToolMode(options?: vscode.ProvideLanguageModelChatResponseOption
  * Convert VS Code tool definitions to OpenAI function tool definitions.
  */
 export function convertToolsToOpenAI(
-    options?: vscode.ProvideLanguageModelChatResponseOptions,
-    modelId?: string
+    options?: vscode.ProvideLanguageModelChatResponseOptions
 ): { tools?: OpenAIFunctionToolDef[]; tool_choice?: string } {
     if (!options?.tools || options.tools.length === 0) {
         return {};
@@ -146,7 +144,7 @@ export function convertToolsToOpenAI(
 
     let toolChoice: string | undefined;
     if (toolMode === "required") {
-        toolChoice = modelId && isZenFreeModelId(modelId) ? "auto" : "required";
+        toolChoice = "required";
     } else if (toolMode === "none") {
         toolChoice = "none";
     } else if (toolMode === "auto") {
@@ -171,10 +169,9 @@ export function convertOpenAIToolToResponses(tool: OpenAIFunctionToolDef): Respo
 
 /** Convert VS Code tool definitions to the flat OpenAI Responses format. */
 export function convertToolsToResponses(
-    options?: vscode.ProvideLanguageModelChatResponseOptions,
-    modelId?: string
+    options?: vscode.ProvideLanguageModelChatResponseOptions
 ): { tools?: ResponsesFunctionToolDef[]; tool_choice?: string } {
-    const chatTools = convertToolsToOpenAI(options, modelId);
+    const chatTools = convertToolsToOpenAI(options);
     return {
         tools: chatTools.tools?.map(convertOpenAIToolToResponses),
         tool_choice: chatTools.tool_choice,

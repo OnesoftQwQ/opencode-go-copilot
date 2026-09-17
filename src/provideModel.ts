@@ -4,18 +4,14 @@ import { CancellationToken, LanguageModelChatInformation, PrepareLanguageModelCh
 import { logger } from "./logger";
 import { getApiModelIds, clearApiModelCache } from "./apiModelList";
 import { ensureModelsDevLoaded, clearModelsDevCache, getCatalogProviderModelIds } from "./modelsDev";
-import { buildCatalogModelInfo, isModelDeprecated, isZenFreeModelId, resolveProviderForModelId } from "./catalogModels";
+import { buildCatalogModelInfo, isModelDeprecated } from "./catalogModels";
 import { delay } from "./utils";
 
 const GO_PROVIDER_ID = "opencode-go";
-const ZEN_PROVIDER_ID = "opencode";
 
 let isUpdatingModelsDev = false;
 let lastModelsDevUpdate = 0;
 let cachedDiscoveredInfos: LanguageModelChatInformation[] | null = null;
-
-let cachedZenInfos: LanguageModelChatInformation[] | null = null;
-let lastZenUpdate = 0;
 
 /**
  * Build the full OpenCode Go model list from the catalog.
@@ -50,12 +46,6 @@ async function runCatalogPass(secrets: vscode.SecretStorage): Promise<LanguageMo
         }
     }
 
-    // Keep the Go list consistent with request routing: only show ids that
-    // resolveProviderForModelId() maps to Go. A "-free" suffixed id (e.g.
-    // ox-alpha-free) is routed to Zen at request time, so it must not appear
-    // in the Go picker — otherwise selecting it 401s on the Zen endpoint.
-    availableIds = availableIds.filter((id) => resolveProviderForModelId(id) === GO_PROVIDER_ID);
-
     // Drop deprecated models from the picker unless the user opts in to see them
     const showDeprecated = vscode.workspace.getConfiguration().get<boolean>("opencodego.showDeprecatedModels", false);
     const infos = availableIds
@@ -82,58 +72,11 @@ export function resetAutoDiscoveryState(): void {
     isUpdatingModelsDev = false;
     lastModelsDevUpdate = 0;
     cachedDiscoveredInfos = null;
-    cachedZenInfos = null;
-    lastZenUpdate = 0;
     clearApiModelCache();
     clearModelsDevCache();
     logger.info("models.discovery", {
         action: "reset",
     });
-}
-
-/**
- * Fetch the OpenCode Zen free model list from the catalog with interval caching.
- * Free models are the "-free" suffixed ones plus a small hard-coded set of
- * plain-ID free models (e.g. big-pickle), see isZenFreeModelId.
- */
-async function fetchZenFreeModelsCached(
-    token: CancellationToken,
-    updateInterval: number
-): Promise<LanguageModelChatInformation[]> {
-    const now = Date.now();
-    if (cachedZenInfos && now - lastZenUpdate < updateInterval) {
-        return cachedZenInfos;
-    }
-
-    if (token.isCancellationRequested) return cachedZenInfos ?? [];
-
-    try {
-        await ensureModelsDevLoaded();
-        const showDeprecated = vscode.workspace.getConfiguration().get<boolean>("opencodego.showDeprecatedModels", false);
-        const zenIds = getCatalogProviderModelIds(ZEN_PROVIDER_ID)
-            .filter((id) => isZenFreeModelId(id))
-            .filter((id) => showDeprecated || !isModelDeprecated(ZEN_PROVIDER_ID, id));
-        const zenInfos = zenIds.map((id) => buildCatalogModelInfo(ZEN_PROVIDER_ID, id));
-        cachedZenInfos = zenInfos;
-        lastZenUpdate = Date.now();
-        if (zenInfos.length > 0) {
-            logger.info("models.discovery", {
-                action: "zen_free_models_loaded",
-                count: zenInfos.length,
-                ids: zenInfos.map((info) => info.id).join(", "),
-                source: "zen-free",
-            });
-            logger.info("models.loaded", { count: zenInfos.length, source: "zen-free" });
-        }
-
-        return zenInfos;
-    } catch (error) {
-        logger.error("models.loaded", {
-            source: "zen-free",
-            error: error instanceof Error ? error.message : String(error),
-        });
-        return cachedZenInfos ?? [];
-    }
 }
 
 export async function prepareLanguageModelChatInformation(
@@ -172,11 +115,5 @@ export async function prepareLanguageModelChatInformation(
         }
     }
 
-    // ── Assemble Base & Secondary Model Lists ──
-    const baseInfos = cachedDiscoveredInfos ? [...cachedDiscoveredInfos] : [];
-
-    const enableZen = config.get<boolean>("opencodego.enableZenFreeModels", false);
-    const zenInfos = enableZen ? await fetchZenFreeModelsCached(_token, updateInterval) : [];
-
-    return [...baseInfos, ...zenInfos];
+    return cachedDiscoveredInfos ? [...cachedDiscoveredInfos] : [];
 }

@@ -15,7 +15,7 @@ src/
 ├── localize.ts                           # 国际化/本地化
 ├── logger.ts                             # 日志系统
 ├── modelOverrides.ts                     # 模型覆盖表（models.dev 无法表达的内容）
-├── catalogModels.ts                      # 统一模型解析/构建层 (Go + Zen)
+├── catalogModels.ts                      # 统一模型解析/构建层 (OpenCode Go)
 ├── hardcodedModelList.ts                 # 硬编码兜底目录快照（官方目录与镜像均不可达时的最后防线）
 ├── modelsDev.ts                          # models.dev 目录拉取与查询
 ├── provideModel.ts                       # 模型信息提供函数（目录驱动）
@@ -54,15 +54,15 @@ src/
 | --- | --- | --- |
 | `extension.ts` | ~350 | 扩展激活/停用，注册 Provider 和 10 条命令，首次安装欢迎页引导 |
 | `provider.ts` | ~1150 | 实现 `LanguageModelChatProvider`，处理聊天请求全流程及图片代理多轮循环处理 |
-| `catalogModels.ts` | ~230 | 统一模型解析/构建层：`ModelMeta` 合并链（`MODEL_OVERRIDES` > 目录条目 > 默认值）、`buildCatalogModelInfo()`、`getCatalogModelConfig()`、`resolveProviderForModelId()`/`isZenFreeModelId()`（`-free` 后缀 + 硬编码集合分流 Zen/Go） |
-| `hardcodedModelList.ts` | ~4880 | 硬编码兜底目录快照：opencode-go（24 个）与 opencode（85 个）模型的完整元数据（2026-08-04），官方目录与镜像均不可达时作为最后防线，与运行时 JSON 相同方式断言为 `HardcodedCatalogData` |
+| `catalogModels.ts` | ~200 | 统一模型解析/构建层：`ModelMeta` 合并链（`MODEL_OVERRIDES` > 目录条目 > 默认值）、`buildCatalogModelInfo()`、`getCatalogModelConfig()`，`ProviderId` 当前仅 `opencode-go` |
+| `hardcodedModelList.ts` | ~1690 | 硬编码兜底目录快照：opencode-go（36 个）模型的完整元数据（2026-09-14），官方目录与镜像均不可达时作为最后防线，与运行时 JSON 相同方式断言为 `HardcodedCatalogData` |
 | `modelOverrides.ts` | ~50 | 每模型覆盖表 `MODEL_OVERRIDES`（全部可选字段）+ `ModelMetaOverride` 类型；仅维护 models.dev 无法表达的内容（Anthropic apiMode、adaptive、`reasoning_split` 等） |
 | `types.ts` | ~95 | `OpenCodeGoModelItem`, `ModelPreset`, `ModelsResponse`, `RetryConfig` 等类型 |
 | `apiModelList.ts` | ~110 | API 模型列表获取：从 catalog 解析的 base URL 的 `/models` 端点拉取可用模型 ID，1 分钟缓存，静默降级 |
 | `goUsage.ts` | ~260 | Go 套餐用量拉取：从 `GET /zen/go/v1/usage` 拉取 5h/周/月窗口用量与 `useBalance`，5 分钟 TTL 缓存、失败保留旧值，宽容解析字段名（percent/usagePercent、resetsAt/resetInSec），格式化重置倒计时/摘要 |
 | `modelsDev.ts` | ~440 | models.dev 目录拉取与查询：三级回退链（官方 → 镜像 → 硬编码列表），从 `catalog.json` 下载并索引全局模型与服务商，支持短 ID 匹配、provider 查询、`reasoning_options`/思考模式/视觉/预算推断，1 分钟缓存 |
 | `commonApi.ts` | ~467 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截、User-Agent 配置读取） |
-| `provideModel.ts` | ~180 | 模型信息提供函数：以 catalog 的 `opencode-go` provider 全量构建列表（可选按 API 列表过滤），Zen 免费模型从 `opencode` provider 按 `isZenFreeModelId()`（`-free` 后缀 + 硬编码 `big-pickle`）过滤；1 分钟间隔缓存与并发去重 |
+| `provideModel.ts` | ~120 | 模型信息提供函数：以 catalog 的 `opencode-go` provider 全量构建列表（可选按 API 列表过滤）；1 分钟间隔缓存与并发去重 |
 | `provideToken.ts` | ~100 | Token 用量计算 |
 | `utils.ts` | ~570 | 工具函数（重试、角色映射、Base URL 覆盖/校验、OpenAI Chat/Responses 工具格式转换等） |
 | `statusBar.ts` | ~317 | 状态栏创建、更新、累计计数器、Go 用量轮询与 tooltip 区块渲染 |
@@ -145,7 +145,7 @@ src/
 
 #### `provideLanguageModelChatResponse(model, messages, options, progress, token): Promise<void>`
 
-核心方法：处理聊天请求，流式返回响应。包括模型配置获取（统一 `getCatalogModelConfig`，按 `-free` 后缀 + 硬编码集合自动分流 Zen/Go）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理，以及按 `apiMode` 精确路由到 `/chat/completions`、`/responses`、`/v1/messages`。Base URL 解析优先级为 `opencodego.inferenceBaseUrl` 用户覆盖（代理）> 模型目录 baseUrl > 官方默认。三种协议分别由 `OpenaiApi`、`ResponsesApi`、`AnthropicApi` 转换请求和解析流，之后统一处理图片代理拦截与错误。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。模型配置通过 `{ ...um }` 浅拷贝后再修改 thinking/temperature，防止并发会话间互相泄漏设置。
+核心方法：处理聊天请求，流式返回响应。包括模型配置获取（统一 `getCatalogModelConfig`）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理，以及按 `apiMode` 精确路由到 `/chat/completions`、`/responses`、`/v1/messages`。Base URL 解析优先级为 `opencodego.inferenceBaseUrl` 用户覆盖（代理）> 模型目录 baseUrl > 官方默认。三种协议分别由 `OpenaiApi`、`ResponsesApi`、`AnthropicApi` 转换请求和解析流，之后统一处理图片代理拦截与错误。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。模型配置通过 `{ ...um }` 浅拷贝后再修改 thinking/temperature，防止并发会话间互相泄漏设置。
 
 #### `private async _handleInterceptedToolCall(params): Promise<void>`
 
@@ -176,21 +176,13 @@ src/
 
 解析后的模型元数据。models.dev 可提供的字段全部为**必选**（含保守默认值）：`displayName`、`vision`、`reasoning`、`supportsDisablingReasoning`、`thinkingMode`、`supportedReasoningEfforts`、`defaultReasoningEffort`、`contextLength`、`maxOutputTokens`、`apiMode`、`supportsTemperature`、`supportsThinkingParam`、`toolCalling`、`baseUrl`、`cost`；可选字段：`thinkingBudget`、`status`。
 
-#### `isZenFreeModelId(modelId): boolean`
-
-判断模型 ID 是否为 Zen 免费模型：`-free` 后缀约定，或在硬编码集合 `ZEN_FREE_EXTRA_IDS`（当前含 `big-pickle`）中。是 Zen/Go 分流的唯一依据。
-
-#### `resolveProviderForModelId(modelId): "opencode-go" | "opencode"`
-
-按模型 ID 分流服务商：`isZenFreeModelId()` 为真 → `opencode` (Zen)，否则 → `opencode-go` (Go)。是 Zen/Go 的唯一分流点。
-
 #### `resolveModelMeta(providerId, modelId): ModelMeta`
 
 统一合并链：`resolveFromCatalog()`（provider 条目 → 全局条目 → 保守默认值，逐字段兜底）后 `applyOverride()`（`MODEL_OVERRIDES[modelId]` 逐字段覆盖，写了的覆盖、没写的沿用）。
 
 #### `buildCatalogModelInfo(providerId, modelId): LanguageModelChatInformation`
 
-构建模型选择器条目。模型名显式追加服务商后缀：Go 模型为 ` (Go)`，Zen 免费模型为 ` (Zen)`（deprecated 模型额外前缀 `[Depr]`）。Zen 模型 tooltip 额外提示「免费模型，可能会收集数据用于训练」。推理强度枚举由 `buildReasoningEnum()` 生成：`disabled` 档在前、`none`/`disabled` effort 值归一为 `禁用思考` 档（已由 `resolveFromCatalog` 过滤，避免重复档）；`defaultReasoningEffort` 不在枚举内时回退到最高档（如 adaptive 模型的 `enabled` → `adaptive`）。当模型为 Responses 原生协议且未声明关闭档位（`supportsDisablingReasoning=false`）时不注入 `disabled` 档；当请求体不支持 `thinking` 字段（`supportsThinkingParam=false`，如 glm-5.3/glm-5.3-flash）时同样不注入 `disabled` 档，避免用户选择无效的禁用项。
+构建模型选择器条目。模型名为目录显示名（deprecated 模型额外前缀 `[Depr]`），tooltip 使用服务商 detail 文本。推理强度枚举由 `buildReasoningEnum()` 生成：`disabled` 档在前、`none`/`disabled` effort 值归一为 `禁用思考` 档（已由 `resolveFromCatalog` 过滤，避免重复档）；`defaultReasoningEffort` 不在枚举内时回退到最高档（如 adaptive 模型的 `enabled` → `adaptive`）。当模型为 Responses 原生协议且未声明关闭档位（`supportsDisablingReasoning=false`）时不注入 `disabled` 档；当请求体不支持 `thinking` 字段（`supportsThinkingParam=false`，如 glm-5.3/glm-5.3-flash）时同样不注入 `disabled` 档，避免用户选择无效的禁用项。
 
 #### `getCatalogModelConfig(modelId): OpenCodeGoModelItem`
 
@@ -204,7 +196,7 @@ src/
 
 #### `const MODEL_OVERRIDES: Record<string, ModelMetaOverride>`
 
-覆盖表（当前 10 条）：`minimax-m3`（adaptive + anthropic + `reasoning_split`）、`minimax-m2.7`（anthropic + `reasoning_split`）、`minimax-m2.5`（anthropic）、`qwen3.7-max`/`qwen3.7-plus`/`qwen3.6-plus`/`qwen3.5-plus`（anthropic）、`glm-5.2`（默认 effort=high）、`glm-5.3`/`glm-5.3-flash`（思考常开且上游拒绝 `thinking` 字段，仅发送 `reasoning_effort`）。Zen 免费模型（`-free` 后缀）共用同一命名空间，需要时可在此追加。
+覆盖表（当前 10 条）：`minimax-m3`（adaptive + anthropic + `reasoning_split`）、`minimax-m2.7`（anthropic + `reasoning_split`）、`minimax-m2.5`（anthropic）、`qwen3.7-max`/`qwen3.7-plus`/`qwen3.6-plus`/`qwen3.5-plus`（anthropic）、`glm-5.2`（默认 effort=high）、`glm-5.3`/`glm-5.3-flash`（思考常开且上游拒绝 `thinking` 字段，仅发送 `reasoning_effort`）。
 
 ---
 
@@ -427,7 +419,7 @@ API 实现的抽象基类。
 
 #### `logLoadSummary(source, start, data)`
 
-目录加载汇总日志 `modelsDev.load`：记录最终来源（official/mirror/hardcoded/failed）、整条回退链耗时、providers 数与 Go/Zen 模型数；官方源命中为 info，回退源与失败为 warn 以便在输出面板中一眼定位。
+目录加载汇总日志 `modelsDev.load`：记录最终来源（official/mirror/hardcoded/failed）、整条回退链耗时、providers 数与 Go 模型数；官方源命中为 info，回退源与失败为 warn 以便在输出面板中一眼定位。
 
 #### `lookupModelDevEntry(apiModelId): ModelsDevEntry | undefined`
 
@@ -467,19 +459,15 @@ API 实现的抽象基类。
 
 #### `prepareLanguageModelChatInformation(options, _token, _secrets): Promise<LanguageModelChatInformation[]>`
 
-获取模型信息列表。模型列表完全由 `models.dev` 目录驱动：`runCatalogPass()` 以 catalog 的 `opencode-go` provider 全量模型构建列表（可选按 API `/models` 列表过滤可用性；API 不可用时显示目录全量），**并额外按 `resolveProviderForModelId()` 过滤，仅保留路由到 Go 的模型**（避免 `-free` 后缀的目录条目被错误放入 Go 选择器、选中后 401 路由到 Zen 端点），Zen 免费模型由 `fetchZenFreeModelsCached()` 从 `opencode` provider 按 `isZenFreeModelId()` 过滤免费模型（`-free` 后缀 + 硬编码 `big-pickle`）构建并追加。刷新频率由 `opencodego.modelsDevUpdateInterval` 控制（默认 1 分钟）：该值充当限速器，去重 VS Code 启动时多个并发 `activate()` 调用产生的刷新，同时保证每次激活与超过间隔的模型选择器打开都会刷新。目录不可用（加载失败且无缓存）时返回空列表，待下次拉取恢复。扩展每次激活时由 `extension.ts` 非阻塞调用本函数预热刷新。
+获取模型信息列表。模型列表完全由 `models.dev` 目录驱动：`runCatalogPass()` 以 catalog 的 `opencode-go` provider 全量模型构建列表（可选按 API `/models` 列表过滤可用性；API 不可用时显示目录全量）。刷新频率由 `opencodego.modelsDevUpdateInterval` 控制（默认 1 分钟）：该值充当限速器，去重 VS Code 启动时多个并发 `activate()` 调用产生的刷新，同时保证每次激活与超过间隔的模型选择器打开都会刷新。目录不可用（加载失败且无缓存）时返回空列表，待下次拉取恢复。扩展每次激活时由 `extension.ts` 非阻塞调用本函数预热刷新。
 
 #### `runCatalogPass(secrets): Promise<LanguageModelChatInformation[] | null>`
 
-目录加载失败时返回 null（保持旧缓存）；否则构建 Go 模型列表（额外按 `resolveProviderForModelId()` 过滤，丢弃会被路由到 Zen 的 `-free` 后缀条目，如 `ox-alpha-free`），并记录 `models.discovery` 日志。
-
-#### `fetchZenFreeModelsCached(token, updateInterval): Promise<LanguageModelChatInformation[]>`
-
-从目录 `opencode` provider 按 `isZenFreeModelId()`（`-free` 后缀 + 硬编码 `big-pickle`）过滤构建 Zen 免费模型列表，带 1 分钟间隔缓存，失败时返回旧缓存或空数组。
+目录加载失败时返回 null（保持旧缓存）；否则构建 Go 模型列表并记录 `models.discovery` 日志。
 
 #### `resetAutoDiscoveryState(): void`
 
-重置所有缓存状态：清除 `cachedDiscoveredInfos`、`cachedZenInfos`、`isUpdatingModelsDev` 等内部状态，并调用 `clearApiModelCache()` 和 `clearModelsDevCache()` 一并清空 API 模型列表和 models.dev 目录缓存。由 `opencodego.updateModelList` 命令在强制刷新时调用。
+重置所有缓存状态：清除 `cachedDiscoveredInfos`、`isUpdatingModelsDev` 等内部状态，并调用 `clearApiModelCache()` 和 `clearModelsDevCache()` 一并清空 API 模型列表和 models.dev 目录缓存。由 `opencodego.updateModelList` 命令在强制刷新时调用。
 
 ---
 
@@ -541,13 +529,13 @@ API 实现的抽象基类。
 
 优先读取官方 `ProvideLanguageModelChatResponseOptions.toolMode`，并在缺失时回退到旧版 `modelOptions.toolMode`。
 
-#### `convertToolsToOpenAI(options?, modelId?): { tools?, tool_choice? }`
+#### `convertToolsToOpenAI(options?): { tools?, tool_choice? }`
 
-将 VS Code 工具定义转换为 OpenAI 函数工具定义。传入 Zen 免费模型 ID 时，将不兼容的强制 `required` 工具选择降级为 `auto`。
+将 VS Code 工具定义转换为 OpenAI 函数工具定义，并按 `resolveToolMode()` 结果映射 `tool_choice`。
 
-#### `convertToolsToResponses(options?, modelId?): { tools?, tool_choice? }`
+#### `convertToolsToResponses(options?): { tools?, tool_choice? }`
 
-将 VS Code 工具定义转换为 OpenAI Responses 扁平函数工具定义，并沿用相同的工具选择兼容逻辑。
+将 VS Code 工具定义转换为 OpenAI Responses 扁平函数工具定义，并沿用相同的工具选择逻辑。
 
 #### `createRetryConfig(): RetryConfig`
 

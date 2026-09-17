@@ -35,7 +35,6 @@
 	"config.modelPreset.desc": "当前模型预设 ID。使用「设置模型预设」命令选择预设。设为「custom」可使用「opencodego.temperature」和「opencodego.top_p」手动输入的值。",
 	"config.temperature.desc": "模型温度 (0.0 - 2.0)。与「opencodego.top_p」配对使用。仅在「opencodego.modelPreset」设为「custom」时生效。",
 	"config.top_p.desc": "模型 top_p (0.0 - 1.0)。与「opencodego.temperature」配对使用。仅在「opencodego.modelPreset」设为「custom」时生效。",
-	"config.enableZenFreeModels.desc": "启用 OpenCode Zen 免费模型并将其添加到模型选择器中。开启后，将显示 models.dev 目录中 OpenCode Zen 服务商的免费模型（ID 以 -free 结尾，如 Big Pickle、DeepSeek V4 Flash Free、MiniMax M3 Free）。Zen 免费模型暂不支持用于 Git 提交消息生成。更改此设置后需要重新加载 VS Code 才能生效。",
 	"config.enableAutoModelDiscovery.desc": "启用自动模型发现。开启后，扩展将从 API 获取实际模型列表，过滤模型选择器仅显示服务器上可用的模型。不在 API 列表中的模型将被隐藏。模型列表本身来自 models.dev 目录，并按周期自动刷新。关闭后将显示目录中的全部模型，不受 API 可用性影响。",
 	"config.showDeprecatedModels.desc": "在模型选择器中显示已弃用模型。关闭（默认）时，models.dev 目录中标记为已弃用的模型将被隐藏。",
 	"config.modelsDevUpdateInterval.desc": "当「opencodego.enableAutoModelDiscovery」启用时，检查 API 模型更新的缓存 TTL（毫秒）。默认值: 60000（1分钟）。最小值: 30000（30秒）。",
@@ -69,5 +68,5 @@
 	"walkthrough.showModels.title": "显示 OpenCode Go 模型",
 	"walkthrough.showModels.description": "如果模型被隐藏，请打开 VS Code 的语言模型管理器并显示 OpenCode Go 模型。\n[打开语言模型管理](command:workbench.action.chat.manage)",
 	"walkthrough.advancedSettings.title": "探索高级设置",
-	"walkthrough.advancedSettings.description": "自定义模型预设、启用 Zen 免费模型、配置视觉代理等。\n[打开设置](command:opencodego.openSettings)"
+	"walkthrough.advancedSettings.description": "自定义模型预设、配置视觉代理等。\n[打开设置](command:opencodego.openSettings)"
 }

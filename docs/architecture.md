@@ -13,10 +13,9 @@
 | 能力 | 说明 |
 | --- | --- |
 | **Chat 模型提供商** | 实现 `LanguageModelChatProvider` 接口，向 VS Code 注册为 `opencodego` 厂商 |
-| **多模型支持** | 模型列表完全由 `models.dev` 目录驱动（`catalog.json` 的 `opencode-go` 服务商），覆盖 GLM、Kimi、DeepSeek、MiMo、MiniMax、Qwen 等全系列模型（含 gpt-5.6-luna、grok-4.5、hy3、qwen3.8-max 等新模型），统一通过推理强度选择器切换思考模式。可选开启 OpenCode Zen 免费模型（`opencode` 服务商，`-free` 后缀过滤 + 硬编码免费模型补充，见下）。元数据（上下文长度、视觉、思考模式、温度支持、API 端点等）全部自动获取，无需硬编码模型列表 |
+| **多模型支持** | 模型列表完全由 `models.dev` 目录驱动（`catalog.json` 的 `opencode-go` 服务商），覆盖 GLM、Kimi、DeepSeek、MiMo、MiniMax、Qwen 等全系列模型（含 gpt-5.6-luna、grok-4.5、hy3、qwen3.8-max 等新模型），统一通过推理强度选择器切换思考模式。元数据（上下文长度、视觉、思考模式、温度支持、API 端点等）全部自动获取，无需硬编码模型列表 |
 | **自动模型发现** | 模型列表以 `models.dev` 目录为唯一数据源（1 分钟 TTL 缓存，兼作启动并发激活去重）。通过 `opencodego.enableAutoModelDiscovery` 配置（默认开启）控制是否从 `/zen/go/v1/models` 获取实际可用列表过滤模型选择器（不可用模型隐藏，API 不可用则显示目录全量）。服务商 URL、模型列表、参数（含 `reasoning_options` 思考强度）均从目录自动获取；API 不可用时目录不可用的降级为空列表，待下次拉取恢复 |
 | **目录容灾回退** | 目录获取采用三级回退链：官方 `models.dev`（10 秒超时）→ 镜像（`opencodego.modelsDevMirrorUrl`，默认 `https://modelsdev-mirror.onesoft.top/catalog.json`，30 秒超时，请求头携带 `platform: opencode-go-copilot` 及可选 `x-mirror-token`）→ 硬编码兜底目录快照。镜像/兜底命中时按 1 分钟间隔持续重试官方源，官方恢复后自动切回 |
-| **OpenCode Zen 免费模型** | 通过设置开关启用，从 `models.dev` 目录的 `opencode` 服务商获取模型列表并过滤出免费模型（`-free` 后缀约定 + 硬编码集合 `ZEN_FREE_EXTRA_IDS` 补充无后缀免费模型，如 `big-pickle`），以 `OpenCode Zen` 标识追加到模型选择器。元数据合并链与 Go 模型完全统一：`MODEL_OVERRIDES` > 目录条目 > 保守默认值。支持内存缓存（1 分钟 TTL） |
 | **三 API 模式** | 根据 `models.dev` 的模型级 `provider.npm`（缺失时继承服务商 `npm`）区分 **OpenAI 兼容格式** (`/chat/completions`)、**OpenAI Responses 格式** (`/responses`) 和 **Anthropic 格式** (`/v1/messages`)；旧目录缺少适配器信息时才使用 family 启发式兜底 |
 | **流式推理** | 支持 SSE (Server-Sent Events) 流式响应，实时输出文本和工具调用 |
 | **Thinking/推理** | 支持模型的推理过程展示 ("thinking" 状态)，包括 XML think 块解析 |
@@ -50,11 +49,9 @@
 | 服务商 (Provider) | 来源 | 过滤规则 | 分组 (family) |
 | --- | --- | --- | --- |
 | `opencode-go`（OpenCode Go） | `catalog.json` → `providers["opencode-go"].models` | 可选按 API `/models` 列表过滤可用性 | `OpenCodeGo` |
-| `opencode`（OpenCode Zen） | `catalog.json` → `providers["opencode"].models` | `-free` 后缀 + 硬编码集合（`big-pickle`） | `OpenCode Zen` |
 
 > Go 服务商当前收录模型包括但不限于：`glm-5/5.1/5.2/5.3/5.3-flash`、`kimi-k3/k2.5/k2.6/k2.7-code`、`deepseek-v4-pro/flash`、`mimo-v2-pro/omni/v2.5-pro/v2.5`、`minimax-m3/m2.7/m2.5`、`qwen3.5/3.6/3.7-plus`、`qwen3.7-max`、`qwen3.8-max`、`gpt-5.6-luna`、`grok-4.5`、`hy3` 等。实际显示取决于目录收录与 API 可用性。
-> Zen 免费模型（`-free` 后缀）包括但不限于：`big-pickle`、`deepseek-v4-flash-free`、`minimax-m3-free`、`minimax-m2.5-free`、`ring-2.6-1t-free`、`nemotron-3-super-free` 等。
-> 兜底快照：`src/hardcodedModelList.ts` 内置 2026-08-04 的官方目录快照，含 opencode-go（24 个）与 opencode（85 个，其中 22 个 `-free` 免费模型）的**完整模型元数据**（limit、cost、reasoning_options、attachment、modalities 等），仅作官方目录与镜像均不可达时的最后防线。发布构建（`.github/workflows/release.yml`）会先运行 `scripts/update-hardcoded-catalog.mjs` 自动刷新该快照（拉取官方目录 → 提取两个服务商 → 重写文件），失败时保留旧快照不阻断构建；数据有变化时随版本号变更在同一 commit 推送。
+> 兜底快照：`src/hardcodedModelList.ts` 内置 2026-09-14 的官方目录快照，含 opencode-go（36 个）的**完整模型元数据**（limit、cost、reasoning_options、attachment、modalities 等），仅作官方目录与镜像均不可达时的最后防线。发布构建（`.github/workflows/release.yml`）会先运行 `scripts/update-hardcoded-catalog.mjs` 自动刷新该快照（拉取官方目录 → 提取服务商 → 重写文件），失败时保留旧快照不阻断构建；数据有变化时随版本号变更在同一 commit 推送。
 
 #### 思考强度自动推导（`reasoning_options`）
 
@@ -144,8 +141,7 @@ activate(context)
 provideLanguageModelChatResponse(model, messages, options, progress, token)
   │
   ├── 1. 解析模型 ID → getCatalogModelConfig(model.id)
-  │       格式: "baseId"（无 :: 后缀）
-  │       统一入口：`-free` 后缀或硬编码免费集合（big-pickle）→ opencode (Zen) 服务商，否则 → opencode-go (Go) 服务商
+  │       格式: "baseId"（无 :: 后缀），统一走 opencode-go (Go) 服务商
   │       元数据合并链: MODEL_OVERRIDES > 目录 provider 条目 > 全局目录条目 > 保守默认值
   │
   ├── 2. 应用用户配置的 reasoningEffort

@@ -399,7 +399,7 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 		}
 
 		// Add tools configuration
-		const toolConfig = convertToolsToOpenAI(options, um?.id ?? this._modelId);
+		const toolConfig = convertToolsToOpenAI(options);
 		const anthropicToolList: Array<{ name: string; description?: string; input_schema?: object }> = [];
 		if (toolConfig.tools) {
 			for (const tool of toolConfig.tools) {

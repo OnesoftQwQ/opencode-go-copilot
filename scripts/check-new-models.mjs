@@ -3,9 +3,9 @@
 /**
  * Check for new models available on the API that are not yet hardcoded.
  *
- * Extracts hardcoded model IDs from src/models.ts (BUILT_IN_MODELS) and
- * src/zen/zenModels.ts (ZEN_FREE_MODEL_IDS), then compares against the
- * API model list from /zen/go/v1/models.
+ * Extracts the model IDs of the opencode-go provider from the hardcoded
+ * fallback snapshot (src/hardcodedModelList.ts), then compares them against
+ * the API model list from /zen/go/v1/models.
  *
  * Outputs JSON result that can be consumed by a GitHub Action.
  *
@@ -18,46 +18,26 @@
  */
 
 const API_BASE_URL = "https://opencode.ai/zen/go/v1/";
-const MODELS_TS_PATH = new URL("../src/models.ts", import.meta.url);
-const ZEN_MODELS_TS_PATH = new URL("../src/zen/zenModels.ts", import.meta.url);
+const HARDCODED_TS_PATH = new URL("../src/hardcodedModelList.ts", import.meta.url);
+const PROVIDER_ID = "opencode-go";
 
 // ── Helpers ──
 
-function extractModelsFromBuiltIn(fileContent) {
-    const ids = [];
-    // Match: { baseId: "xxx", ... }
-    const regex = /\{\s*baseId:\s*"([^"]+)"/g;
-    let match;
-    while ((match = regex.exec(fileContent)) !== null) {
-        ids.push(match[1]);
+/**
+ * Read the provider's model IDs out of the hardcoded snapshot.
+ * The snapshot is generated JSON-in-TS, so the object literal between the
+ * declaration and the trailing assertion parses as-is.
+ */
+function extractHardcodedIds(fileContent) {
+    const startMarker = "export const HARDCODED_CATALOG: HardcodedCatalogData = {";
+    const endMarker = "\n} as unknown as HardcodedCatalogData;";
+    const start = fileContent.indexOf(startMarker);
+    const end = fileContent.lastIndexOf(endMarker);
+    if (start < 0 || end < 0) {
+        throw new Error("hardcoded catalog markers not found");
     }
-    return [...new Set(ids)].sort();
-}
-
-function extractZenFreeIds(fileContent) {
-    const ids = [];
-    // Match: "xxx",  inside ZEN_FREE_MODEL_IDS array
-    const regex = /"(big-pickle|deepseek-v4-flash-free|minimax-m3-free|minimax-m2\.5-free|mimo-v2\.5-free|ring-2\.6-1t-free|nemotron-3-super-free|qwen3\.6-plus-free)"/g;
-    let match;
-    while ((match = regex.exec(fileContent)) !== null) {
-        ids.push(match[1]);
-    }
-    // If regex misses something, also try generic in-array string match
-    if (ids.length === 0) {
-        // Fallback: find the ZEN_FREE_MODEL_IDS array and extract
-        const arrayStart = fileContent.indexOf("ZEN_FREE_MODEL_IDS");
-        if (arrayStart >= 0) {
-            const bracket = fileContent.indexOf("[", arrayStart);
-            const closeBracket = fileContent.indexOf("]", bracket);
-            const arrayContent = fileContent.slice(bracket + 1, closeBracket);
-            const genericRegex = /"([^"]+)"/g;
-            let gm;
-            while ((gm = genericRegex.exec(arrayContent)) !== null) {
-                ids.push(gm[1]);
-            }
-        }
-    }
-    return [...new Set(ids)].sort();
+    const data = JSON.parse("{" + fileContent.slice(start + startMarker.length, end) + "\n}");
+    return Object.keys(data.providers?.[PROVIDER_ID]?.models ?? {}).sort();
 }
 
 async function fetchApiModelIds(apiKey) {
@@ -178,16 +158,11 @@ async function main() {
 
     // 1. Read hardcoded IDs
     const fs = await import("fs");
-    const modelsTs = fs.readFileSync(MODELS_TS_PATH, "utf-8");
-    const zenModelsTs = fs.readFileSync(ZEN_MODELS_TS_PATH, "utf-8");
+    const hardcodedTs = fs.readFileSync(HARDCODED_TS_PATH, "utf-8");
 
-    const builtInIds = extractModelsFromBuiltIn(modelsTs);
-    const zenFreeIds = extractZenFreeIds(zenModelsTs);
-    const allHardcodedIds = [...new Set([...builtInIds, ...zenFreeIds])].sort();
+    const hardcodedIds = extractHardcodedIds(hardcodedTs);
 
-    console.error(`[check] Built-in models: ${builtInIds.length} IDs`);
-    console.error(`[check] Zen free models: ${zenFreeIds.length} IDs`);
-    console.error(`[check] Total hardcoded: ${allHardcodedIds.length} IDs`);
+    console.error(`[check] Hardcoded ${PROVIDER_ID} models: ${hardcodedIds.length} IDs`);
 
     // 2. Fetch API model list (no authentication required for model listing)
     let apiModelIds = [];
@@ -204,15 +179,14 @@ async function main() {
     const result = {
         fetchSuccessful,
         apiModelIds,
-        builtInIds,
-        zenFreeIds,
+        hardcodedIds,
         newModelIds: [],
         newModelDetails: [],
         summary: "",
     };
 
     if (fetchSuccessful && apiModelIds.length > 0) {
-        const hardcodedSet = new Set(allHardcodedIds);
+        const hardcodedSet = new Set(hardcodedIds);
         result.newModelIds = apiModelIds.filter((id) => !hardcodedSet.has(id));
 
         if (result.newModelIds.length > 0) {
@@ -298,8 +272,7 @@ main().catch((err) => {
     console.log(JSON.stringify({
         fetchSuccessful: false,
         apiModelIds: [],
-        builtInIds: [],
-        zenFreeIds: [],
+        hardcodedIds: [],
         newModelIds: [],
         newModelDetails: [],
         summary: `Script error: ${err.message}`,

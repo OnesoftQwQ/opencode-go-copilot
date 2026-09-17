@@ -51,10 +51,6 @@ export interface ModelMetaOverride {
 
 /**
  * Per-model overrides, keyed by model ID.
- *
- * Note: Zen free models share the same namespace (IDs end with "-free") and
- * can be overridden here too — e.g. "minimax-m3-free" if it ever diverges
- * from its Go counterpart.
  */
 export const MODEL_OVERRIDES: Record<string, ModelMetaOverride> = {
     // ── MiniMax series ── served via Anthropic-compatible API; M3 is adaptive-only

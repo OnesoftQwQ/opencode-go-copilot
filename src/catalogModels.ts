@@ -1,15 +1,11 @@
 /**
  * Unified model resolution layer.
  *
- * Every model — OpenCode Go and OpenCode Zen — flows through the same
- * two-layer merge chain:
+ * Every model flows through the same two-layer merge chain:
  *
  *   1. resolveFromCatalog() — models.dev catalog
  *      (provider entry → global entry → conservative defaults, per field)
  *   2. applyOverride()      — MODEL_OVERRIDES[modelId] wins per field when present
- *
- * Zen and Go only differ in the provider ID and model filtering (-free suffix);
- * all resolution and build logic is shared.
  */
 
 import type { LanguageModelChatInformation } from "vscode";
@@ -33,20 +29,20 @@ import {
     type ModelsDevEntry,
 } from "./modelsDev";
 
-/** Supported provider IDs. */
-export type ProviderId = "opencode-go" | "opencode";
+/**
+ * Supported provider IDs. Only OpenCode Go remains: the OpenCode Zen free
+ * tier rejects requests originating outside OpenCode with a 403 FreeTierError.
+ */
+export type ProviderId = "opencode-go";
 
-/** Fallback base URLs used when the catalog is not loaded. */
+/** Fallback base URL used when the catalog is not loaded. */
 const FALLBACK_BASE_URLS: Record<ProviderId, string> = {
     "opencode-go": "https://opencode.ai/zen/go/v1/",
-    "opencode": "https://opencode.ai/zen/v1/",
 };
 
-/** Per-provider display metadata (family grouping, name suffix). */
-const PROVIDER_LABELS: Record<ProviderId, { family: string; detail: string; nameSuffix: string }> = {
-    // implied to be go models, no suffix
-    "opencode-go": { family: "OpenCodeGo", detail: "OpenCode Go", nameSuffix: "" },
-    "opencode": { family: "OpenCode Zen", detail: "OpenCode Zen", nameSuffix: " (Zen)" },
+/** Provider display metadata (family grouping, picker detail text). */
+const PROVIDER_LABELS: Record<ProviderId, { family: string; detail: string }> = {
+    "opencode-go": { family: "OpenCodeGo", detail: "OpenCode Go" },
 };
 
 const DEFAULT_CONTEXT_LENGTH = 128000;
@@ -76,31 +72,6 @@ export interface ModelMeta {
     thinkingBudget?: { min?: number; max?: number };
     status?: string;
     cost: { cache_read: number; input: number; output: number };
-}
-
-/**
- * Zen free models that do not follow the "-free" suffix convention but are
- * free on the OpenCode Zen provider (kept in sync with the models.dev
- * catalog; big-pickle is a long-standing free model with a plain ID).
- */
-const ZEN_FREE_EXTRA_IDS: ReadonlySet<string> = new Set(["big-pickle"]);
-
-/**
- * Whether a model ID refers to an OpenCode Zen free model:
- * the "-free" suffix convention, or an ID hard-coded as free (see
- * ZEN_FREE_EXTRA_IDS). Everything else is treated as Go.
- */
-export function isZenFreeModelId(modelId: string): boolean {
-    return modelId.endsWith("-free") || ZEN_FREE_EXTRA_IDS.has(modelId);
-}
-
-/**
- * Resolve the provider for a model ID.
- * Zen free models follow the "-free" suffix convention (plus a small
- * hard-coded set of free models with plain IDs); everything else is Go.
- */
-export function resolveProviderForModelId(modelId: string): ProviderId {
-    return isZenFreeModelId(modelId) ? "opencode" : "opencode-go";
 }
 
 /**
@@ -318,15 +289,8 @@ export function buildCatalogModelInfo(providerId: ProviderId, modelId: string): 
     const label = PROVIDER_LABELS[providerId];
     // Deprecated models keep a visible marker when shown (opt-in setting)
     const deprecatedPrefix = meta.status === "deprecated" ? l10n("[Depr] ") : "";
-    // Explicitly mark the provider so models are unambiguous in surfaces that
-    // only show the name (e.g. custom-agent model selection). Zen models are
-    // typically free but may collect data for training, so the marker matters.
-    const nameSuffix = label.nameSuffix;
-    const name = `${deprecatedPrefix}${meta.displayName}${nameSuffix}`;
-    // Surface the free model and implications in the tooltip. 
-    const tooltip = providerId === "opencode"
-        ? l10n("Free models are available on OpenCode for a limited time. Data may be collected for training. See https://opencode.ai/docs/zen for details.")
-        : label.detail;
+    const name = `${deprecatedPrefix}${meta.displayName}`;
+    const tooltip = label.detail;
     const { enumValues, enumItemLabels, enumDescriptions, defaultEffort } = buildReasoningEnum(meta);
 
     return {
@@ -363,11 +327,9 @@ export function buildCatalogModelInfo(providerId: ProviderId, modelId: string): 
 
 /**
  * Build the OpenCodeGoModelItem request config for a model.
- * The provider (Go vs Zen) is resolved from the model ID.
  */
 export function getCatalogModelConfig(modelId: string): OpenCodeGoModelItem {
-    const providerId = resolveProviderForModelId(modelId);
-    const meta = resolveModelMeta(providerId, modelId);
+    const meta = resolveModelMeta("opencode-go", modelId);
     const override = MODEL_OVERRIDES[modelId];
 
     const config: OpenCodeGoModelItem = {
