@@ -50,7 +50,7 @@
 | --- | --- | --- | --- |
 | `opencode-go`（OpenCode Go） | `catalog.json` → `providers["opencode-go"].models` | 可选按 API `/models` 列表过滤可用性 | `OpenCodeGo` |
 
-> Go 服务商当前收录模型包括但不限于：`glm-5/5.1/5.2/5.3/5.3-flash`、`kimi-k3/k2.5/k2.6/k2.7-code`、`deepseek-v4-pro/flash`、`mimo-v2-pro/omni/v2.5-pro/v2.5`、`minimax-m3/m2.7/m2.5`、`qwen3.5/3.6/3.7-plus`、`qwen3.7-max`、`qwen3.8-max`、`gpt-5.6-luna`、`grok-4.5`、`hy3` 等。实际显示取决于目录收录与 API 可用性。
+> Go 服务商当前收录模型包括但不限于：`glm-5/5.1/5.2/5.3/5.3-flash`、`kimi-k3/k2.5/k2.6/k2.7-code`、`deepseek-v4-pro/flash`、`mimo-v2-pro/omni/v2.5-pro/v2.5`、`minimax-m3/m2.7/m2.5`、`qwen3.5/3.6/3.7-plus`、`qwen3.7-max`、`qwen3.8-max`、`gpt-5.6-luna`、`grok-4.5`、`claude-haiku-5-5`、`hy3` 等。实际显示取决于目录收录与 API 可用性。
 > 兜底快照：`src/hardcodedModelList.ts` 内置 2026-09-14 的官方目录快照，含 opencode-go（36 个）的**完整模型元数据**（limit、cost、reasoning_options、attachment、modalities 等），仅作官方目录与镜像均不可达时的最后防线。发布构建（`.github/workflows/release.yml`）会先运行 `scripts/update-hardcoded-catalog.mjs` 自动刷新该快照（拉取官方目录 → 提取服务商 → 重写文件），失败时保留旧快照不阻断构建；数据有变化时随版本号变更在同一 commit 推送。
 
 #### 思考强度自动推导（`reasoning_options`）
@@ -66,6 +66,8 @@ models.dev 目录通过 `reasoning_options` 字段提供每个模型的思考能
 | `{"type":"budget_tokens","max":N}` | `thinking_budget`（OpenAI 模式请求体 `budget_tokens`） | qwen3.5/3.6 (81920)、qwen3.7/3.8 (262144) |
 
 > **`thinking` 字段能力（`supportsThinkingParam`）：** 目录无法表达「请求体是否接受 `thinking` 字段」。`glm-5.3` / `glm-5.3-flash` 经 `MODEL_OVERRIDES` 标记为 `thinkingMode: "always"` + `supportsThinkingParam: false`：思考强制开启（模型选择器不再提供「禁用思考」档），请求体不发送 `thinking` 字段，思考强度仅通过 `reasoning_effort`（low/high/max）控制——其上游端点会以 `json: unknown field "thinking"` 拒绝该字段（issue #129）。
+
+> **自适应思考（Claude 5.x）：** 目录同样无法表达「模型仅支持自适应思考」。`claude-haiku-5-5` 经 `MODEL_OVERRIDES` 标记为 `thinkingMode: "adaptive"` + `apiMode: "anthropic"`：Anthropic 协议请求体发送 `thinking: { type: "adaptive" }`，思考强度改由顶层 `output_config.effort` 下发；旧版 `thinking: { type: "enabled", budget_tokens: N }` 会被上游以 400 `"thinking.type.enabled" is not supported for this model` 拒绝（issue #137）。
 
 > **关于图像输入：** 所有模型（包括非视觉模型）的 `imageInput` 能力均声明为 `true`，以确保 VS Code 始终传递图片数据。非视觉模型通过内部的 `ask_image` 工具代理机制处理图片，不直接支持视觉输入。视觉模型可直接接收工具结果（如内置 `view_image`）返回的图片 data part，以及 MCP 工具返回的 resource-link 图片（解析后发送）。
 
@@ -146,9 +148,9 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   │
   ├── 2. 应用用户配置的 reasoningEffort
   │       ├── "disabled" → 关闭思考（always 模型除外）
-  │       ├── "adaptive" → 开启思考，自动模式（发送 thinking: { type: "adaptive" }）
+  │       ├── "adaptive" → 开启思考，自动模式（Anthropic 协议发送 thinking: { type: "adaptive" }）
   │       ├── "enabled" → 开启思考，使用默认推理力度
-  │       ├── "high"/"max" → 开启思考，指定推理力度
+  │       ├── "high"/"max" → 开启思考，指定推理力度（自适应模型写入 output_config.effort）
   │
   ├── 2b. 注入 temperature/top_p（模型预设或自定义设置）
   │       ├── preset 模式 → 注入预设的 temperature（不传入 top_p，由模型使用默认值）

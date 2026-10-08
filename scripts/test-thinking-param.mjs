@@ -5,6 +5,10 @@
  * `thinking` field entirely (HTTP 400 `json: unknown field "thinking"`), so
  * requests must carry only `reasoning_effort` (low/high/max) and the model
  * picker must not offer an off switch thinking cannot honour.
+ *
+ * It also covers Anthropic 5.x adaptive-thinking models (claude-haiku-5-5):
+ * they reject the legacy `thinking.type: "enabled"` + `budget_tokens` form and
+ * require `thinking.type: "adaptive"` with `output_config.effort`.
  */
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
@@ -39,7 +43,7 @@ Module._load = function (request, parent, isMain) {
 try {
     const { buildCatalogModelInfo, getCatalogModelConfig } = require("../out/catalogModels.js");
     const { OpenaiApi } = require("../out/openai/openaiApi.js");
-    const { AnthropicApi } = require("../out/anthropic/anthropicApi.js");
+    const { AnthropicApi, buildAnthropicThinkingConfig } = require("../out/anthropic/anthropicApi.js");
 
     // Both always-thinking GLM-5.3 variants are effort-only: no `thinking`
     // field, no "禁用思考" picker entry.
@@ -111,6 +115,40 @@ try {
         supportsThinkingParam: false,
     });
     assert.equal("thinking" in anthropicBody, false);
+
+    // Anthropic 5.x models (claude-haiku-5-5) only accept adaptive thinking:
+    // the legacy `enabled` + `budget_tokens` form is rejected with 400, and the
+    // selected effort must travel in `output_config.effort` instead.
+    const haikuConfig = getCatalogModelConfig("claude-haiku-5-5");
+    assert.equal(haikuConfig.thinkingMode, "adaptive");
+    assert.equal(haikuConfig.apiMode, "anthropic");
+
+    const adaptiveBody = buildAnthropicThinkingConfig({
+        id: "claude-haiku-5-5",
+        enable_thinking: true,
+        thinkingMode: "adaptive",
+        reasoning_effort: "max",
+    });
+    assert.deepEqual(adaptiveBody.thinking, { type: "adaptive" });
+    assert.deepEqual(adaptiveBody.output_config, { effort: "max" });
+    assert.equal("budget_tokens" in adaptiveBody.thinking, false);
+
+    // Adaptive models without an explicit effort (e.g. minimax-m3) omit output_config.
+    assert.deepEqual(
+        buildAnthropicThinkingConfig({
+            enable_thinking: true,
+            thinkingMode: "adaptive",
+            reasoning_effort: "adaptive",
+        }),
+        { thinking: { type: "adaptive" } }
+    );
+
+    // Legacy Anthropic models keep the enabled + budget_tokens shape.
+    assert.deepEqual(
+        buildAnthropicThinkingConfig({ enable_thinking: true, reasoning_effort: "high" }).thinking,
+        { type: "enabled", budget_tokens: 8192 }
+    );
+    assert.deepEqual(buildAnthropicThinkingConfig({ enable_thinking: false }).thinking, { type: "disabled" });
 
     console.log("thinking param: ok");
 } finally {

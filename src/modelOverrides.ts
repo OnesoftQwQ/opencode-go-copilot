@@ -67,6 +67,15 @@ export const MODEL_OVERRIDES: Record<string, ModelMetaOverride> = {
         apiMode: "anthropic",
     },
 
+    // ── Anthropic Claude 5.x ── only adaptive thinking is supported; the legacy
+    // `thinking.type: "enabled"` + `budget_tokens` form is rejected with 400.
+    // Depth is controlled through `output_config.effort` (low..max), so the
+    // "adaptive" thinking mode maps the selected effort onto that field.
+    "claude-haiku-5-5": {
+        thinkingMode: "adaptive",
+        apiMode: "anthropic",
+    },
+
     // ── Qwen series ── served via Anthropic-compatible API
     "qwen3.7-max": { apiMode: "anthropic" },
     "qwen3.7-plus": { apiMode: "anthropic" },

@@ -69,6 +69,14 @@ export interface AnthropicRequestBody {
 		type: "enabled" | "adaptive" | "disabled";
 		budget_tokens?: number;
 	};
+	/**
+	 * Output configuration for adaptive-thinking models (Claude 5.x).
+	 * `effort` (low/medium/high/xhigh/max) controls thinking depth; the legacy
+	 * `thinking.type: "enabled"` + `budget_tokens` form is rejected there.
+	 */
+	output_config?: {
+		effort?: string;
+	};
 	tools?: AnthropicToolDefinition[];
 	tool_choice?: AnthropicToolChoice;
 }

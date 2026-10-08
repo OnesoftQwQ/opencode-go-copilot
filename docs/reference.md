@@ -154,11 +154,11 @@ src/
 - 视觉模型调用期间用户取消则跳过本轮。
 - 每轮创建独立 AbortController，带独立超时。
 - 每轮注入 VS Code 原生工具 + ask_image + ask_with_multi_image，确保模型可以混合使用。
-- Anthropic 模式额外恢复 `system` 内容（`_systemContent`）和 `thinking` 参数。
+- Anthropic 模式额外恢复 `system` 内容（`_systemContent`）和 `thinking`/`output_config` 参数（委托 `buildAnthropicThinkingConfig()`）。
 - 第二轮及后续轮次请求体中显式设置 `tool_choice` 为 `"auto"`（OpenAI）或 `{ type: "auto" }`（Anthropic），确保模型可继续调用工具。
 - Responses 模式的第二轮及后续请求继续使用 `store:false`、`/responses` 与扁平工具定义，并在 function call 前放回上一轮 encrypted reasoning item。
 - 使用 `_resetStreamState()` 重置流状态，避免 `_completedToolCallIndices` 等状态在轮次间残留导致工具调用被跳过。
-- `thinking` 字段值统一使用字符串（`"enabled"` / `"disabled"`），与 `prepareRequestBody` 保持一致；`supportsThinkingParam=false` 的模型（如 glm-5.3/glm-5.3-flash）在视觉轮次中同样省略该字段。
+- `thinking`/`output_config` 由 `buildAnthropicThinkingConfig()` 统一构建：旧版模型发送 `{ type: "enabled" }` / `{ type: "disabled" }`，自适应模型（如 claude-haiku-5-5）发送 `{ type: "adaptive" }` 并把强度写入 `output_config.effort`；`supportsThinkingParam=false` 的模型（如 glm-5.3/glm-5.3-flash）在视觉轮次中同样省略该字段。
 
 #### `private async ensureApiKey(): Promise<string | undefined>`
 
@@ -196,7 +196,7 @@ src/
 
 #### `const MODEL_OVERRIDES: Record<string, ModelMetaOverride>`
 
-覆盖表（当前 10 条）：`minimax-m3`（adaptive + anthropic + `reasoning_split`）、`minimax-m2.7`（anthropic + `reasoning_split`）、`minimax-m2.5`（anthropic）、`qwen3.7-max`/`qwen3.7-plus`/`qwen3.6-plus`/`qwen3.5-plus`（anthropic）、`glm-5.2`（默认 effort=high）、`glm-5.3`/`glm-5.3-flash`（思考常开且上游拒绝 `thinking` 字段，仅发送 `reasoning_effort`）。
+覆盖表（当前 11 条）：`minimax-m3`（adaptive + anthropic + `reasoning_split`）、`minimax-m2.7`（anthropic + `reasoning_split`）、`minimax-m2.5`（anthropic）、`claude-haiku-5-5`（adaptive + anthropic，仅支持自适应思考，强度经 `output_config.effort` 下发）、`qwen3.7-max`/`qwen3.7-plus`/`qwen3.6-plus`/`qwen3.5-plus`（anthropic）、`glm-5.2`（默认 effort=high）、`glm-5.3`/`glm-5.3-flash`（思考常开且上游拒绝 `thinking` 字段，仅发送 `reasoning_effort`）。
 
 ---
 
@@ -965,7 +965,7 @@ API 返回用量数据后重渲染状态栏（主文本 = Go 用量，tooltip = 
 
 #### `interface AnthropicRequestBody`
 
-Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `stream`, `temperature`, `top_p`, `top_k`, `thinking`, `tools`, `tool_choice` 等字段。
+Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `stream`, `temperature`, `top_p`, `top_k`, `thinking`, `output_config`, `tools`, `tool_choice` 等字段。`output_config.effort`（low/medium/high/xhigh/max）用于 Claude 5.x 自适应思考模型控制思考深度。
 
 #### `interface AnthropicToolDefinition`
 
@@ -993,9 +993,13 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 
 将 VS Code 消息转换为 Anthropic 格式（**异步**）。系统消息提取到 `_systemContent`。支持文本、图片、工具使用、工具结果、推理内容。使用 `content` 块数组格式。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据；**视觉模型时保留工具结果内的图片 `LanguageModelDataPart`，转换为 `image` block（base64 source）与文本合并为 `tool_result` 块数组发送**（如内置 `view_image` 工具返回的图片）；**MCP 工具返回的 resource-link（`application/vnd.code.resource-link`）data part 会被解析并通过 `resolveResourceLinkToImage()` 读取为实际图片，视觉模型直接发送、非视觉模型存入 `_localImages` 供 `ask_image` 代理使用，解析失败时以文本形式提示 URI**。**多条工具结果合并**：Anthropic 协议要求一条 assistant `tool_use` 消息对应的所有 `tool_result` 必须放在紧随的同一条 user 消息中；VS Code 可能将每个工具结果作为独立消息传入（每条含一个 `LanguageModelToolResultPart`），转换器将连续出现的纯工具结果消息（无文本/图片/vision history）缓冲暂存，在遇到其他消息或消息列表末尾时合并为单条 user 消息（含全部 `tool_result` 块），避免 400 "tool_use ids were found without tool_result blocks immediately after" 错误（修复 issue #87）。由 `scripts/test-anthropic-tool-result-merge.mjs` 验证合并行为。
 
+#### `buildAnthropicThinkingConfig(um?): { thinking?, output_config? }`
+
+构建 Anthropic `thinking` / `output_config` 字段。`supportsThinkingParam=false` 的模型返回空对象（请求体省略 `thinking` 字段）；关闭思考时返回 `{ thinking: { type: "disabled" } }`；自适应模型（`thinkingMode === "adaptive"` 或内部 `reasoning_effort === "adaptive"` 标记，如 claude-haiku-5-5、minimax-m3）返回 `{ thinking: { type: "adaptive" } }`，且当选中的是可映射强度（low/medium/high/xhigh/max）时附带 `{ output_config: { effort } }`；其余模型保持旧版 `{ thinking: { type: "enabled", budget_tokens: 8192 } }`。Claude 5.x 拒绝旧版 `enabled` + `budget_tokens` 形式（400 `"thinking.type.enabled" is not supported for this model`），必须改用自适应思考 + `output_config.effort`。`prepareRequestBody()` 与 `provider.ts` 的视觉代理轮次均复用该函数。
+
 #### `prepareRequestBody(rb, um?, options?): AnthropicRequestBody`
 
-构建 Anthropic 请求体。设置 max_tokens、system、temperature、top_p、top_k、thinking 模式（支持 `{ type: "enabled" }`、`{ type: "adaptive" }` 和 `{ type: "disabled" }`；`supportsThinkingParam=false` 的模型省略该字段）、tools（转换为 Anthropic 格式）、tool_choice（auto/any/none）以及 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。Extra 参数合并前过滤保留键（`model`, `messages`, `stream` 等），冲突时 `logger.warn()` 记录。
+构建 Anthropic 请求体。设置 max_tokens、system、temperature、top_p、top_k、thinking/output_config（委托 `buildAnthropicThinkingConfig()`，自适应模型发送 `{ type: "adaptive" }` 并将强度写入 `output_config.effort`；`supportsThinkingParam=false` 的模型省略该字段）、tools（转换为 Anthropic 格式）、tool_choice（auto/any/none）以及 extra 参数。非视觉模型且存在图片时自动注入 `ask_image` 工具定义。Extra 参数合并前过滤保留键（`model`, `messages`, `stream` 等，含 `thinking`、`output_config`），冲突时 `logger.warn()` 记录。
 
 #### `processStreamingResponse(responseBody, progress, token): Promise<void>`
 
