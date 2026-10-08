@@ -118,7 +118,7 @@ try {
 	);
 	assert.equal(out[0].role, "user");
 	assert.equal(out[1].role, "assistant");
-	assert.equal(out[1].content.length, 5, "thinking + text + 3 tool_use");
+	assert.equal(out[1].content.length, 4, "text + 3 tool_use (unsigned thinking dropped)");
 	assert.equal(
 		out[2].role,
 		"user",

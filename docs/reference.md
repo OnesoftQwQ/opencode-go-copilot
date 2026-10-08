@@ -34,7 +34,8 @@ src/
 │   └── responsesTypes.ts                 # OpenAI Responses 类型定义
 ├── anthropic/
 │   ├── anthropicApi.ts                   # Anthropic API 实现
-│   └── anthropicTypes.ts                 # Anthropic 类型定义
+│   ├── anthropicTypes.ts                 # Anthropic 类型定义
+│   └── thinkingSignature.ts              # Anthropic 签名 thinking 块的 DataPart 编解码
 ├── gitCommit/
 │   ├── commitMessageGenerator.ts         # Git 提交消息生成
 │   └── gitUtils.ts                       # Git 工具函数
@@ -74,8 +75,9 @@ src/
 | `openai/responsesApi.ts` | ~410 | OpenAI Responses 格式 API 实现：typed input Items、扁平工具定义、请求参数映射、Responses SSE 文本/推理/工具/usage 解析 |
 | `openai/responsesState.ts` | ~70 | 校验并编解码 `reasoning.encrypted_content` 私有 DataPart，使 `store:false` 的 Responses 推理模型可在后续请求中无状态续传 |
 | `openai/responsesTypes.ts` | ~125 | OpenAI Responses 请求、输入 Item、工具、usage 与流事件类型定义 |
-| `anthropic/anthropicApi.ts` | ~535 | Anthropic 格式 API 实现 (消息转换/请求构建/流式处理/图片代理) |
-| `anthropic/anthropicTypes.ts` | ~130 | Anthropic 类型定义 |
+| `anthropic/anthropicApi.ts` | ~555 | Anthropic 格式 API 实现 (消息转换/请求构建/流式处理/图片代理/签名 thinking 块回放) |
+| `anthropic/anthropicTypes.ts` | ~138 | Anthropic 类型定义 |
+| `anthropic/thinkingSignature.ts` | ~62 | Anthropic 签名 thinking 块 DataPart（`application/vnd.opencodego.anthropic-thinking+json`）的 MIME、校验与编解码；由 `scripts/test-anthropic-thinking-signature.mjs` 验证 |
 | `gitCommit/commitMessageGenerator.ts` | ~320 | Git 提交消息生成逻辑 |
 | `gitCommit/gitUtils.ts` | ~260 | Git 命令封装 |
 | `tokenizer/tokenizerManager.ts` | ~115 | o200k_base 分词器管理 (含 LRU 缓存) |
@@ -991,7 +993,7 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 
 #### `async convertMessages(messages, modelConfig): Promise<AnthropicMessage[]>`
 
-将 VS Code 消息转换为 Anthropic 格式（**异步**）。系统消息提取到 `_systemContent`。支持文本、图片、工具使用、工具结果、推理内容。使用 `content` 块数组格式。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据；**视觉模型时保留工具结果内的图片 `LanguageModelDataPart`，转换为 `image` block（base64 source）与文本合并为 `tool_result` 块数组发送**（如内置 `view_image` 工具返回的图片）；**MCP 工具返回的 resource-link（`application/vnd.code.resource-link`）data part 会被解析并通过 `resolveResourceLinkToImage()` 读取为实际图片，视觉模型直接发送、非视觉模型存入 `_localImages` 供 `ask_image` 代理使用，解析失败时以文本形式提示 URI**。**多条工具结果合并**：Anthropic 协议要求一条 assistant `tool_use` 消息对应的所有 `tool_result` 必须放在紧随的同一条 user 消息中；VS Code 可能将每个工具结果作为独立消息传入（每条含一个 `LanguageModelToolResultPart`），转换器将连续出现的纯工具结果消息（无文本/图片/vision history）缓冲暂存，在遇到其他消息或消息列表末尾时合并为单条 user 消息（含全部 `tool_result` 块），避免 400 "tool_use ids were found without tool_result blocks immediately after" 错误（修复 issue #87）。由 `scripts/test-anthropic-tool-result-merge.mjs` 验证合并行为。
+将 VS Code 消息转换为 Anthropic 格式（**异步**）。系统消息提取到 `_systemContent`。支持文本、图片、工具使用、工具结果、推理内容。使用 `content` 块数组格式。modelConfig 新增 `vision` 字段，非视觉模型时自动替换图片为文本引用并存储图片数据；**视觉模型时保留工具结果内的图片 `LanguageModelDataPart`，转换为 `image` block（base64 source）与文本合并为 `tool_result` 块数组发送**（如内置 `view_image` 工具返回的图片）；**MCP 工具返回的 resource-link（`application/vnd.code.resource-link`）data part 会被解析并通过 `resolveResourceLinkToImage()` 读取为实际图片，视觉模型直接发送、非视觉模型存入 `_localImages` 供 `ask_image` 代理使用，解析失败时以文本形式提示 URI**。**签名 thinking 块回放**：Claude 5.x 要求回放的 `thinking` 块必须带有效 `signature`（否则 400 `messages.N.content.M.thinking.signature: Field required`），而 VS Code 的 `LanguageModelThinkingPart` 只携带文本。转换器只重建由 `parseThinkingSignaturePart()` 从隐藏 DataPart 读出的带签名块（置于内容块最前），普通 thinking 文本一律丢弃、不再伪造 `"Next step."`（`includeReasoningInRequest=false` 时连签名块也丢弃）。**多条工具结果合并**：Anthropic 协议要求一条 assistant `tool_use` 消息对应的所有 `tool_result` 必须放在紧随的同一条 user 消息中；VS Code 可能将每个工具结果作为独立消息传入（每条含一个 `LanguageModelToolResultPart`），转换器将连续出现的纯工具结果消息（无文本/图片/vision history）缓冲暂存，在遇到其他消息或消息列表末尾时合并为单条 user 消息（含全部 `tool_result` 块），避免 400 "tool_use ids were found without tool_result blocks immediately after" 错误（修复 issue #87）。由 `scripts/test-anthropic-tool-result-merge.mjs` 验证合并行为，`scripts/test-anthropic-thinking-signature.mjs` 验证签名回放。
 
 #### `buildAnthropicThinkingConfig(um?): { thinking?, output_config? }`
 
@@ -1013,15 +1015,37 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 - `error` — 记录错误
 - `message_start` — 消息元数据
 - `message_delta` — 停止原因和用量
-- `content_block_start` — 块开始（text/thinking/tool_use）
-- `content_block_delta` — 增量内容（text_delta/thinking_delta/input_json_delta/signature_delta）
-- `content_block_stop` / `message_stop` — 清空缓冲区
+- `content_block_start` — 块开始（text/thinking/tool_use）；thinking 块开始时重置 `_thinkingBlockText`/`_thinkingBlockSignature` 并置 `_inThinkingBlock=true`
+- `content_block_delta` — 增量内容（text_delta/thinking_delta/input_json_delta/signature_delta）；`thinking_delta` 追加到 `_thinkingBlockText`，`signature_delta` 追加到 `_thinkingBlockSignature`
+- `content_block_stop` / `message_stop` — thinking 块结束时若有签名，通过 `createThinkingSignaturePart()` 上报隐藏 DataPart（供下一轮带签名回放），随后清空缓冲区
 
 #### `async *createMessage(model, systemPrompt, messages, baseUrl, apiKey, signal?): AsyncGenerator<{ type: "text"; text: string }>`
 
 非流式消息生成器（Anthropic 模式，用于 Git 提交生成）。注册取消回调：`signal.addEventListener("abort")` 时调用 `reader.cancel()` 立即中断流。
 
+#### 私有字段
+
+- `_thinkingBlockText` / `_thinkingBlockSignature` — 当前 thinking 块累积的文本与签名；`_inThinkingBlock` 标记当前内容块是否为 thinking 块。`_resetStreamState()` 覆写以在每轮开始时清空这三项，避免签名跨轮泄漏。
+
 ---
+
+### 2.24b `src/anthropic/thinkingSignature.ts`
+
+#### `const ANTHROPIC_THINKING_SIGNATURE_MIME`
+
+`application/vnd.opencodego.anthropic-thinking+json` — 跨轮携带 Anthropic 签名 thinking 块的私有 DataPart MIME。Claude 5.x 拒绝无签名回放，而 `LanguageModelThinkingPart` 只带文本，故签名需走此 DataPart。
+
+#### `interface AnthropicThinkingSignature`
+
+`{ thinking: string; signature: string }` — 签名覆盖的精确 thinking 文本与 API 返回的不透明签名。
+
+#### `serializeThinkingSignature(entry): Uint8Array` / `deserializeThinkingSignature(data): AnthropicThinkingSignature | null`
+
+序列化/反序列化并校验（`version===1`、两字段均为字符串且 `signature` 非空），无效输入返回 `null`。
+
+#### `createThinkingSignaturePart(entry): LanguageModelDataPart` / `parseThinkingSignaturePart(part): AnthropicThinkingSignature | null`
+
+创建/解析隐藏 DataPart；`parseThinkingSignaturePart()` 对非本 MIME 的 DataPart 返回 `null`。由 `scripts/test-anthropic-thinking-signature.mjs` 做编解码与 `convertMessages` 回放闭环测试。
 
 ### 2.25 `src/gitCommit/commitMessageGenerator.ts`
 
