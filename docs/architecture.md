@@ -340,6 +340,7 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
 - **OpenAI 模式**: 使用 `tool_calls` + `tool` role 消息格式构建每轮
 - **OpenAI Responses 模式**: 使用 `function_call` + `function_call_output` input items 构建每轮，并以私有 DataPart 保存 `reasoning.encrypted_content`，支持 `store:false` 的无状态多轮请求
 - **Anthropic 模式**: 使用 `tool_use` + `tool_result` content block 格式构建每轮
+- **Anthropic 签名 thinking 块**: Claude 5.x 要求回放的 `thinking` 块带有效 `signature`，而 VS Code 的 `LanguageModelThinkingPart` 只携带文本；扩展在流式 `signature_delta` 到达时把 `{thinking, signature}` 写入 `application/vnd.opencodego.anthropic-thinking+json` DataPart，下一轮由 `convertMessages()` 重建带签名的 thinking 块置于内容最前。无签名的普通 thinking 文本一律丢弃（不再伪造 `"Next step."`），避免 400 `messages.N.content.M.thinking.signature: Field required`（issue #137）
 - **参数保留**: 每轮保留 temperature、top_p、thinking 模式等原始参数
 - **DeepSeek 兼容**: 对 DeepSeek 模型的 assistant tool_call 消息注入 reasoning_content 字段
 

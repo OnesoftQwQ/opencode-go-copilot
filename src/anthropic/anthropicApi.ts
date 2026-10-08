@@ -28,6 +28,11 @@ import type { StoredImage } from "../vision/types";
 import { ASK_IMAGE_TOOL_DEF, ASK_WITH_MULTI_IMAGE_TOOL_DEF } from "../vision/types";
 import { parseVisionToolHistoryPart } from "../vision/historyPart";
 import { toAnthropicVisionToolMessages, type VisionToolHistoryEntry } from "../vision/historyCodec";
+import {
+	createThinkingSignaturePart,
+	parseThinkingSignaturePart,
+	type AnthropicThinkingSignature,
+} from "./thinkingSignature";
 
 /**
  * Build the `thinking` / `output_config` fields for an Anthropic request body.
@@ -71,6 +76,26 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 
 	/** Whether images were found during convertMessages for ask_image tool. */
 	private _hasImages = false;
+
+	/** Accumulated thinking text for the current Anthropic thinking block. */
+	private _thinkingBlockText = "";
+
+	/** Accumulated signature for the current Anthropic thinking block. */
+	private _thinkingBlockSignature = "";
+
+	/** Whether the content block currently being streamed is a thinking block. */
+	private _inThinkingBlock = false;
+
+	/**
+	 * Reset mutable streaming state, including the in-flight thinking block
+	 * accumulation, so rounds do not leak signatures into each other.
+	 */
+	protected override _resetStreamState(): void {
+		super._resetStreamState();
+		this._thinkingBlockText = "";
+		this._thinkingBlockSignature = "";
+		this._inThinkingBlock = false;
+	}
 
 	/** Accumulated input tokens from Anthropic message_start for usage reporting. */
 	private _anthropicInputTokens = 0;
@@ -163,13 +188,16 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 			const imageParts: vscode.LanguageModelDataPart[] = [];
 			const toolCalls: AnthropicToolUseBlock[] = [];
 			const toolResults: AnthropicToolResultBlock[] = [];
-			const thinkingParts: string[] = [];
+			const signedThinking: AnthropicThinkingSignature[] = [];
 			const visionToolHistory: VisionToolHistoryEntry[] = [];
 
 			for (const part of m.content ?? []) {
 				const historyEntry = parseVisionToolHistoryPart(part);
+				const thinkingEntry = parseThinkingSignaturePart(part);
 				if (historyEntry) {
 					visionToolHistory.push(historyEntry);
+				} else if (thinkingEntry) {
+					signedThinking.push(thinkingEntry);
 				} else if (part instanceof vscode.LanguageModelTextPart) {
 					if (modelSupportsVision) {
 						textParts.push(part.value);
@@ -267,13 +295,12 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 						content,
 					});
 				} else if (part instanceof vscode.LanguageModelThinkingPart) {
-					const content = Array.isArray(part.value) ? part.value.join("") : part.value;
-					thinkingParts.push(content);
+					// Plain thinking text carries no Anthropic signature and
+					// cannot be replayed; signed blocks travel in a DataPart.
 				}
 			}
 
 			const joinedText = textParts.join("").trim();
-			const joinedThinking = thinkingParts.join("").trim();
 
 			// Restore persisted vision calls before the normal content of this
 			// message, preserving assistant tool_use → user tool_result order.
@@ -308,6 +335,20 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 			// Build content blocks for user/assistant messages
 			const contentBlocks: AnthropicContentBlock[] = [];
 
+			// Replay signed thinking blocks first. Claude 5.x requires a valid
+			// `signature` on replayed thinking blocks; the plain thinking text
+			// VS Code round-trips has none, so only blocks captured through the
+			// hidden signature DataPart are reconstructed here.
+			if (role === "assistant" && modelConfig.includeReasoningInRequest) {
+				for (const signed of signedThinking) {
+					contentBlocks.push({
+						type: "thinking",
+						thinking: signed.thinking,
+						signature: signed.signature,
+					});
+				}
+			}
+
 			// Add text content
 			if (joinedText) {
 				contentBlocks.push({
@@ -338,14 +379,6 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 					});
 					imageIndex++;
 				}
-			}
-
-			// Add thinking content for assistant messages
-			if (role === "assistant" && modelConfig.includeReasoningInRequest) {
-				contentBlocks.push({
-					type: "thinking",
-					thinking: joinedThinking || "Next step.",
-				});
 			}
 
 			// Add tool calls for assistant messages
@@ -623,8 +656,12 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 
 		if (chunk.type === "content_block_start" && chunk.content_block) {
 			// Start of a content block
+			this._inThinkingBlock = chunk.content_block.type === "thinking";
 			if (chunk.content_block.type === "thinking") {
+				this._thinkingBlockText = "";
+				this._thinkingBlockSignature = "";
 				if (chunk.content_block.thinking) {
+					this._thinkingBlockText += chunk.content_block.thinking;
 					this.bufferThinkingContent(chunk.content_block.thinking, progress);
 				}
 			} else if (chunk.content_block.type === "tool_use") {
@@ -647,6 +684,7 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 				progress.report(new vscode.LanguageModelTextPart(chunk.delta.text));
 				this._hasEmittedAssistantText = true;
 			} else if (chunk.delta.type === "thinking_delta" && chunk.delta.thinking) {
+				this._thinkingBlockText += chunk.delta.thinking;
 				this.bufferThinkingContent(chunk.delta.thinking, progress);
 			} else if (chunk.delta.type === "input_json_delta" && chunk.delta.partial_json) {
 				const idx = (chunk.index as number) ?? 0;
@@ -657,9 +695,25 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 					await this.tryEmitBufferedToolCall(idx, progress);
 				}
 			} else if (chunk.delta.type === "signature_delta" && chunk.delta.signature) {
-				// Signature for thinking block - ignore for now
+				// Accumulate the opaque signature so the thinking block can be
+				// replayed verbatim on the next turn (Claude 5.x requires it).
+				this._thinkingBlockSignature += chunk.delta.signature;
 			}
 		} else if (chunk.type === "content_block_stop" || chunk.type === "message_stop") {
+			// End of a content block: persist a signed thinking block so VS Code
+			// can carry it into the next request.
+			if (this._inThinkingBlock && this._thinkingBlockSignature) {
+				progress.report(
+					createThinkingSignaturePart({
+						thinking: this._thinkingBlockText,
+						signature: this._thinkingBlockSignature,
+					}) as unknown as LanguageModelResponsePart
+				);
+			}
+			this._inThinkingBlock = false;
+			this._thinkingBlockText = "";
+			this._thinkingBlockSignature = "";
+
 			// End of message - ensure thinking is ended and flush all tool calls
 			await this.flushToolCallBuffers(progress, false);
 			this.reportEndThinking(progress);

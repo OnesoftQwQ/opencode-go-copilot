@@ -138,7 +138,7 @@ try {
             role: "user",
             content: [{ type: "tool_result", tool_use_id: entry.id, content: entry.result }],
         },
-        { role: "assistant", content: [{ type: "text", text: "The previous answer." }, { type: "thinking", thinking: "Next step." }] },
+        { role: "assistant", content: [{ type: "text", text: "The previous answer." }] },
     ]);
 
     const responsesItems = await new ResponsesApi("test").convertMessages(nextTurnMessages, {
