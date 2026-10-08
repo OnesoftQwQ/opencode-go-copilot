@@ -29,6 +29,41 @@ import { ASK_IMAGE_TOOL_DEF, ASK_WITH_MULTI_IMAGE_TOOL_DEF } from "../vision/typ
 import { parseVisionToolHistoryPart } from "../vision/historyPart";
 import { toAnthropicVisionToolMessages, type VisionToolHistoryEntry } from "../vision/historyCodec";
 
+/**
+ * Build the `thinking` / `output_config` fields for an Anthropic request body.
+ *
+ * Anthropic 5.x models (e.g. claude-haiku-5-5) only accept adaptive thinking.
+ * The legacy `thinking.type: "enabled"` + `budget_tokens` form is rejected with
+ * a 400 error, and the thinking depth must instead be carried by
+ * `output_config.effort`. Adaptive models already set `thinkingMode: "adaptive"`
+ * or use the internal `"adaptive"` effort marker.
+ *
+ * Returns an empty object when the model's schema rejects the `thinking` field
+ * entirely (`supportsThinkingParam === false`).
+ *
+ * @param um The resolved model item for the request.
+ * @returns An object containing the `thinking` and/or `output_config` fields.
+ */
+export function buildAnthropicThinkingConfig(
+	um: OpenCodeGoModelItem | undefined
+): { thinking?: AnthropicRequestBody["thinking"]; output_config?: AnthropicRequestBody["output_config"] } {
+	if (um?.supportsThinkingParam === false) {
+		return {};
+	}
+	if (um?.enable_thinking !== true) {
+		return { thinking: { type: "disabled" } };
+	}
+	const isAdaptive = um?.thinkingMode === "adaptive" || um?.reasoning_effort === "adaptive";
+	if (isAdaptive) {
+		const effort = um?.reasoning_effort;
+		return {
+			thinking: { type: "adaptive" },
+			...(effort && effort !== "adaptive" ? { output_config: { effort } } : {}),
+		};
+	}
+	return { thinking: { type: "enabled", budget_tokens: 8192 } };
+}
+
 export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBody> {
 	constructor(modelId: string) {
 		super(modelId);
@@ -386,17 +421,7 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 		// Models whose schema rejects the `thinking` field entirely
 		// (supportsThinkingParam=false) must not receive it: thinking is
 		// mandatory there and only controllable through `reasoning_effort`.
-		if (um?.supportsThinkingParam !== false) {
-			if (um?.enable_thinking === true) {
-				if (um?.reasoning_effort === 'adaptive') {
-					rb.thinking = { type: "adaptive" };
-				} else {
-					rb.thinking = { type: "enabled", budget_tokens: 8192 };
-				}
-			} else {
-				rb.thinking = { type: "disabled" };
-			}
-		}
+		Object.assign(rb, buildAnthropicThinkingConfig(um));
 
 		// Add tools configuration
 		const toolConfig = convertToolsToOpenAI(options);
@@ -451,7 +476,7 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 		const ANTHROPIC_RESERVED_EXTRA_KEYS = new Set([
 			"model", "messages", "stream", "max_tokens", "system",
 			"temperature", "top_p", "top_k", "tools", "tool_choice",
-			"thinking", "stop_sequences",
+			"thinking", "output_config", "stop_sequences",
 		]);
 		if (um?.extra && typeof um.extra === "object") {
 			for (const [key, value] of Object.entries(um.extra)) {

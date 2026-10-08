@@ -32,7 +32,7 @@ import { updateContextStatusBar, recordUsage, updateCumulativeTooltip, updateSta
 import { OpenaiApi } from "./openai/openaiApi";
 import { ResponsesApi } from "./openai/responsesApi";
 import type { ResponsesRequestBody } from "./openai/responsesTypes";
-import { AnthropicApi } from "./anthropic/anthropicApi";
+import { AnthropicApi, buildAnthropicThinkingConfig } from "./anthropic/anthropicApi";
 import type { AnthropicRequestBody } from "./anthropic/anthropicTypes";
 import { CommonApi, type StreamUsage } from "./commonApi";
 import { callVisionModel, callVisionModelMulti } from "./vision/imageProxy";
@@ -908,17 +908,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     }
                     // Routes whose schema rejects the `thinking` field
                     // (supportsThinkingParam=false) must not receive it.
-                    if (params.um?.supportsThinkingParam !== false) {
-                        if (params.um?.enable_thinking === true) {
-                            if (params.um?.reasoning_effort === 'adaptive') {
-                                body.thinking = { type: "adaptive" };
-                            } else {
-                                body.thinking = { type: "enabled", budget_tokens: 8192 };
-                            }
-                        } else {
-                            body.thinking = { type: "disabled" as const };
-                        }
-                    }
+                    Object.assign(body, buildAnthropicThinkingConfig(params.um));
 
                     // Inject tools (VS Code + ask_image + ask_with_multi_image)
                     const anthropicToolList: Array<{ name: string; description?: string; input_schema?: object }> = [];
