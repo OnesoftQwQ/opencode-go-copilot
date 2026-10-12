@@ -22,6 +22,7 @@ src/
 ├── provider.ts                           # Chat 模型提供商 (核心主文件)
 ├── sessionRouting.ts                     # x-opencode-session 会话 ID 登记/轮换
 ├── provideToken.ts                       # Token 计数函数
+├── requestUsageLog.ts                    # 每次请求的 token 用量日志字段构建
 ├── statusBar.ts                          # 状态栏管理
 ├── types.ts                              # TypeScript 类型定义
 ├── utils.ts                              # 通用工具函数
@@ -65,6 +66,7 @@ src/
 | `commonApi.ts` | ~467 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截、User-Agent 配置读取） |
 | `provideModel.ts` | ~120 | 模型信息提供函数：以 catalog 的 `opencode-go` provider 全量构建列表（可选按 API 列表过滤）；1 分钟间隔缓存与并发去重 |
 | `provideToken.ts` | ~100 | Token 用量计算 |
+| `requestUsageLog.ts` | ~75 | 每次请求的 token 用量日志字段：`computeCacheHitRate()` / `formatCacheHitRate()` / `buildRequestUsageLog()`，供 `request.end` 日志使用（由 `scripts/test-request-usage-log.mjs` 验证） |
 | `utils.ts` | ~570 | 工具函数（重试、角色映射、Base URL 覆盖/校验、OpenAI Chat/Responses 工具格式转换等） |
 | `statusBar.ts` | ~317 | 状态栏创建、更新、累计计数器、Go 用量轮询与 tooltip 区块渲染 |
 | `logger.ts` | ~55 | 日志输出 (LogOutputChannel) |
@@ -147,7 +149,9 @@ src/
 
 #### `provideLanguageModelChatResponse(model, messages, options, progress, token): Promise<void>`
 
-核心方法：处理聊天请求，流式返回响应。包括模型配置获取（统一 `getCatalogModelConfig`）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理，以及按 `apiMode` 精确路由到 `/chat/completions`、`/responses`、`/v1/messages`。Base URL 解析优先级为 `opencodego.inferenceBaseUrl` 用户覆盖（代理）> 模型目录 baseUrl > 官方默认。三种协议分别由 `OpenaiApi`、`ResponsesApi`、`AnthropicApi` 转换请求和解析流，之后统一处理图片代理拦截与错误。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。模型配置通过 `{ ...um }` 浅拷贝后再修改 thinking/temperature，防止并发会话间互相泄漏设置。
+核心方法：处理聊天请求，流式返回响应。包括模型配置获取（统一 `getCatalogModelConfig`）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理，以及按 `apiMode` 精确路由到 `/chat/completions`、`/responses`、`/v1/messages`。
+
+请求结束时会记录一条 `request.end` 日志，字段为本次请求的 token 用量：`inputTokens`（prompt/input token）、`cachedTokens`（缓存命中 token）、`cacheMissTokens`（缓存未命中 token，provider 未提供时为 `null`）、`outputTokens`、`cacheHitRate`（`cachedTokens / inputTokens` 的百分比数值，保留一位小数，无法计算时为 `null`）、`cacheHitRateText`（同值的可读文本，如 `"83.4%"`，无法计算时为 `"n/a"`）、`usageSource`（`stream` = 上游流式 usage、`estimated` = 客户端估算回退、`none` = 无数据）。三个 apiMode 的 `onUsage` 回调与回退分支都会写入本次请求的最终 usage，日志中不会出现 `NaN`/`Infinity`。Base URL 解析优先级为 `opencodego.inferenceBaseUrl` 用户覆盖（代理）> 模型目录 baseUrl > 官方默认。三种协议分别由 `OpenaiApi`、`ResponsesApi`、`AnthropicApi` 转换请求和解析流，之后统一处理图片代理拦截与错误。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。模型配置通过 `{ ...um }` 浅拷贝后再修改 thinking/temperature，防止并发会话间互相泄漏设置。
 
 #### `private async _handleInterceptedToolCall(params): Promise<void>`
 

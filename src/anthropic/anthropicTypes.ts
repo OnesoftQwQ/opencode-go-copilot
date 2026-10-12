@@ -130,7 +130,11 @@ export interface AnthropicStreamChunk {
 	};
 	usage?: {
 		input_tokens: number;
-		output_tokens: number;
+		output_tokens?: number;
+		/** Prompt tokens served from the provider's prompt cache. */
+		cache_read_input_tokens?: number;
+		/** Prompt tokens written into the provider's prompt cache this request. */
+		cache_creation_input_tokens?: number;
 	};
 	error?: {
 		type: string;

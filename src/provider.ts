@@ -35,6 +35,7 @@ import type { ResponsesRequestBody } from "./openai/responsesTypes";
 import { AnthropicApi, buildAnthropicThinkingConfig } from "./anthropic/anthropicApi";
 import type { AnthropicRequestBody } from "./anthropic/anthropicTypes";
 import { CommonApi, type StreamUsage } from "./commonApi";
+import { buildRequestUsageLog } from "./requestUsageLog";
 import { callVisionModel, callVisionModelMulti } from "./vision/imageProxy";
 import { ASK_IMAGE_TOOL_DEF, ASK_WITH_MULTI_IMAGE_TOOL_NAME, ASK_WITH_MULTI_IMAGE_TOOL_DEF } from "./vision/types";
 import type { StoredImage } from "./vision/types";
@@ -154,6 +155,11 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
         token: CancellationToken
     ): Promise<void> {
         let usageReportedDuringStream = false;
+        // Final usage of this request: set by whichever path reported last
+        // (streamed usage from the active API mode, or the client-side
+        // estimate in the fallback branch). Used only for the request.end log.
+        let requestUsage: StreamUsage | undefined;
+        let requestUsageSource: "stream" | "estimated" | "none" = "none";
         const collectedOutputText: string[] = [];
         const trackingProgress: Progress<LanguageModelResponsePart> = {
             report: (part) => {
@@ -345,6 +351,8 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 const anthropicApi = new AnthropicApi(model.id);
                 anthropicApi.onUsage = (usage) => {
                     usageReportedDuringStream = true;
+                    requestUsage = usage;
+                    requestUsageSource = "stream";
                     // Always report to native Copilot indicator (use original progress, not trackingProgress wrapper)
                     reportNativeUsage(usage, progress);
                     // Conditionally update Advanced Token indicator
@@ -422,6 +430,8 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 const responsesApi = new ResponsesApi(model.id);
                 responsesApi.onUsage = (usage) => {
                     usageReportedDuringStream = true;
+                    requestUsage = usage;
+                    requestUsageSource = "stream";
                     reportNativeUsage(usage, progress);
                     if (enableThirdPartyIndicator) {
                         recordUsage(usage);
@@ -490,6 +500,8 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                 const openaiApi = new OpenaiApi(model.id);
                 openaiApi.onUsage = (usage) => {
                     usageReportedDuringStream = true;
+                    requestUsage = usage;
+                    requestUsageSource = "stream";
                     // Always report to native Copilot indicator (use original progress, not trackingProgress wrapper)
                     reportNativeUsage(usage, progress);
                     // Conditionally update Advanced Token indicator
@@ -581,6 +593,8 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
                     promptTokens: estimatedInputTokens,
                     completionTokens: estimatedOutputTokens,
                 };
+                requestUsage = fallbackUsage;
+                requestUsageSource = "estimated";
                 reportNativeUsage(fallbackUsage, progress);
                 if (enableThirdPartyIndicator) {
                     recordUsage(fallbackUsage);
@@ -645,7 +659,14 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
         } finally {
             clearTimeout(timeoutId);
             const durationMs = Date.now() - requestStartTime;
-            logger.info("request.end", { modelId: model.id, durationMs });
+            logger.info(
+                "request.end",
+                buildRequestUsageLog(requestUsage, {
+                    modelId: model.id,
+                    durationMs,
+                    usageSource: requestUsageSource,
+                })
+            );
             this._lastRequestTime = Date.now();
         }
     }
