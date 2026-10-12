@@ -101,6 +101,14 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 	private _anthropicInputTokens = 0;
 
 	/**
+	 * Prompt tokens served from Anthropic's prompt cache
+	 * (`usage.cache_read_input_tokens`), captured from message_start and
+	 * refreshed by message_delta. Without this the reported cache-hit rate for
+	 * Anthropic models would always be 0.
+	 */
+	private _anthropicCacheHitTokens: number | undefined;
+
+	/**
 	 * Convert VS Code chat messages to Anthropic message format.
 	 * @param messages The VS Code chat messages to convert.
 	 * @param modelConfig model configuration that may affect message conversion.
@@ -635,20 +643,42 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 		if (chunk.type === "message_start" && chunk.message) {
 			// Extract message metadata (id, model, etc.) and input token count
 			const msg = chunk.message as Record<string, unknown>;
-			const usage = msg.usage as { input_tokens?: number } | undefined;
+			const usage = msg.usage as {
+				input_tokens?: number;
+				cache_read_input_tokens?: number;
+			} | undefined;
 			if (usage?.input_tokens) {
 				this._anthropicInputTokens = usage.input_tokens;
+			}
+			if (typeof usage?.cache_read_input_tokens === "number") {
+				this._anthropicCacheHitTokens = usage.cache_read_input_tokens;
 			}
 			return;
 		}
 
 		if (chunk.type === "message_delta" && chunk.delta) {
 			// Extract stop_reason and usage information
-			const chunkUsage = chunk.usage as { output_tokens?: number } | undefined;
+			const chunkUsage = chunk.usage as {
+				output_tokens?: number;
+				input_tokens?: number;
+				cache_read_input_tokens?: number;
+			} | undefined;
+			// Later deltas may restate (and refresh) the cache counters.
+			if (typeof chunkUsage?.input_tokens === "number") {
+				this._anthropicInputTokens = chunkUsage.input_tokens;
+			}
+			if (typeof chunkUsage?.cache_read_input_tokens === "number") {
+				this._anthropicCacheHitTokens = chunkUsage.cache_read_input_tokens;
+			}
 			if (chunkUsage?.output_tokens && this._anthropicInputTokens > 0) {
 				this._onUsage?.({
 					promptTokens: this._anthropicInputTokens,
 					completionTokens: chunkUsage.output_tokens,
+					cacheHitTokens: this._anthropicCacheHitTokens,
+					cacheMissTokens:
+						this._anthropicCacheHitTokens === undefined
+							? undefined
+							: Math.max(0, this._anthropicInputTokens - this._anthropicCacheHitTokens),
 				});
 			}
 			return;

@@ -24,6 +24,7 @@
 | **MCP 工具图片支持** | 完整支持 MCP 工具（如 Chrome DevTools `take_screenshot`、photoshop-mcp 等）返回的图片：`type: image`/带 blob 的 `resource` 直接以图片 data part 接收；`resource`/`resource_link`（无 blob）则以 `application/vnd.code.resource-link` data part 接收，扩展会解析其中的 URI 并通过 `vscode.workspace.fs.readFile` 读取实际图片字节（VS Code 为 `vscode-chat-response-resource://` 注册了文件系统提供者）。视觉模型直接收到图片（image_url/image block），非视觉模型存入 `_localImages` 供 `ask_image` 代理使用；解析失败时以文本形式提示 URI |
 | **Token 计数** | 使用 `o200k_base` tiktoken 分词器精确统计 token 用量 |
 | **状态栏** | 实时显示当前会话 token 使用量、累计用量、缓存命中率 |
+| **请求用量日志** | 每次请求结束在 OpenCodeGo 输出通道记录一条 `request.end` 日志，包含输入 token、缓存命中 token、缓存未命中 token、输出 token 与缓存命中率（`cachedTokens / inputTokens` 百分比，保留一位小数），覆盖 OpenAI Chat Completions / Responses / Anthropic 三种协议与客户端估算回退路径（issue #141） |
 | **原生 Token 指示器** | 始终启用，向 Copilot Chat 原生 Token 指示器报告 token 用量。通过发送 MIME 类型为 `usage` 的 `LanguageModelDataPart`（TextEncoder 编码 JSON）实现，无需自建状态栏。依赖 VS Code/Copilot Chat 1.116+ 对外部模型 `usage` data part 的识别 |
 | **高级 Token 指示器** | 可通过 `opencodego.enableThirdPartyTokenIndicator` 配置（默认开启）控制 VS Code 状态栏中的高级Token计数器。状态栏主文本显示 Go 套餐用量（见下），累计 Token 信息展示在悬停提示中。关闭后仅显示原生指示器 |
 | **套餐用量监控** | 从官方用量端点 `GET /zen/go/v1/usage`（2026-08-11 上线，anomalyco/opencode#16513）拉取 Go 套餐用量：5 小时滚动 / 周 / 月三个窗口的使用率与重置时间，以及 `useBalance` 余额回退标志。状态栏主文本默认显示 5H 窗口用量（`$(symbol-numeric) Go 5H 65%`，无数据时 `Go --`）；悬停提示中展示三窗口明细与 5h 窗口重置倒计时（`opencodego.showUsageInTooltip` 控制 tooltip 区块，默认开启），后台按 `opencodego.usageRefreshInterval` 间隔轮询（默认 5 分钟，1-60 可调）；点击状态栏条目或运行 `opencodego.checkUsage` 命令可强制立即刷新并弹窗显示摘要。无 API Key 时不轮询，401（无 Go 套餐）与网络失败均静默降级、仅记录日志，响应字段名宽容解析（`percent`/`usagePercent`、`resetsAt`/`resetInSec` 双兼容） |
@@ -253,6 +254,9 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   │        └── 其他错误 → 原样抛出
   │
   └── 12. finally: 清理定时器, 记录请求结束日志
+           └── request.end: modelId / durationMs / inputTokens / cachedTokens
+               / cacheMissTokens / outputTokens / cacheHitRate / cacheHitRateText
+               / usageSource（三个 apiMode 与估算回退均覆盖）
 ```
 
 ### 2.4 Thinking/推理内容处理
