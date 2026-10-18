@@ -2,9 +2,11 @@
  * OpenCode Go usage fetcher.
  *
  * Fetches Go plan subscription usage from the official usage endpoint
- * (GET /zen/go/v1/usage, live since 2026-08-11, anomalyco/opencode#16513)
- * and caches it with a 5-minute TTL. Falls back to stale cache on failure
- * (silent degradation).
+ * (GET https://opencode.ai/zen/go/v1/usage, live since 2026-08-11,
+ * anomalyco/opencode#16513) and caches it with a 5-minute TTL. The endpoint
+ * does not exist under the catalog's /inference base, so the control-plane
+ * base is fixed rather than read from the catalog (#144). Falls back to stale
+ * cache on failure (silent degradation).
  *
  * The endpoint is authenticated with the same Bearer API key used for
  * inference. It reports rolling (5h), weekly (7d) and monthly utilization
@@ -17,10 +19,9 @@
 
 import * as path from "path";
 import * as vscode from "vscode";
+import { OFFICIAL_CONTROL_PLANE_BASE_URL } from "./endpoints";
 import { logger } from "./logger";
-import { ensureModelsDevLoaded, getCatalogProviderBaseUrl } from "./modelsDev";
 
-const FALLBACK_BASE_URL = "https://opencode.ai/zen/go/v1/";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes — endpoint does a multi-table join, keep polling gentle
 const FETCH_TIMEOUT_MS = 10000;
 
@@ -51,18 +52,6 @@ export interface GoUsageResult {
 let cachedUsage: GoUsageResult | null = null;
 let cacheTimestamp = 0;
 let lastFetchStatus: UsageFetchStatus = "error";
-
-/**
- * Resolve the API base URL from the catalog, with fallback.
- */
-async function resolveBaseUrl(): Promise<string> {
-    try {
-        await ensureModelsDevLoaded();
-        return getCatalogProviderBaseUrl("opencode-go", FALLBACK_BASE_URL);
-    } catch {
-        return FALLBACK_BASE_URL;
-    }
-}
 
 /**
  * Parse a single usage window object leniently.
@@ -127,8 +116,10 @@ function createUsageFetch(): typeof fetch {
  * @throws Error with `status` 401 when the key is valid but there is no active Go plan.
  */
 async function fetchGoUsage(apiKey: string): Promise<GoUsageResult> {
-    const apiBaseUrl = await resolveBaseUrl();
-    const url = `${apiBaseUrl.replace(/\/+$/, "")}/usage`;
+    // Always use the official control-plane base. The catalog's provider API
+    // points at a protocol-specific inference route that has no /usage route
+    // (#144).
+    const url = `${OFFICIAL_CONTROL_PLANE_BASE_URL.replace(/\/+$/, "")}/usage`;
     const start = performance.now();
     let response: Response;
     try {

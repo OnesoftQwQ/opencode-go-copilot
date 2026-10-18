@@ -5,6 +5,7 @@ import { getGitDiff, getRecentCommits } from "./gitUtils";
 import { OpenaiApi } from "../openai/openaiApi";
 import { ResponsesApi } from "../openai/responsesApi";
 import { AnthropicApi } from "../anthropic/anthropicApi";
+import { GoogleApi } from "../google/googleApi";
 import { getCatalogModelConfig } from "../catalogModels";
 import { getCatalogProviderBaseUrl } from "../modelsDev";
 import { getInferenceBaseUrlOverride, validateBaseUrl } from "../utils";
@@ -270,7 +271,9 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
             ? new AnthropicApi(modelId)
             : apiMode === "openai-responses"
                 ? new ResponsesApi(modelId)
-                : new OpenaiApi(modelId);
+                : apiMode === "google"
+                    ? new GoogleApi(modelId)
+                    : new OpenaiApi(modelId);
 
         commitGenerationAbortController = new AbortController();
         const stream = apiInstance.createMessage(selectedModel, systemPrompt, messages, baseUrl, apiKey, commitGenerationAbortController.signal);

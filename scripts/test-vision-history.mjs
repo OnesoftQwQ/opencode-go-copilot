@@ -4,6 +4,7 @@ import {
     deserializeVisionToolHistory,
     serializeVisionToolHistory,
     toAnthropicVisionToolMessages,
+    toGoogleVisionToolMessages,
     toOpenAIVisionToolMessages,
     toResponsesVisionToolItems,
 } from "../out/vision/historyCodec.js";
@@ -52,6 +53,29 @@ assert.deepEqual(toResponsesVisionToolItems(entry), [
         type: "function_call_output",
         call_id: entry.id,
         output: entry.result,
+    },
+]);
+assert.deepEqual(toGoogleVisionToolMessages(entry), [
+    {
+        role: "model",
+        parts: [
+            {
+                functionCall: { id: entry.id, name: entry.name, args: entry.args },
+                thoughtSignature: "skip_thought_signature_validator",
+            },
+        ],
+    },
+    {
+        role: "user",
+        parts: [
+            {
+                functionResponse: {
+                    id: entry.id,
+                    name: entry.name,
+                    response: { name: entry.name, content: entry.result },
+                },
+            },
+        ],
     },
 ]);
 assert.equal(deserializeVisionToolHistory(new TextEncoder().encode("not-json")), null);

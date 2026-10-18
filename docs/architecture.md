@@ -16,7 +16,7 @@
 | **多模型支持** | 模型列表完全由 `models.dev` 目录驱动（`catalog.json` 的 `opencode-go` 服务商），覆盖 GLM、Kimi、DeepSeek、MiMo、MiniMax、Qwen 等全系列模型（含 gpt-5.6-luna、grok-4.5、hy3、qwen3.8-max 等新模型），统一通过推理强度选择器切换思考模式。元数据（上下文长度、视觉、思考模式、温度支持、API 端点等）全部自动获取，无需硬编码模型列表 |
 | **自动模型发现** | 模型列表以 `models.dev` 目录为唯一数据源（1 分钟 TTL 缓存，兼作启动并发激活去重）。通过 `opencodego.enableAutoModelDiscovery` 配置（默认开启）控制是否从 `/zen/go/v1/models` 获取实际可用列表过滤模型选择器（不可用模型隐藏，API 不可用则显示目录全量）。服务商 URL、模型列表、参数（含 `reasoning_options` 思考强度）均从目录自动获取；API 不可用时目录不可用的降级为空列表，待下次拉取恢复 |
 | **目录容灾回退** | 目录获取采用三级回退链：官方 `models.dev`（10 秒超时）→ 镜像（`opencodego.modelsDevMirrorUrl`，默认 `https://modelsdev-mirror.onesoft.top/catalog.json`，30 秒超时，请求头携带 `platform: opencode-go-copilot` 及可选 `x-mirror-token`）→ 硬编码兜底目录快照。镜像/兜底命中时按 1 分钟间隔持续重试官方源，官方恢复后自动切回 |
-| **三 API 模式** | 根据 `models.dev` 的模型级 `provider.npm`（缺失时继承服务商 `npm`）区分 **OpenAI 兼容格式** (`/chat/completions`)、**OpenAI Responses 格式** (`/responses`) 和 **Anthropic 格式** (`/v1/messages`)；旧目录缺少适配器信息时才使用 family 启发式兜底 |
+| **四 API 模式** | 根据 `models.dev` 的模型级 `provider.npm`（缺失时继承服务商 `npm`）区分 **OpenAI 兼容格式** (`/chat/completions`)、**OpenAI Responses 格式** (`/responses`)、**Anthropic 格式** (`/v1/messages`) 和 **Google Gemini 原生格式** (`/models/{model}:streamGenerateContent?alt=sse`)；旧目录缺少适配器信息时才使用 family 启发式兜底 |
 | **流式推理** | 支持 SSE (Server-Sent Events) 流式响应，实时输出文本和工具调用 |
 | **Thinking/推理** | 支持模型的推理过程展示 ("thinking" 状态)，包括 XML think 块解析 |
 | **工具调用 (Tool Calling)** | 支持 VS Code 的 LanguageModelToolCallPart 机制 |
@@ -51,8 +51,8 @@
 | --- | --- | --- | --- |
 | `opencode-go`（OpenCode Go） | `catalog.json` → `providers["opencode-go"].models` | 可选按 API `/models` 列表过滤可用性 | `OpenCodeGo` |
 
-> Go 服务商当前收录模型包括但不限于：`glm-5/5.1/5.2/5.3/5.3-flash`、`kimi-k3/k2.5/k2.6/k2.7-code`、`deepseek-v4-pro/flash`、`mimo-v2-pro/omni/v2.5-pro/v2.5`、`minimax-m3/m2.7/m2.5`、`qwen3.5/3.6/3.7-plus`、`qwen3.7-max`、`qwen3.8-max`、`gpt-5.6-luna`、`grok-4.5`、`claude-haiku-5-5`、`hy3` 等。实际显示取决于目录收录与 API 可用性。
-> 兜底快照：`src/hardcodedModelList.ts` 内置 2026-09-14 的官方目录快照，含 opencode-go（36 个）的**完整模型元数据**（limit、cost、reasoning_options、attachment、modalities 等），仅作官方目录与镜像均不可达时的最后防线。发布构建（`.github/workflows/release.yml`）会先运行 `scripts/update-hardcoded-catalog.mjs` 自动刷新该快照（拉取官方目录 → 提取服务商 → 重写文件），失败时保留旧快照不阻断构建；数据有变化时随版本号变更在同一 commit 推送。
+> Go 服务商当前收录模型包括但不限于：`glm-5/5.1/5.2/5.3/5.3-flash`、`kimi-k3/k2.5/k2.6/k2.7-code`、`deepseek-v4-pro/flash`、`mimo-v2-pro/omni/v2.5-pro/v2.5`、`minimax-m3/m2.7/m2.5`、`qwen3.5/3.6/3.7-plus`、`qwen3.7-max`、`qwen3.8-max`、`gpt-5.6-luna`、`grok-4.5`、`claude-haiku-5-5`、`hy3`、`gemini-4-argon-contributor` 等。实际显示取决于目录收录与 API 可用性。
+> 兜底快照：`src/hardcodedModelList.ts` 内置 2026-10-18 的官方目录快照，含 opencode-go（32 个）的**完整模型元数据**（limit、cost、reasoning_options、attachment、modalities 等），仅作官方目录与镜像均不可达时的最后防线。发布构建（`.github/workflows/release.yml`）会先运行 `scripts/update-hardcoded-catalog.mjs` 自动刷新该快照（拉取官方目录 → 提取服务商 → 重写文件），失败时保留旧快照不阻断构建；数据有变化时随版本号变更在同一 commit 推送。
 
 #### 思考强度自动推导（`reasoning_options`）
 
@@ -69,6 +69,8 @@ models.dev 目录通过 `reasoning_options` 字段提供每个模型的思考能
 > **`thinking` 字段能力（`supportsThinkingParam`）：** 目录无法表达「请求体是否接受 `thinking` 字段」。`glm-5.3` / `glm-5.3-flash` 经 `MODEL_OVERRIDES` 标记为 `thinkingMode: "always"` + `supportsThinkingParam: false`：思考强制开启（模型选择器不再提供「禁用思考」档），请求体不发送 `thinking` 字段，思考强度仅通过 `reasoning_effort`（low/high/max）控制——其上游端点会以 `json: unknown field "thinking"` 拒绝该字段（issue #129）。
 
 > **自适应思考（Claude 5.x）：** 目录同样无法表达「模型仅支持自适应思考」。`claude-haiku-5-5` 经 `MODEL_OVERRIDES` 标记为 `thinkingMode: "adaptive"` + `apiMode: "anthropic"`：Anthropic 协议请求体发送 `thinking: { type: "adaptive" }`，思考强度改由顶层 `output_config.effort` 下发；旧版 `thinking: { type: "enabled", budget_tokens: N }` 会被上游以 400 `"thinking.type.enabled" is not supported for this model` 拒绝（issue #137）。
+
+> **Google Gemini 协议（#143）：** `gemini-4-argon-contributor` 的目录适配器为 `@ai-sdk/google`，模型级 `provider.api` 为 `https://opencode.ai/inference/go/google/v1beta`。它与 OpenAI/Anthropic 协议不在同一个 base 上，因此 `catalogModels` 现在优先使用模型级 `provider.api`；适配器将消息转换为 `contents` + `systemInstruction`，请求 `:streamGenerateContent?alt=sse`。Gemini 4 思考常开（低/中/高三档，默认中），选择器不提供「禁用思考」；思考内容以 `thought: true` 的 part 返回。Gemini 3+ 回放工具调用需要 `thoughtSignature`，扩展在无法恢复原始签名时注入官方哨兵 `skip_thought_signature_validator`（已用真实接口验证多轮工具回放）。
 
 > **关于图像输入：** 所有模型（包括非视觉模型）的 `imageInput` 能力均声明为 `true`，以确保 VS Code 始终传递图片数据。非视觉模型通过内部的 `ask_image` 工具代理机制处理图片，不直接支持视觉输入。视觉模型可直接接收工具结果（如内置 `view_image`）返回的图片 data part，以及 MCP 工具返回的 resource-link 图片（解析后发送）。
 
@@ -94,7 +96,8 @@ models.dev 目录通过 `reasoning_options` 字段提供每个模型的思考能
 │  │   5. 构建请求 → API 路由选择                                  │  │
 │  │      ├─ apiMode="openai"           → OpenaiApi                │  │
 │  │      ├─ apiMode="openai-responses" → ResponsesApi             │  │
-│  │      └─ apiMode="anthropic"        → AnthropicApi              │  │
+│  │      ├─ apiMode="anthropic"        → AnthropicApi              │  │
+│  │      └─ apiMode="google"           → GoogleApi                 │  │
 │  │   6. 发送 HTTP 请求 (fetch with undici + 超时控制)             │  │
 │  │   7. 流式解析响应 → Progress<LanguageModelResponsePart2>      │  │
 │  │      ├─ LanguageModelTextPart     (文本)                      │  │
@@ -108,7 +111,7 @@ models.dev 目录通过 `reasoning_options` 字段提供每个模型的思考能
 │  SCM 标题栏按钮 → generateCommitMsg()                              │
 │    → 获取 Git Diff (gitUtils.ts)                                   │
 │    → 获取最近提交风格参考                                          │
-│    → 构建 prompt → 调用 API (OpenaiApi/AnthropicApi)               │
+│    → 构建 prompt → 调用 API (OpenaiApi/ResponsesApi/AnthropicApi/GoogleApi) │
 │    → 流式输出到 SCM InputBox                                       │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -160,10 +163,11 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   ├── 2c. 注入 vision 配置
   │       └── modelConfig.vision = um?.vision ?? false
   │
-  ├── 3. 确定 API 模式 (apiMode: "openai" | "openai-responses" | "anthropic")
+  ├── 3. 确定 API 模式 (apiMode: "openai" | "openai-responses" | "anthropic" | "google")
   │       模型 provider.npm > 服务商 npm > 旧目录 family 兜底
   │
-  ├── 3b. 解析推理 Base URL: opencodego.inferenceBaseUrl 用户覆盖（代理）> 模型目录 baseUrl > 官方默认
+  ├── 3b. 解析推理 Base URL: opencodego.inferenceBaseUrl 用户覆盖（代理）> 模型级 provider.api > 服务商 api > 官方默认
+  │       └── Google 模型因此使用 /inference/go/google/v1beta（#143）
   │        └── 发送前经 validateBaseUrl() 校验（HTTP 仅限本地/私网，远程强制 HTTPS）
   │
   ├── 4. 记录请求开始日志
@@ -217,20 +221,32 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   │     │       │   └── 工具调用 → LanguageModelToolCallPart
   │     │       └── 用量统计 (usage chunk)
   │     │
-  │     └── Anthropic 模式:
-  │         ├── AnthropicApi.convertMessages()   ← 消息格式转换
-  │         ├── AnthropicApi.prepareRequestBody() ← 构建请求体
-  │         ├── POST /v1/messages               ← 发送请求
-  │         ├── executeWithRetry()               ← 可重试
-  │         └── AnthropicApi.processStreamingResponse()
+  │     ├── Anthropic 模式:
+  │     │   ├── AnthropicApi.convertMessages()   ← 消息格式转换
+  │     │   ├── AnthropicApi.prepareRequestBody() ← 构建请求体
+  │     │   ├── POST /v1/messages               ← 发送请求
+  │     │   ├── executeWithRetry()               ← 可重试
+  │     │   └── AnthropicApi.processStreamingResponse()
+  │     │       ├── SSE 行解析 ("data: ...")
+  │     │       └── processAnthropicChunk()
+  │     │           ├── content_block_start → 块开始
+  │     │           ├── content_block_delta → 增量内容
+  │     │           │   ├── text_delta      → 文本
+  │     │           │   ├── thinking_delta  → 推理
+  │     │           │   └── input_json_delta → 工具参数
+  │     │           └── content_block_stop/message_stop → 结束
+  │     │
+  │     └── Google 模式:
+  │         ├── GoogleApi.convertMessages()       ← contents + systemInstruction
+  │         ├── GoogleApi.prepareRequestBody()    ← generationConfig/tools/toolConfig
+  │         ├── POST /models/{model}:streamGenerateContent?alt=sse
+  │         ├── executeWithRetry()                ← 可重试
+  │         └── GoogleApi.processStreamingResponse()
   │             ├── SSE 行解析 ("data: ...")
-  │             └── processAnthropicChunk()
-  │                 ├── content_block_start → 块开始
-  │                 ├── content_block_delta → 增量内容
-  │                 │   ├── text_delta      → 文本
-  │                 │   ├── thinking_delta  → 推理
-  │                 │   └── input_json_delta → 工具参数
-  │                 └── content_block_stop/message_stop → 结束
+  │             ├── thought:true 文本 → thinking
+  │             ├── 普通 text → LanguageModelTextPart
+  │             ├── 完整 functionCall → LanguageModelToolCallPart / ask_image 拦截
+  │             └── usageMetadata 在流结束时上报一次
   │
   ├── 11. 图片代理拦截处理:
   │       └── _handleInterceptedToolCall()
@@ -242,6 +258,7 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   │           ├── 创建独立 AbortController 用于本轮请求
   │           │   ├── 保留 temperature/reasoning_effort 等原始参数
   │           │   ├── Anthropic 模式额外恢复 system 和 thinking 配置
+  │           │   ├── Google 模式使用 functionCall + functionResponse 并注入签名哨兵
   │           │   └── DeepSeek 兼容注入 reasoning_content
   │           ├── 注入工具: 本轮注入 VS Code 原生工具 + ask_image（+ ask_with_multi_image 当 >=2 张图时）
   │           ├── 将完成的调用/结果写入 vision history DataPart
@@ -272,6 +289,9 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
       ├── reasoning.text    → text 字段
       └── reasoning.encrypted → "[REDACTED]"
 
+推理内容来源 (Google 模式):
+  candidates[0].content.parts[] 中 thought:true 的 text part
+
 处理机制:
   1. bufferThinkingContent(text) → 积累到 _thinkingBuffer
   2. 每 100ms 定时刷新 → LanguageModelThinkingPart
@@ -288,6 +308,11 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
     ├── id: 调用 ID
     ├── function.name: 函数名
     └── function.arguments: JSON 参数 (可能分片)
+
+工具调用流 (Google 模式):
+  candidates[0].content.parts[] 中完整的 functionCall
+    ├── id / name
+    └── args: 已解析的 JSON 对象（一次到达，无需分片缓冲）
 
 处理机制:
   1. _toolCallBuffers Map<index, {id, name, args}>
@@ -340,10 +365,11 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
 - **支持无限追问**: 模型拿到图片描述后可以继续调用 ask_image 追问细节（最多 `visionMaxRounds` 次，默认 5）
 - **工具共存**: 每轮同时注入 VS Code 原生工具（read_file 等）+ ask_image，模型可混合使用
 - **图片数据生命周期**: 图片存于 API 实例的 `_localImages` 数组，请求结束后随实例 GC 自动回收；历史记录只持久化调用参数、结果和必要的 reasoning_content，不复制原始图片字节
-- **跨轮工具历史**: `historyCodec.ts` 负责序列化/校验及 OpenAI Chat、OpenAI Responses、Anthropic 三种标准消息重建，`historyPart.ts` 负责 VS Code DataPart 的创建与解析；旧 history DataPart 在新请求中被消费，不会再次输出造成重复
+- **跨轮工具历史**: `historyCodec.ts` 负责序列化/校验及 OpenAI Chat、OpenAI Responses、Anthropic、Google 四种标准消息重建，`historyPart.ts` 负责 VS Code DataPart 的创建与解析；旧 history DataPart 在新请求中被消费，不会再次输出造成重复
 - **OpenAI 模式**: 使用 `tool_calls` + `tool` role 消息格式构建每轮
 - **OpenAI Responses 模式**: 使用 `function_call` + `function_call_output` input items 构建每轮，并以私有 DataPart 保存 `reasoning.encrypted_content`，支持 `store:false` 的无状态多轮请求
 - **Anthropic 模式**: 使用 `tool_use` + `tool_result` content block 格式构建每轮
+- **Google 模式**: 使用 `functionCall` + `functionResponse` content part 格式构建每轮；回放的 `functionCall` 带 `thoughtSignature: skip_thought_signature_validator`，满足 Gemini 3+ 的签名校验（真实接口已验证多轮工具回放）
 - **Anthropic 签名 thinking 块**: Claude 5.x 要求回放的 `thinking` 块带有效 `signature`，而 VS Code 的 `LanguageModelThinkingPart` 只携带文本；扩展在流式 `signature_delta` 到达时把 `{thinking, signature}` 写入 `application/vnd.opencodego.anthropic-thinking+json` DataPart，下一轮由 `convertMessages()` 重建带签名的 thinking 块置于内容最前。无签名的普通 thinking 文本一律丢弃（不再伪造 `"Next step."`），避免 400 `messages.N.content.M.thinking.signature: Field required`（issue #137）
 - **参数保留**: 每轮保留 temperature、top_p、thinking 模式等原始参数
 - **DeepSeek 兼容**: 对 DeepSeek 模型的 assistant tool_call 消息注入 reasoning_content 字段
@@ -369,8 +395,52 @@ generateCommitMsg(secrets, scm?)
   │   ├── 用户当前输入 (SCM InputBox)
   │   └── Git Diff 内容
   ├── 调用 API:
-  │   ├── 解析 Base URL: opencodego.inferenceBaseUrl 用户覆盖（代理）> 模型目录 baseUrl > 官方默认
-  │   ├── 按 models.dev 的 apiMode 选择 OpenaiApi / ResponsesApi / AnthropicApi.createMessage()
+  │   ├── 解析 Base URL: opencodego.inferenceBaseUrl 用户覆盖（代理）> 模型级 provider.api > 服务商 api > 官方默认
+  │   ├── 按 models.dev 的 apiMode 选择 OpenaiApi / ResponsesApi / AnthropicApi / GoogleApi.createMessage()
   │   └── 流式输出到 SCM InputBox
   └── 清理: 移除 ``` 标记和 <think> 标签
 ```
+
+### 2.8 Google Gemini 原生协议适配（#143）
+
+```
+目录解析:
+  providers["opencode-go"].models["gemini-4-argon-contributor"]
+    ├── provider.npm = "@ai-sdk/google"      → ApiMode = "google"
+    └── provider.api = ".../google/v1beta"   → 模型级 baseUrl（优先于服务商 base）
+
+请求:
+  POST {base}/models/{model}:streamGenerateContent?alt=sse
+  Headers: Authorization: Bearer <key> + x-opencode-session: <uuid>
+  Body:
+    ├── contents[]              ← user/model 轮次，parts: text / inlineData /
+    │                              functionCall / functionResponse
+    ├── systemInstruction       ← 系统提示（不在 contents 内）
+    ├── generationConfig        ← maxOutputTokens / temperature / topP / topK /
+    │                              stopSequences / thinkingConfig
+    │                                └── thinkingLevel: low|medium|high
+    │                                    includeThoughts: true
+    ├── tools[].functionDeclarations[]
+    │     └── name / description / parametersJsonSchema
+    └── toolConfig.functionCallingConfig.mode: AUTO|ANY|NONE
+
+流式响应:
+  data: { candidates: [{ content: { parts: [...] }, finishReason }], usageMetadata }
+    ├── { text, thought: true }  → LanguageModelThinkingPart
+    ├── { text }                 → LanguageModelTextPart
+    ├── { functionCall }         → LanguageModelToolCallPart（或 ask_image 拦截）
+    └── usageMetadata            → 流结束时折算一次 StreamUsage
+
+多轮工具回放:
+  model.functionCall(id, name, args) + thoughtSignature:
+      "skip_thought_signature_validator"（原始签名不可得时的官方哨兵）
+  user.functionResponse(id, name, response: { name, content })
+      └── parts[] 可携带工具返回的图片（Gemini 3+）
+```
+
+设计要点：
+
+- **协议独立**：Google 模式不复用 OpenAI/Anthropic 的 endpoint 或消息结构；模型级 `provider.api` 决定 base，避免共用 `/inference/go/openai/v1` 导致 `ModelProtocolUnsupported`。
+- **思考常开**：Gemini 4 Argon 只支持 low/medium/high（默认 medium），`thinkingMode: "always"` 让选择器不提供「禁用思考」；`buildGoogleThinkingConfig()` 把 `max/xhigh` 归一到 high，`disabled` 仅关闭思考摘要。
+- **签名回放**：Gemini 3+ 要求回放 `functionCall` 时带 `thoughtSignature`；VS Code 的 `LanguageModelToolCallPart` 不携带签名，因此统一注入官方哨兵，真实接口已验证多轮工具调用不会 400。
+- **用量只报一次**：Gemini 的 `usageMetadata` 在流中累计更新，适配器在流结束时用最后一个快照上报，避免状态栏累计值翻倍。

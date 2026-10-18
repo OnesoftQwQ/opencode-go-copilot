@@ -33,9 +33,12 @@ try {
     assert.equal(deduceApiModeFromCatalog("gpt-5.6-luna", "@ai-sdk/openai"), "openai-responses");
     assert.equal(deduceApiModeFromCatalog("glm-5", "@ai-sdk/openai-compatible"), "openai");
     assert.equal(deduceApiModeFromCatalog("minimax-m3", "@ai-sdk/anthropic"), "anthropic");
+    assert.equal(deduceApiModeFromCatalog("gemini-4-argon-contributor", "@ai-sdk/google"), "google");
 
     // Legacy catalog fallback remains compatible with the existing family rules.
     assert.equal(deduceApiModeFromCatalog("qwen3.7-plus", undefined, { family: "qwen" }), "anthropic");
+    assert.equal(deduceApiModeFromCatalog("gemini-4-argon", undefined, { family: "gemini" }), "google");
+    assert.equal(deduceApiModeFromCatalog("gemma-3", undefined, { family: "gemma" }), "google");
     assert.equal(deduceApiModeFromCatalog("unknown-model", undefined, { family: "unknown" }), "openai");
 
     // A provider-wide adapter is passed only after the caller has checked the

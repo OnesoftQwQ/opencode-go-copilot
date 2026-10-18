@@ -11,6 +11,7 @@ src/
 ├── apiModelList.ts                       # API 模型列表获取
 ├── goUsage.ts                            # Go 套餐用量拉取与缓存
 ├── commonApi.ts                          # API 抽象基类
+├── endpoints.ts                          # 官方控制面端点常量（用量/模型列表）
 ├── extension.ts                          # 扩展入口 (activate/deactivate)
 ├── localize.ts                           # 国际化/本地化
 ├── logger.ts                             # 日志系统
@@ -37,6 +38,9 @@ src/
 │   ├── anthropicApi.ts                   # Anthropic API 实现
 │   ├── anthropicTypes.ts                 # Anthropic 类型定义
 │   └── thinkingSignature.ts              # Anthropic 签名 thinking 块的 DataPart 编解码
+├── google/
+│   ├── googleApi.ts                      # Google Gemini generateContent API 实现
+│   └── googleTypes.ts                    # Google Gemini 协议类型定义
 ├── gitCommit/
 │   ├── commitMessageGenerator.ts         # Git 提交消息生成
 │   └── gitUtils.ts                       # Git 工具函数
@@ -57,13 +61,14 @@ src/
 | `extension.ts` | ~350 | 扩展激活/停用，注册 Provider 和 10 条命令，首次安装欢迎页引导 |
 | `provider.ts` | ~1150 | 实现 `LanguageModelChatProvider`，处理聊天请求全流程及图片代理多轮循环处理 |
 | `catalogModels.ts` | ~200 | 统一模型解析/构建层：`ModelMeta` 合并链（`MODEL_OVERRIDES` > 目录条目 > 默认值）、`buildCatalogModelInfo()`、`getCatalogModelConfig()`，`ProviderId` 当前仅 `opencode-go` |
-| `hardcodedModelList.ts` | ~1690 | 硬编码兜底目录快照：opencode-go（36 个）模型的完整元数据（2026-09-14），官方目录与镜像均不可达时作为最后防线，与运行时 JSON 相同方式断言为 `HardcodedCatalogData` |
-| `modelOverrides.ts` | ~50 | 每模型覆盖表 `MODEL_OVERRIDES`（全部可选字段）+ `ModelMetaOverride` 类型；仅维护 models.dev 无法表达的内容（Anthropic apiMode、adaptive、`reasoning_split` 等） |
+| `hardcodedModelList.ts` | ~1540 | 硬编码兜底目录快照：opencode-go（32 个）模型的完整元数据（2026-10-18），官方目录与镜像均不可达时作为最后防线，与运行时 JSON 相同方式断言为 `HardcodedCatalogData` |
+| `modelOverrides.ts` | ~60 | 每模型覆盖表 `MODEL_OVERRIDES`（全部可选字段）+ `ModelMetaOverride` 类型；仅维护 models.dev 无法表达的内容（Anthropic/Google apiMode、adaptive、`reasoning_split`、Gemini 思考常开等） |
 | `types.ts` | ~95 | `OpenCodeGoModelItem`, `ModelPreset`, `ModelsResponse`, `RetryConfig` 等类型 |
-| `apiModelList.ts` | ~110 | API 模型列表获取：从 catalog 解析的 base URL 的 `/models` 端点拉取可用模型 ID，1 分钟缓存，静默降级 |
-| `goUsage.ts` | ~260 | Go 套餐用量拉取：从 `GET /zen/go/v1/usage` 拉取 5h/周/月窗口用量与 `useBalance`，5 分钟 TTL 缓存、失败保留旧值，宽容解析字段名（percent/usagePercent、resetsAt/resetInSec），格式化重置倒计时/摘要 |
+| `apiModelList.ts` | ~90 | API 模型列表获取：固定访问官方控制面 `https://opencode.ai/zen/go/v1/models` 拉取可用模型 ID，1 分钟缓存，静默降级；不再复用目录的推理 base（#144） |
+| `goUsage.ts` | ~240 | Go 套餐用量拉取：固定访问官方控制面 `GET https://opencode.ai/zen/go/v1/usage` 拉取 5h/周/月窗口用量与 `useBalance`，5 分钟 TTL 缓存、失败保留旧值，宽容解析字段名（percent/usagePercent、resetsAt/resetInSec），格式化重置倒计时/摘要；不再复用目录的推理 base（#144） |
 | `modelsDev.ts` | ~440 | models.dev 目录拉取与查询：三级回退链（官方 → 镜像 → 硬编码列表），从 `catalog.json` 下载并索引全局模型与服务商，支持短 ID 匹配、provider 查询、`reasoning_options`/思考模式/视觉/预算推断，1 分钟缓存 |
-| `commonApi.ts` | ~467 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截、User-Agent 配置读取） |
+| `commonApi.ts` | ~477 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截、User-Agent 配置读取） |
+| `endpoints.ts` | ~20 | 官方控制面端点常量 `OFFICIAL_CONTROL_PLANE_BASE_URL`；用量与模型列表请求固定使用该地址，不跟随目录推理 base 或推理代理覆盖 |
 | `provideModel.ts` | ~120 | 模型信息提供函数：以 catalog 的 `opencode-go` provider 全量构建列表（可选按 API 列表过滤）；1 分钟间隔缓存与并发去重 |
 | `provideToken.ts` | ~100 | Token 用量计算 |
 | `requestUsageLog.ts` | ~75 | 每次请求的 token 用量日志字段：`computeCacheHitRate()` / `formatCacheHitRate()` / `buildRequestUsageLog()`，供 `request.end` 日志使用（由 `scripts/test-request-usage-log.mjs` 验证） |
@@ -80,12 +85,14 @@ src/
 | `anthropic/anthropicApi.ts` | ~555 | Anthropic 格式 API 实现 (消息转换/请求构建/流式处理/图片代理/签名 thinking 块回放) |
 | `anthropic/anthropicTypes.ts` | ~138 | Anthropic 类型定义 |
 | `anthropic/thinkingSignature.ts` | ~62 | Anthropic 签名 thinking 块 DataPart（`application/vnd.opencodego.anthropic-thinking+json`）的 MIME、校验与编解码；由 `scripts/test-anthropic-thinking-signature.mjs` 验证 |
+| `google/googleApi.ts` | ~560 | Google Gemini generateContent 格式 API 实现：contents/systemInstruction 转换、inlineData 图片、functionCall/functionResponse 工具、thinkingConfig 思考档位、SSE 解析（thought/functionCall/usageMetadata）与 Git 提交文本流 |
+| `google/googleTypes.ts` | ~160 | Google Gemini generateContent 协议类型（GoogleContent/GooglePart/GoogleRequestBody/GoogleUsageMetadata 等）与 `skip_thought_signature_validator` 常量 |
 | `gitCommit/commitMessageGenerator.ts` | ~320 | Git 提交消息生成逻辑 |
 | `gitCommit/gitUtils.ts` | ~260 | Git 命令封装 |
 | `tokenizer/tokenizerManager.ts` | ~115 | o200k_base 分词器管理 (含 LRU 缓存) |
 | `tokenizer/imageUtils.ts` | ~130 | 图片尺寸解析 (PNG/GIF/JPEG/WebP) |
 | `vision/types.ts` | ~53 | Vision proxy 类型定义（`StoredImage`, `InterceptedToolCall`, `ASK_IMAGE_TOOL_DEF`, `ASK_IMAGE_TOOL_NAME`, `ASK_WITH_MULTI_IMAGE_TOOL_DEF`, `ASK_WITH_MULTI_IMAGE_TOOL_NAME`, `DEFAULT_VISION_PROMPT`） |
-| `vision/historyCodec.ts` | ~170 | 视觉工具历史 DataPart 的 MIME、数据校验/编解码，以及 OpenAI Chat、OpenAI Responses、Anthropic 标准工具调用/结果重建；由 `scripts/test-vision-history.mjs` 做编解码和三 API 转换器顺序闭环测试（含无推理工具调用回合必须回传空 `reasoning_content` 的 DeepSeek 回归用例） |
+| `vision/historyCodec.ts` | ~200 | 视觉工具历史 DataPart 的 MIME、数据校验/编解码，以及 OpenAI Chat、OpenAI Responses、Anthropic、Google 标准工具调用/结果重建；由 `scripts/test-vision-history.mjs` 做编解码和三 API 转换器顺序闭环测试（含无推理工具调用回合必须回传空 `reasoning_content` 的 DeepSeek 回归用例） |
 | `vision/historyPart.ts` | ~28 | 创建和解析 `application/vnd.opencodego.vision-tool-history+json` DataPart；测试脚本使用 VS Code 最小运行时桩验证下一轮消息转换 |
 | `vision/imageProxy.ts` | ~95 | 图片代理核心：调用视觉模型描述图片（`callVisionModel`/`callVisionModelMulti`），支持 thinking 模式配置和文本流式转发 |
 
@@ -149,13 +156,13 @@ src/
 
 #### `provideLanguageModelChatResponse(model, messages, options, progress, token): Promise<void>`
 
-核心方法：处理聊天请求，流式返回响应。包括模型配置获取（统一 `getCatalogModelConfig`）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理，以及按 `apiMode` 精确路由到 `/chat/completions`、`/responses`、`/v1/messages`。
+核心方法：处理聊天请求，流式返回响应。包括模型配置获取（统一 `getCatalogModelConfig`）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理，以及按 `apiMode` 精确路由到 `/chat/completions`、`/responses`、`/v1/messages` 或 Gemini 的 `/models/{model}:streamGenerateContent?alt=sse`。
 
-请求结束时会记录一条 `request.end` 日志，字段为本次请求的 token 用量：`inputTokens`（prompt/input token）、`cachedTokens`（缓存命中 token）、`cacheMissTokens`（缓存未命中 token，provider 未提供时为 `null`）、`outputTokens`、`cacheHitRate`（`cachedTokens / inputTokens` 的百分比数值，保留一位小数，无法计算时为 `null`）、`cacheHitRateText`（同值的可读文本，如 `"83.4%"`，无法计算时为 `"n/a"`）、`usageSource`（`stream` = 上游流式 usage、`estimated` = 客户端估算回退、`none` = 无数据）。三个 apiMode 的 `onUsage` 回调与回退分支都会写入本次请求的最终 usage，日志中不会出现 `NaN`/`Infinity`。Base URL 解析优先级为 `opencodego.inferenceBaseUrl` 用户覆盖（代理）> 模型目录 baseUrl > 官方默认。三种协议分别由 `OpenaiApi`、`ResponsesApi`、`AnthropicApi` 转换请求和解析流，之后统一处理图片代理拦截与错误。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。模型配置通过 `{ ...um }` 浅拷贝后再修改 thinking/temperature，防止并发会话间互相泄漏设置。
+请求结束时会记录一条 `request.end` 日志，字段为本次请求的 token 用量：`inputTokens`（prompt/input token）、`cachedTokens`（缓存命中 token）、`cacheMissTokens`（缓存未命中 token，provider 未提供时为 `null`）、`outputTokens`、`cacheHitRate`（`cachedTokens / inputTokens` 的百分比数值，保留一位小数，无法计算时为 `null`）、`cacheHitRateText`（同值的可读文本，如 `"83.4%"`，无法计算时为 `"n/a"`）、`usageSource`（`stream` = 上游流式 usage、`estimated` = 客户端估算回退、`none` = 无数据）。四种 apiMode 的 `onUsage` 回调与回退分支都会写入本次请求的最终 usage，日志中不会出现 `NaN`/`Infinity`。Base URL 解析优先级为 `opencodego.inferenceBaseUrl` 用户覆盖（代理）> 模型级 `provider.api` > 服务商级 `api` > 官方默认。四种协议分别由 `OpenaiApi`、`ResponsesApi`、`AnthropicApi`、`GoogleApi` 转换请求和解析流，之后统一处理图片代理拦截与错误。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。模型配置通过 `{ ...um }` 浅拷贝后再修改 thinking/temperature，防止并发会话间互相泄漏设置。
 
 #### `private async _handleInterceptedToolCall(params): Promise<void>`
 
-处理图片代理拦截。循环处理最多 `opencodego.visionMaxRounds` 轮（默认 5）。每轮检测 API 实例的 `interceptedToolCall`，发出 thinking 块显示"正在根据图片提问：[问题]"，关闭 thinking 块后视觉模型输出以普通文本流式显示，并立即输出一个 `application/vnd.opencodego.vision-tool-history+json` DataPart 保存调用 ID、参数、视觉结果和 OpenAI Chat 模式所需的 `reasoning_content`。单图调用 `callVisionModel()`，多图调用 `callVisionModelMulti()`，按当前协议追加工具调用与结果，注入 VS Code 原生工具 + ask_image（+ ask_with_multi_image 当 >=2 图时）供模型继续使用，保留 temperature/reasoning_effort 等原始参数；Responses 模式额外续传本轮捕获的 encrypted reasoning item。模型不再调用 ask_image/ask_with_multi_image 时退出循环。
+处理图片代理拦截。循环处理最多 `opencodego.visionMaxRounds` 轮（默认 5）。每轮检测 API 实例的 `interceptedToolCall`，发出 thinking 块显示"正在根据图片提问：[问题]"，关闭 thinking 块后视觉模型输出以普通文本流式显示，并立即输出一个 `application/vnd.opencodego.vision-tool-history+json` DataPart 保存调用 ID、参数、视觉结果和 OpenAI Chat 模式所需的 `reasoning_content`。单图调用 `callVisionModel()`，多图调用 `callVisionModelMulti()`，按当前协议追加工具调用与结果（Google 模式使用 `functionCall` + `functionResponse`，并注入 `skip_thought_signature_validator` 签名），注入 VS Code 原生工具 + ask_image（+ ask_with_multi_image 当 >=2 图时）供模型继续使用，保留 temperature/reasoning_effort 等原始参数；Responses 模式额外续传本轮捕获的 encrypted reasoning item。模型不再调用 ask_image/ask_with_multi_image 时退出循环。
 
 - 视觉模型调用期间用户取消则跳过本轮。
 - 每轮创建独立 AbortController，带独立超时。
@@ -192,7 +199,7 @@ src/
 
 #### `getCatalogModelConfig(modelId): OpenCodeGoModelItem`
 
-构建请求配置（provider.ts 与 Git 提交生成共用）。含 `baseUrl`（取自服务商 `api` 字段）、`supportsThinkingParam`（false 时 OpenAI 请求体省略 `thinking` 字段）、`thinking_budget`（`budget_tokens` 的 max）、`reasoning_effort`（仅真实强度档，`enabled`/`adaptive` 不发送）、`extra`（仅覆盖表）。
+构建请求配置（provider.ts 与 Git 提交生成共用）。含 `baseUrl`（模型级 `provider.api` 优先，缺失时回退服务商 `api`；Google 模型因此拿到 `/inference/go/google/v1beta`）、`supportsThinkingParam`（false 时 OpenAI 请求体省略 `thinking` 字段）、`thinking_budget`（`budget_tokens` 的 max）、`reasoning_effort`（仅真实强度档，`enabled`/`adaptive` 不发送）、`extra`（仅覆盖表）。
 
 ### 2.4 `src/modelOverrides.ts`
 
@@ -202,7 +209,7 @@ src/
 
 #### `const MODEL_OVERRIDES: Record<string, ModelMetaOverride>`
 
-覆盖表（当前 11 条）：`minimax-m3`（adaptive + anthropic + `reasoning_split`）、`minimax-m2.7`（anthropic + `reasoning_split`）、`minimax-m2.5`（anthropic）、`claude-haiku-5-5`（adaptive + anthropic，仅支持自适应思考，强度经 `output_config.effort` 下发）、`qwen3.7-max`/`qwen3.7-plus`/`qwen3.6-plus`/`qwen3.5-plus`（anthropic）、`glm-5.2`（默认 effort=high）、`glm-5.3`/`glm-5.3-flash`（思考常开且上游拒绝 `thinking` 字段，仅发送 `reasoning_effort`）。
+覆盖表（当前 12 条）：`minimax-m3`（adaptive + anthropic + `reasoning_split`）、`minimax-m2.7`（anthropic + `reasoning_split`）、`minimax-m2.5`（anthropic）、`claude-haiku-5-5`（adaptive + anthropic，仅支持自适应思考，强度经 `output_config.effort` 下发）、`qwen3.7-max`/`qwen3.7-plus`/`qwen3.6-plus`/`qwen3.5-plus`（anthropic）、`glm-5.2`（默认 effort=high）、`glm-5.3`/`glm-5.3-flash`（思考常开且上游拒绝 `thinking` 字段，仅发送 `reasoning_effort`）、`gemini-4-argon-contributor`（google 协议 + 思考常开低/中/高三档，默认 medium，不提供禁用思考）。
 
 ---
 
@@ -241,9 +248,13 @@ src/
 | `supportsThinkingParam` | `boolean` (可选) | 请求体是否允许携带 `thinking` 字段，默认 true；false 时省略（如 glm-5.3/glm-5.3-flash） |
 | `useForCommitGeneration` | `boolean` (可选) | 是否用于提交消息生成 |
 | `delay` | `number` (可选) | 模型专属请求延迟 |
-| `apiMode` | `ApiMode` (可选) | API 模式：OpenAI Chat、Responses 或 Anthropic |
+| `apiMode` | `ApiMode` (可选) | API 模式：OpenAI Chat、Responses、Anthropic 或 Google Gemini |
 | `supportsDisablingReasoning` | `boolean` (可选) | 目录是否声明 `none`/`disabled` effort 档；Responses 适配器据此决定能否发送 `reasoning.effort="none"` |
 | `headers` | `Record<string, string>` (可选) | 自定义 HTTP 头 |
+
+#### `type ApiMode`
+
+`"openai" | "openai-responses" | "anthropic" | "google"` — 请求协议。`google` 对应 Gemini 原生 generateContent/streamGenerateContent 协议（#143）。
 
 #### `interface ModelsResponse`
 
@@ -393,7 +404,7 @@ API 实现的抽象基类。
 
 #### `getApiModelIds(apiKey): Promise<Set<string>>`
 
-从 `/zen/go/v1/models` 拉取可用模型 ID 列表并返回 Set。使用内存缓存（1 分钟 TTL），API 不可用时返回空 Set 或上次缓存。内部 `fetchApiModelList()` 使用 10 秒 `AbortSignal.timeout(10000)`，超时后记录警告并抛出普通 `Error`（非 AbortError）以保留调用方缓存。导出 `isApiFetchSuccessful()` 检查上次请求是否成功。
+从固定控制面 `https://opencode.ai/zen/go/v1/models` 拉取可用模型 ID 列表并返回 Set（不再使用目录的推理 base，修复 #144）。使用内存缓存（1 分钟 TTL），API 不可用时返回空 Set 或上次缓存。内部 `fetchApiModelList()` 使用 10 秒 `AbortSignal.timeout(10000)`，超时后记录警告并抛出普通 `Error`（非 AbortError）以保留调用方缓存。导出 `isApiFetchSuccessful()` 检查上次请求是否成功。
 
 #### `isApiFetchSuccessful(): boolean`
 
@@ -437,7 +448,11 @@ API 实现的抽象基类。
 
 #### `getCatalogProviderBaseUrl(providerId, fallbackUrl): string`
 
-获取服务商 API 基础 URL（来自目录 `api` 字段，规范化去尾部斜杠并补 `/`）。目录未加载或服务商缺失时返回传入的 fallback。
+获取服务商级 API 基础 URL（来自目录 `api` 字段，规范化去尾部斜杠并补 `/`）。目录未加载或服务商缺失时返回传入的 fallback。注意该字段目前指向协议专属推理 base（`/inference/go/openai/v1`），不能用于控制面端点。
+
+#### `getCatalogModelBaseUrl(providerId, modelId, fallbackUrl): string`
+
+获取单个模型的推理 Base URL：模型条目的 `provider.api`（如 `/inference/go/google/v1beta`）优先于服务商级 `api`，两者都缺失时回退到 fallback。目录把不同协议拆到不同 base 后，这是让 Gemini 走 Google 原生路由、Claude 走 Anthropic base 的关键（#143）；`catalogModels.resolveFromCatalog()` 使用该函数填充 `ModelMeta.baseUrl`。
 
 #### `getCatalogProviderModelEntry(providerId, modelId): ModelsDevEntry | undefined`
 
@@ -457,7 +472,7 @@ API 实现的抽象基类。
 
 #### `deduceApiModeFromCatalog(modelId, adapterNpm?, entry?)`
 
-根据 `models.dev` 适配器包解析 API 格式：`@ai-sdk/openai` → `"openai-responses"`、`@ai-sdk/openai-compatible` → `"openai"`、`@ai-sdk/anthropic` → `"anthropic"`。调用方先选择模型级 `provider.npm`，缺失时继承服务商 `npm`；未识别或旧目录缺失适配器信息时才使用原 family 启发式兜底。由 `scripts/test-api-mode.mjs` 验证三协议映射和旧目录兼容行为。
+根据 `models.dev` 适配器包解析 API 格式：`@ai-sdk/openai` → `"openai-responses"`、`@ai-sdk/openai-compatible` → `"openai"`、`@ai-sdk/anthropic` → `"anthropic"`、`@ai-sdk/google` / `@ai-sdk/google-vertex` → `"google"`。调用方先选择模型级 `provider.npm`，缺失时继承服务商 `npm`；未识别或旧目录缺失适配器信息时才使用 family 启发式兜底（`gemini`/`gemma` → google，`claude` → anthropic，`qwen` 按版本区分）。由 `scripts/test-api-mode.mjs` 验证四协议映射和旧目录兼容行为。
 
 ---
 
@@ -667,6 +682,10 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 
 重建 Anthropic 标准 `assistant.tool_use` + `user.tool_result` 消息。
 
+#### `toGoogleVisionToolMessages(entry): GoogleContent[]`
+
+重建 Google Gemini 标准 `model.functionCall` + `user.functionResponse` 内容块；回放的 `functionCall` 附带 `skip_thought_signature_validator`，满足 Gemini 3+ 对签名回放的要求。
+
 ---
 
 ### 2.15 `src/vision/historyPart.ts`
@@ -701,7 +720,7 @@ ask_image 工具定义的 OpenAI 格式（`type: "function"`），包含 `imageI
 
 #### `fetchGoUsage(apiKey): Promise<GoUsageResult>`
 
-从 `${baseUrl}/usage` 拉取用量（Bearer 认证，10 秒 `AbortSignal.timeout` 超时）。顶层结构宽容解包（`usage` / `windows` / 平铺字段均可）；非 2xx 时抛出带 `status` 属性的 Error（401 由调用方识别为无 Go 套餐）。日志：成功时输出 `goUsage.fetch.ok`（info，含 url/durationMs/各窗口百分比/useBalance），超时输出 `goUsage.fetch.timeout`（warn），JSON 解析失败输出 `goUsage.fetch.parseError`（error）。
+从固定控制面 `https://opencode.ai/zen/go/v1/usage` 拉取用量（Bearer 认证，10 秒 `AbortSignal.timeout` 超时；不再使用目录推理 base，修复 #144）。顶层结构宽容解包（`usage` / `windows` / 平铺字段均可）；非 2xx 时抛出带 `status` 属性的 Error（401 由调用方识别为无 Go 套餐）。日志：成功时输出 `goUsage.fetch.ok`（info，含 url/durationMs/各窗口百分比/useBalance），超时输出 `goUsage.fetch.timeout`（warn），JSON 解析失败输出 `goUsage.fetch.parseError`（error）。
 
 #### `getGoUsageCached(apiKey, force?): Promise<GoUsageResult | null>`
 
@@ -1087,7 +1106,7 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 
 #### `performCommitMsgGeneration(secrets, gitDiff, inputBox, repoPath?): Promise<void>`
 
-核心生成逻辑。构建 prompt（含自定义提示词、最近提交风格、用户输入、diff 内容），支持 `auto` 语言模式（由模型根据历史 commit 风格自动推断），根据 catalog 的 `apiMode` 创建 OpenAI Chat、OpenAI Responses 或 Anthropic API 实例，流式输出提交消息到 InputBox。Base URL 与聊天请求共用解析逻辑：`opencodego.inferenceBaseUrl` 用户覆盖（代理）> 模型目录 baseUrl > 官方默认，发送前经 `validateBaseUrl()` 校验。支持通过配置 `opencodego.commitIncludeCommitDiff` 控制风格参考中是否包含历史提交的实际代码变更（默认关闭）。支持通过配置 `opencodego.commitAttachContextFiles`（默认开启）控制是否将仓库根目录的 `AGENTS.md` 和 `README.md` 内容附加到 prompt 中作为额外上下文。在选择模型配置后浅拷贝（`{ ...config }`）再修改 `enable_thinking` 和 `max_completion_tokens`，防止对共享的自动发现配置缓存的突变；只有 catalog 声明 `none`/`disabled` 档位时才为提交生成关闭 reasoning。
+核心生成逻辑。构建 prompt（含自定义提示词、最近提交风格、用户输入、diff 内容），支持 `auto` 语言模式（由模型根据历史 commit 风格自动推断），根据 catalog 的 `apiMode` 创建 OpenAI Chat、OpenAI Responses、Anthropic 或 Google Gemini API 实例，流式输出提交消息到 InputBox。Base URL 与聊天请求共用解析逻辑：`opencodego.inferenceBaseUrl` 用户覆盖（代理）> 模型级 `provider.api` > 服务商 `api` > 官方默认，发送前经 `validateBaseUrl()` 校验。支持通过配置 `opencodego.commitIncludeCommitDiff` 控制风格参考中是否包含历史提交的实际代码变更（默认关闭）。支持通过配置 `opencodego.commitAttachContextFiles`（默认开启）控制是否将仓库根目录的 `AGENTS.md` 和 `README.md` 内容附加到 prompt 中作为额外上下文。在选择模型配置后浅拷贝（`{ ...config }`）再修改 `enable_thinking` 和 `max_completion_tokens`，防止对共享的自动发现配置缓存的突变；只有 catalog 声明 `none`/`disabled` 档位时才为提交生成关闭 reasoning。
 
 #### `abortCommitGeneration(): void`
 
@@ -1202,3 +1221,71 @@ Anthropic 请求体。包含 `model`, `messages`, `max_tokens`, `system`, `strea
 #### `getWebPDimensions(base64String): { width, height }`
 
 解析 WebP 图片尺寸（支持 VP8/VP8L/VP8X 格式）。
+
+---
+
+### 2.29 `src/endpoints.ts`
+
+#### `const OFFICIAL_CONTROL_PLANE_BASE_URL = "https://opencode.ai/zen/go/v1/"`
+
+OpenCode Go 控制面固定地址。用量（`/usage`）与模型列表（`/models`）请求必须使用该地址：目录的 `providers["opencode-go"].api` 现在指向协议专属推理 base（`/inference/go/openai/v1`），其下没有 `/usage` 与 `/models` 路由；推理代理设置也只影响推理请求。由 `scripts/test-control-plane-base.mjs` 回归验证（#144）。
+
+---
+
+### 2.30 `src/google/googleTypes.ts`
+
+Gemini generateContent 协议类型（仅覆盖适配器使用的子集）：
+
+- `GoogleInlineData` — `{ mimeType, data }`，base64 内联二进制。
+- `GoogleFunctionCall` / `GoogleFunctionResponse` — 工具调用与结果；`functionResponse.response` 为结构化对象，`parts` 可携带工具返回的图片（Gemini 3+）。
+- `GooglePart` — `text` / `thought` / `thoughtSignature` / `inlineData` / `functionCall` / `functionResponse`。
+- `GoogleContent` — `{ role: "user" | "model", parts }`。
+- `GoogleSystemInstruction`、`GoogleThinkingConfig`（`thinkingBudget` / `thinkingLevel` / `includeThoughts`）、`GoogleGenerationConfig`、`GoogleFunctionDeclaration`（`parametersJsonSchema`）、`GoogleTool`、`GoogleToolConfig`、`GoogleRequestBody`、`GoogleUsageMetadata`、`GoogleCandidate`、`GoogleGenerateContentResponse`。
+- `const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"` — Gemini 3+ 回放 `functionCall` 时缺少原始 `thoughtSignature` 的官方哨兵值。
+
+---
+
+### 2.31 `src/google/googleApi.ts`
+
+#### `class GoogleApi extends CommonApi<GoogleContent, GoogleRequestBody>`
+
+Google Gemini 原生协议适配器。端点由调用方拼为 `{base}/models/{model}:streamGenerateContent?alt=sse`，鉴权沿用网关的 Bearer + `x-opencode-session`。
+
+#### `convertMessages(messages, modelConfig): Promise<GoogleContent[]>`
+
+将 VS Code 消息转换为 Gemini contents：
+
+- `system` 消息收集到实例的 `_systemContent`，请求时写入 `systemInstruction`。
+- `user` 消息的文本与图片 → `{ text }` / `{ inlineData }`；视觉模型的工具结果图片放入 `functionResponse.parts`。
+- `assistant` 消息的 thinking → `{ text, thought: true }`，文本 → `{ text }`，工具调用 → `functionCall` + `thoughtSignature: skip_thought_signature_validator`。
+- 工具结果 → 独立 `user` content 中的 `functionResponse`（`id`/`name`/`response.content`）。
+- 非视觉模型（`vision=false`）复刻 `ask_image` 代理：图片存入 `_localImages`，原文替换为强指令文本，并记录 `_hasImages`。
+- 已持久化的视觉工具历史经 `toGoogleVisionToolMessages()` 重放。
+
+#### `prepareRequestBody(rb, um, options?): GoogleRequestBody`
+
+构建 `generationConfig`（temperature/topP/topK/maxOutputTokens/stopSequences/thinkingConfig，`supportsTemperature=false` 时省略温度）、`systemInstruction`、`tools[].functionDeclarations`（VS Code 工具 + ask_image 系列，JSON Schema 写入 `parametersJsonSchema`）与 `toolConfig`（`AUTO`/`ANY`/`NONE`）。`um.extra` 中的非保留键合并到顶层。
+
+#### `processStreamingResponse(responseBody, progress, token): Promise<void>`
+
+解析 Gemini SSE：`thought: true` 的文本进入 thinking 缓冲；普通文本发 `LanguageModelTextPart`；完整 `functionCall` 直接发 `LanguageModelToolCallPart`（ask_image/ask_with_multi_image 转存 `interceptedToolCall`）；`inlineData` 输出仅记录日志。`usageMetadata` 为累计值，仅在流结束时上报一次：输入 = `promptTokenCount + toolUsePromptTokenCount`，输出 = `candidatesTokenCount + thoughtsTokenCount`，缓存命中 = `cachedContentTokenCount`。`promptFeedback.blockReason` 抛出可读错误。
+
+#### `private processChunk(chunk, progress): void`
+
+处理单个 SSE chunk；见上。非 `STOP` 的 `finishReason` 记录 `google.stream.finish` 警告。
+
+#### `private processFunctionCall(call, progress): void`
+
+发射或拦截完整 functionCall；首次工具调用前按需补一个空格文本，保持与 OpenAI 适配器一致的分隔行为。
+
+#### `private reportUsage(usage): void`
+
+把 `GoogleUsageMetadata` 换算为 `StreamUsage` 并回调 `onUsage`。
+
+#### `createMessage(model, systemPrompt, messages, baseUrl, apiKey, signal?): AsyncGenerator<{ type: "text"; text: string }>`
+
+Git 提交消息生成用的文本流：构造 contents + systemInstruction，POST `:streamGenerateContent?alt=sse`，只 yield 非 thought 文本。
+
+#### `buildGoogleThinkingConfig(um?): GoogleThinkingConfig | undefined`
+
+把思考设置映射到 Gemini：`low/medium/high` → `thinkingLevel` + `includeThoughts: true`；`minimal` 原样；`xhigh/max` → `high`；未指定/enabled/adaptive → 仅 `includeThoughts: true`（使用模型默认档）；`enable_thinking=false` → 仅关闭思考摘要（Gemini 4 无法真正关闭思考）。由 `scripts/test-google-api.mjs` 覆盖。

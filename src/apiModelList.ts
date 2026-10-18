@@ -2,16 +2,18 @@
  * API model list fetcher.
  *
  * Fetches the list of available model IDs from the OpenCode Go API
- * (/zen/go/v1/models) and caches it with a 1-minute TTL.
- * Falls back to stale cache or an empty list on failure (silent degradation).
+ * (GET https://opencode.ai/zen/go/v1/models) and caches it with a 1-minute
+ * TTL. Falls back to stale cache or an empty list on failure (silent
+ * degradation).
  *
- * The API base URL is resolved from the models.dev catalog's "opencode-go" provider.
+ * The control-plane base is fixed rather than resolved from the models.dev
+ * catalog: the catalog's "opencode-go" provider API now points at a
+ * protocol-specific inference route that has no /models route (#144).
  */
 
+import { OFFICIAL_CONTROL_PLANE_BASE_URL } from "./endpoints";
 import { logger } from "./logger";
-import { ensureModelsDevLoaded, getCatalogProviderBaseUrl } from "./modelsDev";
 
-const FALLBACK_BASE_URL = "https://opencode.ai/zen/go/v1/";
 const CACHE_TTL_MS = 60 * 1000; // 1 minute — short TTL dedupes concurrent startup activations
 
 // ── Module-level cache ──
@@ -20,25 +22,12 @@ let cacheTimestamp = 0;
 let lastFetchSuccess = false;
 
 /**
- * Resolve the API base URL from the catalog, with fallback.
- */
-async function resolveBaseUrl(): Promise<string> {
-    try {
-        await ensureModelsDevLoaded();
-        return getCatalogProviderBaseUrl("opencode-go", FALLBACK_BASE_URL);
-    } catch {
-        return FALLBACK_BASE_URL;
-    }
-}
-
-/**
  * Fetch the model ID list from the API's /models endpoint.
  * The endpoint follows OpenAI /v1/models format:
  *   { object: "list", data: [{ id: string, object: string, created: number, owned_by: string }, ...] }
  */
 async function fetchApiModelList(apiKey: string): Promise<string[]> {
-    const apiBaseUrl = await resolveBaseUrl();
-    const url = `${apiBaseUrl.replace(/\/+$/, "")}/models`;
+    const url = `${OFFICIAL_CONTROL_PLANE_BASE_URL.replace(/\/+$/, "")}/models`;
     try {
         const response = await fetch(url, {
             headers: { Authorization: `Bearer ${apiKey}` },

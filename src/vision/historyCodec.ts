@@ -1,4 +1,6 @@
 import type { AnthropicMessage } from "../anthropic/anthropicTypes";
+import type { GoogleContent } from "../google/googleTypes";
+import { SKIP_THOUGHT_SIGNATURE_VALIDATOR } from "../google/googleTypes";
 import type { OpenAIChatMessage } from "../openai/openaiTypes";
 import type { ResponsesInputItem } from "../openai/responsesTypes";
 import { ASK_IMAGE_TOOL_NAME, ASK_WITH_MULTI_IMAGE_TOOL_NAME } from "./types";
@@ -137,6 +139,40 @@ export function toResponsesVisionToolItems(entry: VisionToolHistoryEntry): Respo
             type: "function_call_output",
             call_id: entry.id,
             output: entry.result,
+        },
+    ];
+}
+
+/** Rebuild the standard Google model functionCall + user functionResponse pair. */
+export function toGoogleVisionToolMessages(entry: VisionToolHistoryEntry): GoogleContent[] {
+    return [
+        {
+            role: "model",
+            parts: [
+                {
+                    functionCall: {
+                        id: entry.id,
+                        name: entry.name,
+                        args: entry.args,
+                    },
+                    thoughtSignature: SKIP_THOUGHT_SIGNATURE_VALIDATOR,
+                },
+            ],
+        },
+        {
+            role: "user",
+            parts: [
+                {
+                    functionResponse: {
+                        id: entry.id,
+                        name: entry.name,
+                        response: {
+                            name: entry.name,
+                            content: entry.result,
+                        },
+                    },
+                },
+            ],
         },
     ];
 }
