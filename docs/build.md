@@ -55,9 +55,11 @@ npm run build
 
 | 脚本 | 说明 |
 | --- | --- |
-| `scripts/test-vision-history.mjs` | 视觉工具历史编解码与三 API 转换器顺序闭环测试（含 DeepSeek 空 `reasoning_content` 回归用例） |
+| `scripts/test-vision-history.mjs` | 视觉工具历史编解码与 OpenAI Chat / Responses / Anthropic / Google 四 API 转换器顺序闭环测试（含 DeepSeek 空 `reasoning_content` 回归用例） |
 | `scripts/test-responses-api.mjs` | OpenAI Responses 消息、请求体、SSE、工具调用、usage、encrypted reasoning 回放、缺失 MIME 与工具模式兼容测试 |
-| `scripts/test-api-mode.mjs` | models.dev 适配器到三种 API 协议的映射与旧目录兼容测试 |
+| `scripts/test-api-mode.mjs` | models.dev 适配器到四种 API 协议的映射（含 `@ai-sdk/google` 与 gemini/gemma family 兜底）与旧目录兼容测试 |
+| `scripts/test-google-api.mjs` | Google Gemini 协议适配测试：模型级 `provider.api` 解析、contents/systemInstruction/inlineData 转换、`parametersJsonSchema`、thinkingConfig、SSE thought/text/functionCall/usage、ask_image 拦截与提交消息流 |
+| `scripts/test-control-plane-base.mjs` | 用量与模型列表固定访问官方控制面 base、不落入 `/inference` 的回归测试（issue #144） |
 | `scripts/test-anthropic-tool-result-merge.mjs` | Anthropic 多条工具结果合并行为验证（issue #87） |
 | `scripts/test-base-url.mjs` | 推理 Base URL 覆盖读取与 HTTP 安全检查（localhost/私网 http、远程 https、非法输入）验证 |
 | `scripts/test-thinking-param.mjs` | `supportsThinkingParam=false`（glm-5.3/glm-5.3-flash）时 OpenAI/Anthropic 请求体省略 `thinking` 字段、保留 `reasoning_effort`，且模型选择器不提供「禁用思考」档的回归测试（issue #129）；并覆盖 Anthropic 自适应思考模型（claude-haiku-5-5）发送 `thinking: { type: "adaptive" }` + `output_config.effort`、不再发送旧版 `enabled`/`budget_tokens` 的回归测试（issue #137） |

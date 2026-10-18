@@ -15,7 +15,7 @@
 
 Integrate [OpenCode Go](https://opencode.ai/go) into GitHub Copilot Chat as a VS Code extension.
 
-The extension reads adapter metadata from models.dev and automatically routes each model through its declared OpenAI-compatible Chat Completions, OpenAI Responses, or Anthropic Messages protocol.
+The extension reads adapter metadata from models.dev and automatically routes each model through its declared OpenAI-compatible Chat Completions, OpenAI Responses, Anthropic Messages, or Google Gemini (generateContent) protocol. Gemini 4 Argon runs on the native Google protocol; its thinking level (low/medium/high) is selected with the same reasoning-effort picker as the other models.
 
 ### Usage
 
@@ -167,7 +167,7 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 
 将 [OpenCode Go](https://opencode.ai/go) 集成到 GitHub Copilot Chat 的 VS Code 插件。
 
-插件会读取 models.dev 的适配器元数据，自动按模型声明选择 OpenAI 兼容 Chat Completions、OpenAI Responses 或 Anthropic Messages 请求格式。
+插件会读取 models.dev 的适配器元数据，自动按模型声明选择 OpenAI 兼容 Chat Completions、OpenAI Responses、Anthropic Messages 或 Google Gemini（generateContent）请求格式。Gemini 4 Argon 走 Google 原生协议，思考档位（低/中/高）与其他模型共用同一个推理强度选择器。
 
 ### 使用
 

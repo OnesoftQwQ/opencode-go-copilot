@@ -34,6 +34,8 @@ import { ResponsesApi } from "./openai/responsesApi";
 import type { ResponsesRequestBody } from "./openai/responsesTypes";
 import { AnthropicApi, buildAnthropicThinkingConfig } from "./anthropic/anthropicApi";
 import type { AnthropicRequestBody } from "./anthropic/anthropicTypes";
+import { GoogleApi } from "./google/googleApi";
+import { SKIP_THOUGHT_SIGNATURE_VALIDATOR, type GoogleContent, type GoogleRequestBody } from "./google/googleTypes";
 import { CommonApi, type StreamUsage } from "./commonApi";
 import { buildRequestUsageLog } from "./requestUsageLog";
 import { callVisionModel, callVisionModelMulti } from "./vision/imageProxy";
@@ -346,7 +348,74 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             });
             logger.debug("request.messages.origin", { messages });
 
-            if (apiMode === "anthropic") {
+            if (apiMode === "google") {
+                // Google Gemini generateContent API mode
+                const googleApi = new GoogleApi(model.id);
+                googleApi.onUsage = (usage) => {
+                    usageReportedDuringStream = true;
+                    requestUsage = usage;
+                    requestUsageSource = "stream";
+                    reportNativeUsage(usage, progress);
+                    if (enableThirdPartyIndicator) {
+                        recordUsage(usage);
+                        updateCumulativeTooltip(this.statusBarItem);
+                        updateStatusBarWithApiPrompt(this.statusBarItem);
+                    }
+                };
+                const googleContents = await googleApi.convertMessages(messages, modelConfig);
+
+                let requestBody: GoogleRequestBody = { contents: googleContents };
+                requestBody = googleApi.prepareRequestBody(requestBody, um, options);
+
+                // Gemini puts the model in the path and uses a method suffix.
+                const modelPath = encodeURIComponent(um?.id ?? model.id);
+                const url = `${BASE_URL.replace(/\/+$/, "")}/models/${modelPath}:streamGenerateContent?alt=sse`;
+                logger.debug("request.body", { url, requestBody });
+                const response = await this._sendWithSessionFallback(async () => executeWithRetry(async () => {
+                    const res = await dispatchFetch(url, {
+                        method: "POST",
+                        headers: requestHeaders,
+                        body: JSON.stringify(requestBody),
+                        signal: abortController.signal,
+                    });
+
+                    if (!res.ok) {
+                        const errorText = await res.text();
+                        console.error("[OpenCodeGo] Google API error response", errorText);
+                        if (errorText.includes("image is sensitive")) {
+                            throw new Error(`IMAGE_SENSITIVE: ${errorText}`);
+                        }
+                        throw new Error(
+                            `Google API error: [${res.status}] ${res.statusText}${errorText ? `\n${errorText}` : ""}\nURL: ${url}`
+                        );
+                    }
+
+                    return res;
+                }, retryConfig), rotateSession);
+
+                if (!response.body) {
+                    throw new Error("No response body from Google API");
+                }
+                await googleApi.processStreamingResponse(response.body, trackingProgress, token);
+
+                clearTimeout(timeoutId);
+                await this._handleInterceptedToolCall({
+                    api: googleApi,
+                    apiMode: "google",
+                    model: model,
+                    um: um,
+                    messages: messages,
+                    modelApiKey: modelApiKey,
+                    baseUrl: BASE_URL,
+                    dispatchFetch: dispatchFetch,
+                    requestHeaders: requestHeaders,
+                    retryConfig: retryConfig,
+                    abortController: abortController,
+                    trackingProgress: trackingProgress,
+                    token: token,
+                    options: options,
+                });
+            } else if (apiMode === "anthropic") {
                 // Anthropic API mode
                 const anthropicApi = new AnthropicApi(model.id);
                 anthropicApi.onUsage = (usage) => {
@@ -893,7 +962,63 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
             }
 
             try {
-                if (params.apiMode === "anthropic") {
+                if (params.apiMode === "google") {
+                    // Google format: functionCall + functionResponse parts. Gemini
+                    // 3+ requires a thoughtSignature on replayed function calls;
+                    // use the documented sentinel when the original is unavailable.
+                    currentMessages.push({
+                        role: "model" as const,
+                        parts: [
+                            {
+                                functionCall: {
+                                    id: intercepted.id,
+                                    name: intercepted.name,
+                                    args: intercepted.args as Record<string, unknown>,
+                                },
+                                thoughtSignature: SKIP_THOUGHT_SIGNATURE_VALIDATOR,
+                            },
+                        ],
+                    });
+                    currentMessages.push({
+                        role: "user" as const,
+                        parts: [
+                            {
+                                functionResponse: {
+                                    id: intercepted.id,
+                                    name: intercepted.name,
+                                    response: {
+                                        name: intercepted.name,
+                                        content: description,
+                                    },
+                                },
+                            },
+                        ],
+                    });
+
+                    const googleApi = api as GoogleApi;
+                    let body: GoogleRequestBody = { contents: currentMessages as GoogleContent[] };
+                    body = googleApi.prepareRequestBody(body, params.um, params.options);
+
+                    const modelPath = encodeURIComponent(params.um?.id ?? params.model.id);
+                    const url = `${params.baseUrl.replace(/\/+$/, "")}/models/${modelPath}:streamGenerateContent?alt=sse`;
+                    const response = await this._sendWithSessionFallback(async () => executeWithRetry(async () => {
+                        const res = await params.dispatchFetch(url, {
+                            method: "POST",
+                            headers: params.requestHeaders,
+                            body: JSON.stringify(body),
+                            signal: roundAbortController.signal,
+                        });
+                        if (!res.ok) {
+                            const errorText = await res.text();
+                            throw new Error(`Google API error: [${res.status}] ${res.statusText}${errorText ? `\n${errorText}` : ""}`);
+                        }
+                        return res;
+                    }, params.retryConfig), rotateSession);
+
+                    if (response.body) {
+                        await googleApi.processStreamingResponse(response.body, params.trackingProgress, params.token);
+                    }
+                } else if (params.apiMode === "anthropic") {
                     // Anthropic format: tool_use + tool_result
                     currentMessages.push({
                         role: "assistant" as const,

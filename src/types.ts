@@ -1,5 +1,5 @@
 /** Request protocol used by an OpenCode model. */
-export type ApiMode = "openai" | "openai-responses" | "anthropic";
+export type ApiMode = "openai" | "openai-responses" | "anthropic" | "google";
 
 /**
  * A single model entry for OpenCode Go.

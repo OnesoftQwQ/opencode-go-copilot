@@ -77,6 +77,8 @@ export interface ModelsDevEntry {
     knowledge?: string;
     provider?: {
         npm?: string;
+        /** Protocol-specific inference base for this model (e.g. /google/v1beta). */
+        api?: string;
     };
     cost?: {
         cache_read: number;
@@ -274,6 +276,27 @@ export function getCatalogProviderBaseUrl(providerId: string, fallbackUrl: strin
         return provider.api.replace(/\/+$/, "") + "/";
     }
     return fallbackUrl;
+}
+
+/**
+ * Get the inference base URL for a single model.
+ *
+ * The catalog publishes a protocol-specific base on the model entry's
+ * `provider.api` (e.g. /inference/go/google/v1beta for @ai-sdk/google models).
+ * That value must win over the provider-wide `api` — the provider-wide base
+ * only points at one protocol (currently OpenAI Chat) and rejects other
+ * protocols with ModelProtocolUnsupported (#143).
+ *
+ * @param providerId - Provider ID (e.g. "opencode-go")
+ * @param modelId - Short model ID (e.g. "gemini-4-argon-contributor")
+ * @param fallbackUrl - Fallback URL if neither the model nor provider is known
+ */
+export function getCatalogModelBaseUrl(providerId: string, modelId: string, fallbackUrl: string): string {
+    const modelApi = providersMap?.get(providerId)?.models?.[modelId]?.provider?.api;
+    if (typeof modelApi === "string" && modelApi.trim()) {
+        return modelApi.trim().replace(/\/+$/, "") + "/";
+    }
+    return getCatalogProviderBaseUrl(providerId, fallbackUrl);
 }
 
 /**
@@ -530,17 +553,20 @@ export function deduceApiModeFromCatalog(
             return "openai-responses";
         case "@ai-sdk/anthropic":
             return "anthropic";
+        case "@ai-sdk/google":
+        case "@ai-sdk/google-vertex":
+            return "google";
         case "@ai-sdk/openai-compatible":
             return "openai";
     }
 
     const family = entry?.family?.toLowerCase() ?? "";
     if (family.includes("claude") || family.includes("anthropic")) return "anthropic";
+    if (family.includes("gemini") || family.includes("gemma")) return "google";
     if (family.includes("qwen")) {
         if (/qwen[\s-]*3\.[67]/i.test(modelId)) return "anthropic";
         return "openai";
     }
-    if (family.includes("gemma")) return "anthropic";
     return "openai";
 }
 

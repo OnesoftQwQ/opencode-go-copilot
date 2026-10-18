@@ -15,8 +15,8 @@ import { MODEL_OVERRIDES, type ModelMetaOverride } from "./modelOverrides";
 import {
     deduceApiModeFromCatalog,
     ensureModelsDevLoaded,
+    getCatalogModelBaseUrl,
     getCatalogProvider,
-    getCatalogProviderBaseUrl,
     getCatalogProviderModelEntry,
     getCatalogProviderModelIds,
     inferDefaultReasoningEffort,
@@ -104,7 +104,8 @@ function resolveFromCatalog(providerId: ProviderId, modelId: string): ModelMeta 
         supportsTemperature: entry?.temperature ?? true,
         supportsThinkingParam: true,
         toolCalling: entry?.tool_call ?? true,
-        baseUrl: getCatalogProviderBaseUrl(providerId, FALLBACK_BASE_URLS[providerId]),
+        // Model-level protocol base wins (e.g. /google/v1beta for Gemini).
+        baseUrl: getCatalogModelBaseUrl(providerId, modelId, FALLBACK_BASE_URLS[providerId]),
         thinkingBudget: entry ? inferThinkingBudget(entry) : undefined,
         status: entry?.status,
         cost: entry?.cost ?? { cache_read: 0, input: 0, output: 0 },

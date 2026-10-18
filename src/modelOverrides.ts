@@ -3,7 +3,7 @@
  *
  * The models.dev catalog is the single source of truth for model metadata.
  * These overrides only carry fields the catalog cannot express (or gets wrong):
- * - apiMode (Anthropic vs OpenAI format) — the catalog only hints via npm field
+ * - apiMode (Anthropic / OpenAI / Google format) — the catalog only hints via npm field
  * - thinkingMode="adaptive" semantics
  * - extra request-body parameters (e.g. `reasoning_split`)
  * - default reasoning effort tuning (e.g. GLM-5.2 defaults to "high", not "max")
@@ -91,4 +91,14 @@ export const MODEL_OVERRIDES: Record<string, ModelMetaOverride> = {
     // "always" hides the unsupported "禁用思考" option in the picker.
     "glm-5.3": { thinkingMode: "always", supportsThinkingParam: false },
     "glm-5.3-flash": { thinkingMode: "always", supportsThinkingParam: false },
+
+    // ── Google Gemini ── native generateContent protocol. Gemini 4 Argon
+    // always thinks (thinkingLevel low/medium/high, default medium); there is
+    // no off switch, so the picker must not offer "Disabled".
+    "gemini-4-argon-contributor": {
+        apiMode: "google",
+        thinkingMode: "always",
+        supportedReasoningEfforts: ["low", "medium", "high"],
+        defaultReasoningEffort: "medium",
+    },
 };
