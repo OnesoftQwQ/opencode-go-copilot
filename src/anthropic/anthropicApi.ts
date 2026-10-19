@@ -692,7 +692,7 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 				this._thinkingBlockSignature = "";
 				if (chunk.content_block.thinking) {
 					this._thinkingBlockText += chunk.content_block.thinking;
-					this.bufferThinkingContent(chunk.content_block.thinking, progress);
+					this.reportThinkingDelta(chunk.content_block.thinking, progress);
 				}
 			} else if (chunk.content_block.type === "tool_use") {
 				// Start tool call block
@@ -715,7 +715,7 @@ export class AnthropicApi extends CommonApi<AnthropicMessage, AnthropicRequestBo
 				this._hasEmittedAssistantText = true;
 			} else if (chunk.delta.type === "thinking_delta" && chunk.delta.thinking) {
 				this._thinkingBlockText += chunk.delta.thinking;
-				this.bufferThinkingContent(chunk.delta.thinking, progress);
+				this.reportThinkingDelta(chunk.delta.thinking, progress);
 			} else if (chunk.delta.type === "input_json_delta" && chunk.delta.partial_json) {
 				const idx = (chunk.index as number) ?? 0;
 				const buf = this._toolCallBuffers.get(idx);
