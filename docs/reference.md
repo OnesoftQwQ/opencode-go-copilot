@@ -1262,7 +1262,7 @@ Google Gemini 原生协议适配器。端点由调用方拼为 `{base}/models/{m
 
 #### `processStreamingResponse(responseBody, progress, token): Promise<void>`
 
-解析 Gemini SSE：`thought: true` 的文本进入 thinking 缓冲；普通文本发 `LanguageModelTextPart`；完整 `functionCall` 直接发 `LanguageModelToolCallPart`（ask_image/ask_with_multi_image 转存 `interceptedToolCall`）；`inlineData` 输出仅记录日志。`usageMetadata` 为累计值，仅在流结束时上报一次：输入 = `promptTokenCount + toolUsePromptTokenCount`，输出 = `candidatesTokenCount + thoughtsTokenCount`，缓存命中 = `cachedContentTokenCount`。`promptFeedback.blockReason` 抛出可读错误。
+解析 Gemini SSE：`thought: true` 的文本直接发射为 `LanguageModelThinkingPart`；普通文本发 `LanguageModelTextPart`；完整 `functionCall` 直接发 `LanguageModelToolCallPart`（ask_image/ask_with_multi_image 转存 `interceptedToolCall`）；`inlineData` 输出仅记录日志。`usageMetadata` 为累计值，仅在流结束时上报一次：输入 = `promptTokenCount + toolUsePromptTokenCount`，输出 = `candidatesTokenCount + thoughtsTokenCount`，缓存命中 = `cachedContentTokenCount`。`promptFeedback.blockReason` 抛出可读错误。
 
 #### `private processChunk(chunk, progress): void`
 
