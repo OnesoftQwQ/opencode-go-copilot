@@ -295,8 +295,6 @@ API 实现的抽象基类。
 | `_xmlThinkActive` | `boolean` | XML think 块解析中 |
 | `_xmlThinkDetectionAttempted` | `boolean` | 是否尝试过 XML think 检测 |
 | `_currentThinkingId` | `string \| null` | 当前推理内容 ID |
-| `_thinkingBuffer` | `string` | 推理内容缓冲区 |
-| `_thinkingFlushTimer` | `NodeJS.Timeout \| null` | 推理刷新定时器 |
 | `_systemContent` | `string \| undefined` | 系统提示内容 |
 | `_modelId` | `string` | 模型 ID |
 | `_onUsage` | `((usage: StreamUsage) => void) \| undefined` | 用量回调 |
@@ -334,7 +332,7 @@ API 实现的抽象基类。
 
 #### `protected _resetStreamState(): void`
 
-重置可变流状态。必须在每次 `processStreamingResponse` 调用开始时调用，防止状态在轮次间残留（例如第一轮 → 视觉代理 → 第二轮）。清理内容包括：工具调用缓冲区、已发射索引、文本/推理发射标记、XML think 解析状态、thinking 缓冲区与定时器、被拦截工具调用。
+重置可变流状态。必须在每次 `processStreamingResponse` 调用开始时调用，防止状态在轮次间残留（例如第一轮 → 视觉代理 → 第二轮）。清理内容包括：工具调用缓冲区、已发射索引、文本/推理发射标记、XML think 解析状态、被拦截工具调用。
 
 #### `protected reportEndThinking(progress): void`
 
@@ -344,13 +342,9 @@ API 实现的抽象基类。
 
 生成唯一的推理内容 ID。
 
-#### `protected bufferThinkingContent(text, progress): void`
+#### `protected reportThinkingDelta(text, progress): void`
 
-缓冲推理内容，设置定时器每 100ms 刷新。
-
-#### `protected flushThinkingBuffer(progress): void`
-
-立即将缓冲的推理内容刷新到进度报告器。
+立即将单个推理增量发射为 `LanguageModelThinkingPart`，不做缓冲或定时合并。与 VS Code 自带语言模型提供方一致：每个流式增量一次报告，推理内容随产生即时显示。
 
 #### `protected processXmlThinkBlocks(content, progress): { emittedAny: boolean }`
 
@@ -1268,7 +1262,7 @@ Google Gemini 原生协议适配器。端点由调用方拼为 `{base}/models/{m
 
 #### `processStreamingResponse(responseBody, progress, token): Promise<void>`
 
-解析 Gemini SSE：`thought: true` 的文本进入 thinking 缓冲；普通文本发 `LanguageModelTextPart`；完整 `functionCall` 直接发 `LanguageModelToolCallPart`（ask_image/ask_with_multi_image 转存 `interceptedToolCall`）；`inlineData` 输出仅记录日志。`usageMetadata` 为累计值，仅在流结束时上报一次：输入 = `promptTokenCount + toolUsePromptTokenCount`，输出 = `candidatesTokenCount + thoughtsTokenCount`，缓存命中 = `cachedContentTokenCount`。`promptFeedback.blockReason` 抛出可读错误。
+解析 Gemini SSE：`thought: true` 的文本直接发射为 `LanguageModelThinkingPart`；普通文本发 `LanguageModelTextPart`；完整 `functionCall` 直接发 `LanguageModelToolCallPart`（ask_image/ask_with_multi_image 转存 `interceptedToolCall`）；`inlineData` 输出仅记录日志。`usageMetadata` 为累计值，仅在流结束时上报一次：输入 = `promptTokenCount + toolUsePromptTokenCount`，输出 = `candidatesTokenCount + thoughtsTokenCount`，缓存命中 = `cachedContentTokenCount`。`promptFeedback.blockReason` 抛出可读错误。
 
 #### `private processChunk(chunk, progress): void`
 

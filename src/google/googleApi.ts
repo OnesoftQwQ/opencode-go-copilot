@@ -510,7 +510,7 @@ export class GoogleApi extends CommonApi<GoogleContent, GoogleRequestBody> {
             if (part.text !== undefined && part.text !== null) {
                 if (part.thought === true) {
                     this._capturedReasoningContent += part.text;
-                    this.bufferThinkingContent(part.text, progress);
+                    this.reportThinkingDelta(part.text, progress);
                 } else {
                     this.reportEndThinking(progress);
                     if (this.processTextContent(part.text, progress).emittedAny) {

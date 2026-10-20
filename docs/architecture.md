@@ -293,10 +293,9 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   candidates[0].content.parts[] 中 thought:true 的 text part
 
 处理机制:
-  1. bufferThinkingContent(text) → 积累到 _thinkingBuffer
-  2. 每 100ms 定时刷新 → LanguageModelThinkingPart
-  3. XML think 块 (꽁...꽁) → processXmlThinkBlocks()
-  4. 文本内容出现时 → reportEndThinking()
+  1. reportThinkingDelta(text) → 立即发射 LanguageModelThinkingPart
+  2. XML think 块 (꽁...꽁) → processXmlThinkBlocks()
+  3. 文本内容出现时 → reportEndThinking()
 ```
 
 ### 2.5 工具调用处理

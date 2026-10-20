@@ -332,7 +332,7 @@ export class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequest
             case "response.reasoning_text.delta":
             case "response.reasoning_summary.delta":
             case "response.reasoning_summary_text.delta":
-                if (event.delta) this.bufferThinkingContent(event.delta, progress);
+                if (event.delta) this.reportThinkingDelta(event.delta, progress);
                 return false;
 
             case "response.output_item.added":
