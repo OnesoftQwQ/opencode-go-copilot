@@ -54,6 +54,8 @@ src/
     └── imageProxy.ts                     # 图片代理核心 (ask_image)
 ```
 
+`scripts/test-provider-model-contract.mjs` 用于校验模型信息在交给 VS Code provider 之前的字段契约。
+
 ### 1.2 文件详细说明
 
 | 文件 | 行数 | 职责 |

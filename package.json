@@ -424,7 +424,7 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
-		"test": "npm run compile && node scripts/test-api-mode.mjs && node scripts/test-thinking-param.mjs && node scripts/test-anthropic-thinking-signature.mjs && node scripts/test-responses-api.mjs && node scripts/test-google-api.mjs && node scripts/test-vision-history.mjs && node scripts/test-anthropic-tool-result-merge.mjs && node scripts/test-base-url.mjs && node scripts/test-control-plane-base.mjs && node scripts/test-store-data-uri.mjs && node scripts/test-request-usage-log.mjs && node scripts/test-model-context-window.mjs",
+		"test": "npm run compile && node scripts/test-api-mode.mjs && node scripts/test-thinking-param.mjs && node scripts/test-anthropic-thinking-signature.mjs && node scripts/test-responses-api.mjs && node scripts/test-google-api.mjs && node scripts/test-vision-history.mjs && node scripts/test-anthropic-tool-result-merge.mjs && node scripts/test-base-url.mjs && node scripts/test-control-plane-base.mjs && node scripts/test-store-data-uri.mjs && node scripts/test-request-usage-log.mjs && node scripts/test-model-context-window.mjs && node scripts/test-provider-model-contract.mjs",
 		"test:api-mode": "npm run compile && node scripts/test-api-mode.mjs",
 		"test:thinking-param": "npm run compile && node scripts/test-thinking-param.mjs",
 		"test:anthropic-thinking-signature": "npm run compile && node scripts/test-anthropic-thinking-signature.mjs",

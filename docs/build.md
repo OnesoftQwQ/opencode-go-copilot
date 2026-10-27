@@ -65,5 +65,6 @@ npm run build
 | `scripts/test-thinking-param.mjs` | `supportsThinkingParam=false`（glm-5.3/glm-5.3-flash）时 OpenAI/Anthropic 请求体省略 `thinking` 字段、保留 `reasoning_effort`，且模型选择器不提供「禁用思考」档的回归测试（issue #129）；并覆盖 Anthropic 自适应思考模型（claude-haiku-5-5）发送 `thinking: { type: "adaptive" }` + `output_config.effort`、不再发送旧版 `enabled`/`budget_tokens` 的回归测试（issue #137） |
 | `scripts/test-anthropic-thinking-signature.mjs` | Anthropic 签名 thinking 块 DataPart 编解码与 `convertMessages()` 回放闭环：带签名块重建在最前、无签名 thinking 文本不发送、`includeReasoningInRequest=false` 丢弃签名块（issue #137 后续） |
 | `scripts/test-model-context-window.mjs` | 模型选择器上方上下文窗口声明回归测试：`maxContextWindowTokens` 必须等于目录 `limit.context`、且不等于 `maxInputTokens + maxOutputTokens`（issue #149） |
+| `scripts/test-provider-model-contract.mjs` | 模型信息交给 VS Code provider 之前的契约回归测试：id、可选性、能力（工具调用/图片输入）与 token 上限字段齐备 |
 | `scripts/update-hardcoded-catalog.mjs` | 刷新硬编码目录快照（发布构建自动执行，失败保留旧快照不阻断） |
 | `scripts/check-new-models.mjs` | 检查 models.dev 目录中的新模型 |
