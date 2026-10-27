@@ -54,12 +54,6 @@ export abstract class CommonApi<TMessage, TRequestBody> {
     // Thinking content state management
     protected _currentThinkingId: string | null = null;
 
-    /** Buffer for accumulating thinking content before emitting. */
-    protected _thinkingBuffer = "";
-
-    /** Timer for delayed flushing of thinking buffer. */
-    protected _thinkingFlushTimer: NodeJS.Timeout | null = null;
-
     /** System prompts to include in requests. */
     protected _systemContent: string | undefined;
 
@@ -270,11 +264,6 @@ export abstract class CommonApi<TMessage, TRequestBody> {
         this._xmlThinkActive = false;
         this._xmlThinkDetectionAttempted = false;
         this._currentThinkingId = null;
-        this._thinkingBuffer = "";
-        if (this._thinkingFlushTimer) {
-            clearTimeout(this._thinkingFlushTimer);
-            this._thinkingFlushTimer = null;
-        }
         this.interceptedToolCall = null;
     }
 
@@ -287,17 +276,11 @@ export abstract class CommonApi<TMessage, TRequestBody> {
             return;
         }
         try {
-            this.flushThinkingBuffer(progress);
             progress.report(new LanguageModelThinkingPart("", this._currentThinkingId) as unknown as LanguageModelResponsePart);
         } catch (e) {
             console.error("[OpenCodeGo] Failed to end thinking sequence:", e);
         }
         this._currentThinkingId = null;
-        this._thinkingBuffer = "";
-        if (this._thinkingFlushTimer) {
-            clearTimeout(this._thinkingFlushTimer);
-            this._thinkingFlushTimer = null;
-        }
     }
 
     /**
@@ -308,40 +291,26 @@ export abstract class CommonApi<TMessage, TRequestBody> {
     }
 
     /**
-     * Buffer and schedule a flush for thinking content.
-     * @param text The thinking text to buffer
+     * Report a thinking delta to VS Code as soon as it arrives.
+     *
+     * Each delta is forwarded immediately, matching how VS Code's own language
+     * model providers report reasoning: one `LanguageModelThinkingPart` per
+     * streamed delta, with no coalescing window. Buffering here delayed the
+     * thinking panel by up to the flush interval, so reasoning appeared in
+     * bursts instead of as it was produced.
+     *
+     * @param text The thinking delta to report
      * @param progress Progress reporter for parts
      */
-    protected bufferThinkingContent(text: string, progress: Progress<LanguageModelResponsePart>): void {
+    protected reportThinkingDelta(text: string, progress: Progress<LanguageModelResponsePart>): void {
         this._hasEmittedThinking = true;
         if (!this._currentThinkingId) {
             this._currentThinkingId = this.generateThinkingId();
         }
-
-        this._thinkingBuffer += text;
-
-        if (!this._thinkingFlushTimer) {
-            this._thinkingFlushTimer = setTimeout(() => {
-                this.flushThinkingBuffer(progress);
-            }, 100);
+        if (!text) {
+            return;
         }
-    }
-
-    /**
-     * Flush the thinking buffer to the progress reporter.
-     * @param progress Progress reporter for parts.
-     */
-    protected flushThinkingBuffer(progress: Progress<LanguageModelResponsePart>): void {
-        if (this._thinkingFlushTimer) {
-            clearTimeout(this._thinkingFlushTimer);
-            this._thinkingFlushTimer = null;
-        }
-
-        if (this._thinkingBuffer && this._currentThinkingId) {
-            const text = this._thinkingBuffer;
-            this._thinkingBuffer = "";
-            progress.report(new LanguageModelThinkingPart(text, this._currentThinkingId) as unknown as LanguageModelResponsePart);
-        }
+        progress.report(new LanguageModelThinkingPart(text, this._currentThinkingId) as unknown as LanguageModelResponsePart);
     }
 
     /**
@@ -366,13 +335,13 @@ export abstract class CommonApi<TMessage, TRequestBody> {
             if (this._xmlThinkActive) {
                 const endIdx = remaining.indexOf("꽁");
                 if (endIdx === -1) {
-                    this.bufferThinkingContent(remaining, progress);
+                    this.reportThinkingDelta(remaining, progress);
                     emittedAny = true;
                     break;
                 } else {
                     const thinkText = remaining.slice(0, endIdx);
                     if (thinkText) {
-                        this.bufferThinkingContent(thinkText, progress);
+                        this.reportThinkingDelta(thinkText, progress);
                         emittedAny = true;
                     }
                     this.reportEndThinking(progress);

@@ -593,7 +593,7 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
                     }
 
                     if (extractedText) {
-                        this.bufferThinkingContent(extractedText, progress);
+                        this.reportThinkingDelta(extractedText, progress);
                         emitted = true;
                     }
                 }
@@ -612,7 +612,7 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
                     // Accumulate reasoning content for echo-back in tool call proxy rounds
                     // DeepSeek thinking mode requires raw reasoning_content to be passed back verbatim
                     this._capturedReasoningContent += text;
-                    this.bufferThinkingContent(text, progress);
+                    this.reportThinkingDelta(text, progress);
                     emitted = true;
                 }
             }
