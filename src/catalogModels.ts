@@ -303,6 +303,14 @@ export function buildCatalogModelInfo(providerId: ProviderId, modelId: string): 
         version: "1.0.0",
         maxInputTokens: meta.contextLength,
         maxOutputTokens: meta.maxOutputTokens,
+        // Total context window, independent of the per-direction maxima above.
+        // Without it VS Code renders the picker's "Max context" as
+        // maxInputTokens + maxOutputTokens, which over-reports the window for
+        // every model whose maxima do not add up to it (a 1M-token model with
+        // 384K max output showed 1.3M — see issue #149). The field exists since
+        // VS Code 1.139 (proposed chatProvider API); older versions ignore it
+        // and keep the summed behaviour.
+        maxContextWindowTokens: meta.contextLength,
         isUserSelectable: true,
         capabilities: {
             toolCalling: meta.toolCalling,
