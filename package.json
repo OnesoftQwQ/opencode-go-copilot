@@ -270,7 +270,7 @@
 				},
 				"opencodego.modelPreset": {
 					"type": "string",
-					"default": "precise",
+					"default": "default",
 					"description": "%config.modelPreset.desc%",
 					"editPresentation": "singlelineText"
 				},
@@ -324,6 +324,10 @@
 					"type": "array",
 					"default": [
 						{
+							"id": "default",
+							"label": "Default"
+						},
+						{
 							"id": "precise",
 							"label": "Precise",
 							"temperature": 0
@@ -348,8 +352,7 @@
 						"type": "object",
 						"required": [
 							"id",
-							"label",
-							"temperature"
+							"label"
 						],
 						"properties": {
 							"id": {
@@ -361,7 +364,10 @@
 								"description": "%config.modelPreset.label.desc%"
 							},
 							"temperature": {
-								"type": "number",
+								"type": [
+									"number",
+									"null"
+								],
 								"description": "%config.modelPreset.temperature.desc%"
 							},
 							"top_p": {
@@ -424,7 +430,7 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
-		"test": "npm run compile && node scripts/test-api-mode.mjs && node scripts/test-thinking-param.mjs && node scripts/test-anthropic-thinking-signature.mjs && node scripts/test-responses-api.mjs && node scripts/test-google-api.mjs && node scripts/test-vision-history.mjs && node scripts/test-anthropic-tool-result-merge.mjs && node scripts/test-base-url.mjs && node scripts/test-control-plane-base.mjs && node scripts/test-store-data-uri.mjs && node scripts/test-request-usage-log.mjs && node scripts/test-model-context-window.mjs && node scripts/test-provider-model-contract.mjs",
+		"test": "npm run compile && node scripts/test-api-mode.mjs && node scripts/test-thinking-param.mjs && node scripts/test-anthropic-thinking-signature.mjs && node scripts/test-responses-api.mjs && node scripts/test-google-api.mjs && node scripts/test-vision-history.mjs && node scripts/test-anthropic-tool-result-merge.mjs && node scripts/test-base-url.mjs && node scripts/test-control-plane-base.mjs && node scripts/test-store-data-uri.mjs && node scripts/test-request-usage-log.mjs && node scripts/test-model-context-window.mjs && node scripts/test-provider-model-contract.mjs && node scripts/test-temperature-preset.mjs",
 		"test:api-mode": "npm run compile && node scripts/test-api-mode.mjs",
 		"test:thinking-param": "npm run compile && node scripts/test-thinking-param.mjs",
 		"test:anthropic-thinking-signature": "npm run compile && node scripts/test-anthropic-thinking-signature.mjs",
@@ -436,6 +442,7 @@
 		"test:store-data-uri": "npm run compile && node scripts/test-store-data-uri.mjs",
 		"test:request-usage-log": "npm run compile && node scripts/test-request-usage-log.mjs",
 		"test:model-context-window": "npm run compile && node scripts/test-model-context-window.mjs",
+    "test:temperature-preset": "npm run compile && node scripts/test-temperature-preset.mjs",
 		"lint": "eslint",
 		"watch": "tsc -watch -p ./",
 		"build": "npx @vscode/vsce package -o extension.vsix",

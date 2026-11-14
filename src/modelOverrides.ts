@@ -92,6 +92,12 @@ export const MODEL_OVERRIDES: Record<string, ModelMetaOverride> = {
     "glm-5.3": { thinkingMode: "always", supportsThinkingParam: false },
     "glm-5.3-flash": { thinkingMode: "always", supportsThinkingParam: false },
 
+    // ── OpenAI GPT-6 Luna ── the upstream catalog advertises temperature
+    // support, but the serving route rejects the parameter with 400
+    // "Unsupported parameter: 'temperature' is not supported with this model"
+    // (issue #152), so neither temperature nor top_p may be sent.
+    "gpt-6-luna": { supportsTemperature: false },
+
     // ── Google Gemini ── native generateContent protocol. Gemini 4 Argon
     // always thinks (thinkingLevel low/medium/high, default medium); there is
     // no off switch, so the picker must not offer "Disabled".

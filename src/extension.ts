@@ -149,9 +149,16 @@ export function activate(context: vscode.ExtensionContext) {
                 presetId?: string;
             }
 
+            // A preset without a temperature sends no parameter at all and
+            // leaves the model on the provider default.
+            const formatPresetTemperature = (p: ModelPreset): string =>
+                p.temperature === undefined || p.temperature === null
+                    ? l10n("provider default")
+                    : String(p.temperature);
+
             // Mark the currently active preset with " (当前)"
             const presetItems: PresetQuickPickItem[] = presets.map((p) => ({
-                label: `${l10n(p.label)} (${p.temperature})${p.id === currentPresetId ? l10n(" (current)") : ""}`,
+                label: `${l10n(p.label)} (${formatPresetTemperature(p)})${p.id === currentPresetId ? l10n(" (current)") : ""}`,
                 presetId: p.id,
             }));
 
@@ -190,10 +197,15 @@ export function activate(context: vscode.ExtensionContext) {
                 // User selected a named preset
                 const matchedPreset = presets.find((p) => p.id === presetId);
                 if (matchedPreset) {
+                    const presetTemperature = matchedPreset.temperature ?? null;
                     await config.update("opencodego.modelPreset", matchedPreset.id, vscode.ConfigurationTarget.Global);
-                    await config.update("opencodego.temperature", matchedPreset.temperature, vscode.ConfigurationTarget.Global);
+                    await config.update("opencodego.temperature", presetTemperature, vscode.ConfigurationTarget.Global);
                     vscode.window.showInformationMessage(
-                        l10nFormat("Set to temperature: {0} ({1})", String(matchedPreset.temperature), l10n(matchedPreset.label))
+                        l10nFormat(
+                            presetTemperature === null ? "Set to {0} ({1})" : "Set to temperature: {0} ({1})",
+                            formatPresetTemperature(matchedPreset),
+                            l10n(matchedPreset.label),
+                        )
                     );
                 }
             } else {

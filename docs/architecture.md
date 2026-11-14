@@ -30,7 +30,7 @@
 | **套餐用量监控** | 从官方用量端点 `GET /zen/go/v1/usage`（2026-08-11 上线，anomalyco/opencode#16513）拉取 Go 套餐用量：5 小时滚动 / 周 / 月三个窗口的使用率与重置时间，以及 `useBalance` 余额回退标志。状态栏主文本默认显示 5H 窗口用量（`$(symbol-numeric) Go 5H 65%`，无数据时 `Go --`）；悬停提示中展示三窗口明细与 5h 窗口重置倒计时（`opencodego.showUsageInTooltip` 控制 tooltip 区块，默认开启），后台按 `opencodego.usageRefreshInterval` 间隔轮询（默认 5 分钟，1-60 可调）；点击状态栏条目或运行 `opencodego.checkUsage` 命令可强制立即刷新并弹窗显示摘要。无 API Key 时不轮询，401（无 Go 套餐）与网络失败均静默降级、仅记录日志，响应字段名宽容解析（`percent`/`usagePercent`、`resetsAt`/`resetInSec` 双兼容） |
 | **Git 提交消息生成** | 一键生成 Conventional Commit 格式的 Git 提交消息，支持 `auto` 语言模式自动从历史提交检测语言 |
 | **多仓库支持** | 支持多根工作区 (multi-root) 中多个 Git 仓库的提交消息生成 |
-| **模型预设** | 支持通过命令面板快速切换 temperature/top_p 预设（🎯 Precise/⚖️ Balanced/🔥 Creative），也支持手动自定义输入 |
+| **模型预设** | 支持通过命令面板快速切换 temperature/top_p 预设（默认 Default 不发送温度参数，另有 Precise/Balanced/Creative/Extra Creative），也支持手动自定义输入 |
 | **国际化** | 内置简体中文 (zh-cn) 中英文双语界面 |
 | **重试机制** | 可配置的指数退避重试策略，应对网络抖动和限流 (429) |
 | **请求延迟** | 可配置的请求间隔延迟，避免触发 API 限流 |
@@ -156,9 +156,11 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   │       ├── "enabled" → 开启思考，使用默认推理力度
   │       ├── "high"/"max" → 开启思考，指定推理力度（自适应模型写入 output_config.effort）
   │
-  ├── 2b. 注入 temperature/top_p（模型预设或自定义设置）
-  │       ├── preset 模式 → 注入预设的 temperature（不传入 top_p，由模型使用默认值）
-  │       └── custom 模式 → 注入用户自定义的 temperature 和 top_p（如有设置）
+  ├── 2b. 注入 temperature/top_p（applyTemperaturePreset，见 temperaturePreset.ts）
+  │       ├── default 预设 → 不发送 temperature/top_p，各模型沿用上游默认值（#151）
+  │       ├── 其他预设 → 注入预设的 temperature（不传 top_p，由模型使用默认值）
+  │       ├── custom 模式 → 注入用户自定义的 temperature 和 top_p（如有设置）
+  │       └── supportsTemperature=false 的模型（如 gpt-6-luna，#152）→ 一律不发送
   │
   ├── 2c. 注入 vision 配置
   │       └── modelConfig.vision = um?.vision ?? false

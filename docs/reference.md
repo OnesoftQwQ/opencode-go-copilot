@@ -25,6 +25,7 @@ src/
 ├── provideToken.ts                       # Token 计数函数
 ├── requestUsageLog.ts                    # 每次请求的 token 用量日志字段构建
 ├── statusBar.ts                          # 状态栏管理
+├── temperaturePreset.ts                  # 温度预设解析（默认档位不发送 temperature/top_p）
 ├── types.ts                              # TypeScript 类型定义
 ├── utils.ts                              # 通用工具函数
 ├── versionManager.ts                     # 版本信息管理
@@ -65,6 +66,7 @@ src/
 | `catalogModels.ts` | ~200 | 统一模型解析/构建层：`ModelMeta` 合并链（`MODEL_OVERRIDES` > 目录条目 > 默认值）、`buildCatalogModelInfo()`、`getCatalogModelConfig()`，`ProviderId` 当前仅 `opencode-go` |
 | `hardcodedModelList.ts` | ~1540 | 硬编码兜底目录快照：opencode-go（32 个）模型的完整元数据（2026-10-18），官方目录与镜像均不可达时作为最后防线，与运行时 JSON 相同方式断言为 `HardcodedCatalogData` |
 | `modelOverrides.ts` | ~60 | 每模型覆盖表 `MODEL_OVERRIDES`（全部可选字段）+ `ModelMetaOverride` 类型；仅维护 models.dev 无法表达的内容（Anthropic/Google apiMode、adaptive、`reasoning_split`、Gemini 思考常开等） |
+| `temperaturePreset.ts` | ~55 | `applyTemperaturePreset()`：按当前预设决定发送的 temperature/top_p；`default` 档位两者都不发送，`supportsTemperature=false` 的模型一律不发送；由 `scripts/test-temperature-preset.mjs` 验证 |
 | `types.ts` | ~95 | `OpenCodeGoModelItem`, `ModelPreset`, `ModelsResponse`, `RetryConfig` 等类型 |
 | `apiModelList.ts` | ~90 | API 模型列表获取：固定访问官方控制面 `https://opencode.ai/zen/go/v1/models` 拉取可用模型 ID，1 分钟缓存，静默降级；不再复用目录的推理 base（#144） |
 | `goUsage.ts` | ~240 | Go 套餐用量拉取：固定访问官方控制面 `GET https://opencode.ai/zen/go/v1/usage` 拉取 5h/周/月窗口用量与 `useBalance`，5 分钟 TTL 缓存、失败保留旧值，宽容解析字段名（percent/usagePercent、resetsAt/resetInSec），格式化重置倒计时/摘要；不再复用目录的推理 base（#144） |
@@ -158,7 +160,7 @@ src/
 
 #### `provideLanguageModelChatResponse(model, messages, options, progress, token): Promise<void>`
 
-核心方法：处理聊天请求，流式返回响应。包括模型配置获取（统一 `getCatalogModelConfig`）、API Key 验证、推理力度应用、temperature/top_p 注入（模型预设或自定义设置）、延迟控制、超时管理，以及按 `apiMode` 精确路由到 `/chat/completions`、`/responses`、`/v1/messages` 或 Gemini 的 `/models/{model}:streamGenerateContent?alt=sse`。
+核心方法：处理聊天请求，流式返回响应。包括模型配置获取（统一 `getCatalogModelConfig`）、API Key 验证、推理力度应用、temperature/top_p 注入（委托 `applyTemperaturePreset()`：默认 `default` 预设不发送任何温度参数，各模型沿用上游默认值；`supportsTemperature=false` 的模型如 gpt-6-luna 也一律不发送）、延迟控制、超时管理，以及按 `apiMode` 精确路由到 `/chat/completions`、`/responses`、`/v1/messages` 或 Gemini 的 `/models/{model}:streamGenerateContent?alt=sse`。
 
 请求结束时会记录一条 `request.end` 日志，字段为本次请求的 token 用量：`inputTokens`（prompt/input token）、`cachedTokens`（缓存命中 token）、`cacheMissTokens`（缓存未命中 token，provider 未提供时为 `null`）、`outputTokens`、`cacheHitRate`（`cachedTokens / inputTokens` 的百分比数值，保留一位小数，无法计算时为 `null`）、`cacheHitRateText`（同值的可读文本，如 `"83.4%"`，无法计算时为 `"n/a"`）、`usageSource`（`stream` = 上游流式 usage、`estimated` = 客户端估算回退、`none` = 无数据）。四种 apiMode 的 `onUsage` 回调与回退分支都会写入本次请求的最终 usage，日志中不会出现 `NaN`/`Infinity`。Base URL 解析优先级为 `opencodego.inferenceBaseUrl` 用户覆盖（代理）> 模型级 `provider.api` > 服务商级 `api` > 官方默认。四种协议分别由 `OpenaiApi`、`ResponsesApi`、`AnthropicApi`、`GoogleApi` 转换请求和解析流，之后统一处理图片代理拦截与错误。错误处理区分三种情况：用户取消（直接重新抛出原始错误）、超时（友好超时提示）、连接被终止（友好终止提示）。模型配置通过 `{ ...um }` 浅拷贝后再修改 thinking/temperature，防止并发会话间互相泄漏设置。
 
@@ -234,7 +236,7 @@ src/
 | `reasoning_effort` | `string` (可选) | 推理力度 |
 | `enable_thinking` | `boolean` (可选) | 是否启用 thinking |
 | `thinking_budget` | `number` (可选) | Thinking 预算 Token |
-| `temperature` | `number \| null` (可选) | 温度参数 |
+| `temperature` | `number \| null` (可选) | 温度参数；`undefined`/未设置表示请求不携带该字段（默认档位的行为） |
 | `top_p` | `number \| null` (可选) | Top-p 采样 |
 | `top_k` | `number` (可选) | Top-k 采样 |
 | `min_p` | `number` (可选) | Min-p 采样 |
@@ -268,11 +270,23 @@ src/
 
 #### `interface ModelPreset`
 
-`{ id, label, temperature, top_p }` — 模型预设配置，用于快速切换温度和 top_p。
+`{ id, label, temperature?, top_p? }` — 模型预设配置。`temperature` 省略或为 `null` 表示不发送该参数（内置 `default` 档位即如此），只有在需要覆盖上游默认值时才提供具体数值。
 
 #### `interface RetryConfig`
 
 `{ enabled, maxAttempts, intervalMs, backoffFactor, maxIntervalMs, statusCodes }` — 重试配置。
+
+---
+
+### 2.5b `src/temperaturePreset.ts`
+
+#### `DEFAULT_PRESET_ID` / `CUSTOM_PRESET_ID`
+
+`"default"` 是内置默认档位 ID（不发送 temperature/top_p）；`"custom"` 表示使用手动的 `opencodego.temperature` / `opencodego.top_p`。
+
+#### `applyTemperaturePreset(um, presetId, presets, userTemperature, userTopP): void`
+
+按当前预设就地写入 `um.temperature` / `um.top_p`。`supportsTemperature === false` 的模型一律置空（覆盖表优先于目录，如 gpt-6-luna，#152）；`default` 档位两者都不发送，模型沿用上游默认值（#151）；其他预设只发送预设温度、不发送 `top_p`；`custom` 模式使用手动设置，`top_p` 未配置时保持省略。由 `scripts/test-temperature-preset.mjs` 验证。
 
 ---
 

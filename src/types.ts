@@ -102,8 +102,14 @@ export interface ModelItem {
 export interface ModelPreset {
     id: string;
     label: string;
-    temperature: number;
-    top_p: number;
+    /**
+     * Temperature sent for this preset. `null` / omitted means "do not send
+     * the parameter" — the built-in `default` preset uses this so every model
+     * keeps its own provider default.
+     */
+    temperature?: number | null;
+    /** top_p applied in `custom` mode (presets never send it). */
+    top_p?: number | null;
 }
 
 /**
