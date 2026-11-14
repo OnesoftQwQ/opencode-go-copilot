@@ -65,7 +65,7 @@ src/
 | `provider.ts` | ~1150 | 实现 `LanguageModelChatProvider`，处理聊天请求全流程及图片代理多轮循环处理 |
 | `catalogModels.ts` | ~200 | 统一模型解析/构建层：`ModelMeta` 合并链（`MODEL_OVERRIDES` > 目录条目 > 默认值）、`buildCatalogModelInfo()`、`getCatalogModelConfig()`，`ProviderId` 当前仅 `opencode-go` |
 | `hardcodedModelList.ts` | ~1540 | 硬编码兜底目录快照：opencode-go（32 个）模型的完整元数据（2026-10-18），官方目录与镜像均不可达时作为最后防线，与运行时 JSON 相同方式断言为 `HardcodedCatalogData` |
-| `modelOverrides.ts` | ~60 | 每模型覆盖表 `MODEL_OVERRIDES`（全部可选字段）+ `ModelMetaOverride` 类型；仅维护 models.dev 无法表达的内容（Anthropic/Google apiMode、adaptive、`reasoning_split`、Gemini 思考常开等） |
+| `modelOverrides.ts` | ~65 | 每模型覆盖表 `MODEL_OVERRIDES`（全部可选字段）+ `ModelMetaOverride` 类型；仅维护 models.dev 无法表达或表达错误的内容（Anthropic/Google apiMode、adaptive、`reasoning_split`、Gemini 思考常开、GPT Luna 不支持 temperature 等） |
 | `temperaturePreset.ts` | ~55 | `applyTemperaturePreset()`：按当前预设决定发送的 temperature/top_p；`default` 档位两者都不发送，`supportsTemperature=false` 的模型一律不发送；由 `scripts/test-temperature-preset.mjs` 验证 |
 | `types.ts` | ~95 | `OpenCodeGoModelItem`, `ModelPreset`, `ModelsResponse`, `RetryConfig` 等类型 |
 | `apiModelList.ts` | ~90 | API 模型列表获取：固定访问官方控制面 `https://opencode.ai/zen/go/v1/models` 拉取可用模型 ID，1 分钟缓存，静默降级；不再复用目录的推理 base（#144） |

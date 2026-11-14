@@ -92,10 +92,14 @@ export const MODEL_OVERRIDES: Record<string, ModelMetaOverride> = {
     "glm-5.3": { thinkingMode: "always", supportsThinkingParam: false },
     "glm-5.3-flash": { thinkingMode: "always", supportsThinkingParam: false },
 
-    // ── OpenAI GPT-6 Luna ── the upstream catalog advertises temperature
-    // support, but the serving route rejects the parameter with 400
-    // "Unsupported parameter: 'temperature' is not supported with this model"
-    // (issue #152), so neither temperature nor top_p may be sent.
+    // ── OpenAI GPT Luna ── the upstream catalog advertises temperature
+    // support, but these models are served over the Responses protocol and
+    // reject the parameter there with 400 "Unsupported parameter:
+    // 'temperature' is not supported with this model" (issue #152). Both were
+    // verified against the live API on 2026-11-14: no parameter → 200 with the
+    // provider default (temperature 1), parameter present → 400. The Chat
+    // Completions path tolerates it, but no request should carry it.
+    "gpt-5.6-luna": { supportsTemperature: false },
     "gpt-6-luna": { supportsTemperature: false },
 
     // ── Google Gemini ── native generateContent protocol. Gemini 4 Argon
