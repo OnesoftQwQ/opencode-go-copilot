@@ -41,33 +41,27 @@ Module._load = function (request, parent, isMain) {
 };
 
 // Serve a catalog that (like the real models.dev data) advertises temperature
-// support for gpt-6-luna, so the override path is what the assertions cover.
+// support for the GPT Luna models, so the override path is what the assertions
+// cover. Both are served over the Responses protocol, where the parameter is
+// rejected with 400 (verified against the live API).
+const LUNA_MODELS = ["gpt-5.6-luna", "gpt-6-luna"];
+const lunaEntry = (id) => ({
+    id,
+    name: id === "gpt-6-luna" ? "GPT-6 Luna" : "GPT-5.6 Luna",
+    reasoning: true,
+    tool_call: true,
+    temperature: true,
+    limit: { context: 1050000, output: 128000 },
+});
+
 const catalog = {
-    models: {
-        "openai/gpt-6-luna": {
-            id: "gpt-6-luna",
-            name: "GPT-6 Luna",
-            reasoning: true,
-            tool_call: true,
-            temperature: true,
-            limit: { context: 1050000, output: 128000 },
-        },
-    },
+    models: Object.fromEntries(LUNA_MODELS.map((id) => ["openai/" + id, lunaEntry(id)])),
     providers: {
         "opencode-go": {
             id: "opencode-go",
             api: "https://opencode.ai/zen/go/v1/",
             name: "OpenCode Go",
-            models: {
-                "gpt-6-luna": {
-                    id: "gpt-6-luna",
-                    name: "GPT-6 Luna",
-                    reasoning: true,
-                    tool_call: true,
-                    temperature: true,
-                    limit: { context: 1050000, output: 128000 },
-                },
-            },
+            models: Object.fromEntries(LUNA_MODELS.map((id) => [id, lunaEntry(id)])),
         },
     },
 };
@@ -91,34 +85,36 @@ try {
     const { ResponsesApi } = require("../out/openai/responsesApi.js");
     const { AnthropicApi } = require("../out/anthropic/anthropicApi.js");
 
-    // ── Issue #152: gpt-6-luna never receives temperature/top_p ──
-    const luna = getCatalogModelConfig("gpt-6-luna");
-    assert.equal(luna.supportsTemperature, false, "override must beat the catalog");
+    // ── Issue #152: the GPT Luna models never receive temperature/top_p ──
+    for (const modelId of LUNA_MODELS) {
+        const luna = getCatalogModelConfig(modelId);
+        assert.equal(luna.supportsTemperature, false, modelId + ": override must beat the catalog");
 
-    const lunaWithPreset = { ...luna, temperature: 0, top_p: 0.9 };
-    applyTemperaturePreset(lunaWithPreset, "precise", [
-        { id: "precise", label: "Precise", temperature: 0 },
-    ], null, null);
-    assert.equal(lunaWithPreset.temperature, undefined);
-    assert.equal(lunaWithPreset.top_p, undefined);
+        const lunaWithPreset = { ...luna, temperature: 0, top_p: 0.9 };
+        applyTemperaturePreset(lunaWithPreset, "precise", [
+            { id: "precise", label: "Precise", temperature: 0 },
+        ], null, null);
+        assert.equal(lunaWithPreset.temperature, undefined, modelId);
+        assert.equal(lunaWithPreset.top_p, undefined, modelId);
 
-    const chatBody = new OpenaiApi("gpt-6-luna").prepareRequestBody(
-        { model: "gpt-6-luna", messages: [], stream: true },
-        lunaWithPreset,
-    );
-    assert.equal("temperature" in chatBody, false, "chat completion temperature");
+        const chatBody = new OpenaiApi(modelId).prepareRequestBody(
+            { model: modelId, messages: [], stream: true },
+            lunaWithPreset,
+        );
+        assert.equal("temperature" in chatBody, false, modelId + ": chat completion temperature");
 
-    const responsesBody = new ResponsesApi("gpt-6-luna").prepareRequestBody(
-        { model: "gpt-6-luna", input: [], stream: true, store: false },
-        lunaWithPreset,
-    );
-    assert.equal("temperature" in responsesBody, false, "responses temperature");
+        const responsesBody = new ResponsesApi(modelId).prepareRequestBody(
+            { model: modelId, input: [], stream: true, store: false },
+            lunaWithPreset,
+        );
+        assert.equal("temperature" in responsesBody, false, modelId + ": responses temperature");
 
-    const anthropicBody = new AnthropicApi("gpt-6-luna").prepareRequestBody(
-        { max_tokens: 4096, messages: [] },
-        lunaWithPreset,
-    );
-    assert.equal("temperature" in anthropicBody, false, "anthropic temperature");
+        const anthropicBody = new AnthropicApi(modelId).prepareRequestBody(
+            { max_tokens: 4096, messages: [] },
+            lunaWithPreset,
+        );
+        assert.equal("temperature" in anthropicBody, false, modelId + ": anthropic temperature");
+    }
 
     // ── Issue #151: the default preset sends nothing ──
     const presets = [
