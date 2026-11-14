@@ -48,14 +48,17 @@ You can configure the model, language, number of recent commits to reference, an
 
 Quickly switch temperature presets via `Ctrl+Shift+P` → `OpenCodeGo: Set Model Temperature Preset`.
 
-Built-in presets:
+Built-in presets (the default is `default`):
 
 | Preset | Temperature |
 |--------|-------------|
+| Default | _not sent_ (model default) |
 | Precise | 0.0 |
 | Balanced | 1.0 |
 | Creative | 1.2 |
 | Extra Creative | 1.7 |
+
+The `default` preset sends neither `temperature` nor `top_p`, so every model keeps its own provider default — matching OpenCode, which no longer sends a temperature. Pick another preset only when you want to override it.
 
 You can also configure `opencodego.temperature` and `opencodego.top_p` directly in `settings.json` (requires `opencodego.modelPreset` set to `"custom"`).
 
@@ -119,10 +122,10 @@ Available in `settings.json`:
 | `opencodego.retry.max_attempts` | `3` | Maximum number of retry attempts. |
 | `opencodego.retry.interval_ms` | `1000` | Initial delay (ms) before the first retry; grows exponentially. |
 | `opencodego.retry.status_codes` | `[]` | Additional HTTP status codes that trigger a retry, on top of 429/500/502/503/504. |
-| `opencodego.modelPreset` | `precise` | Active temperature preset ID. Set to `custom` to use the manual `temperature` / `top_p` values. |
+| `opencodego.modelPreset` | `default` | Active temperature preset ID. `default` sends no temperature/top_p; set to `custom` to use the manual `temperature` / `top_p` values. |
 | `opencodego.temperature` | `null` | Temperature (0.0 - 2.0) used when `modelPreset` is `custom`. |
 | `opencodego.top_p` | `null` | top_p (0.0 - 1.0) used when `modelPreset` is `custom`. |
-| `opencodego.modelPresets` | built-in presets | Preset definitions (`id`, `label`, `temperature`, optional `top_p`). |
+| `opencodego.modelPresets` | built-in presets | Preset definitions (`id`, `label`, optional `temperature` / `top_p`; omit temperature to send no parameter). |
 | `opencodego.enableAutoModelDiscovery` | `true` | Filter the model picker to models available on the API. |
 | `opencodego.showDeprecatedModels` | `false` | Show models marked as deprecated in the models.dev catalog. |
 | `opencodego.modelsDevUpdateInterval` | `60000` | Cache TTL (ms) for checking model updates. Minimum 30000. |
@@ -200,14 +203,17 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 
 通过 `Ctrl+Shift+P` → `OpenCodeGo: 设置模型温度预设` 快速切换温度预设。
 
-内置 4 个预设档位：
+内置预设档位（默认使用「默认」）：
 
 | 档位 | 温度 |
 |------|------|
+| 默认 | _不发送_（由模型自行决定） |
 | 精确 | 0.0 |
 | 均衡 | 1.0 |
 | 创意 | 1.2 |
 | 极具创意 | 1.7 |
+
+「默认」档位不发送 `temperature` 与 `top_p`，各模型沿用自身上游默认值，与 OpenCode 不再主动发送温度的行为一致。只有在需要覆盖模型默认值时才选择其他档位。
 
 也可在 `settings.json` 中直接配置 `opencodego.temperature` 和 `opencodego.top_p`（需将 `opencodego.modelPreset` 设为 `"custom"`）。
 
@@ -271,10 +277,10 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 | `opencodego.retry.max_attempts` | `3` | 最大重试次数。 |
 | `opencodego.retry.interval_ms` | `1000` | 首次重试前的初始延迟（毫秒），按指数递增。 |
 | `opencodego.retry.status_codes` | `[]` | 除 429/500/502/503/504 外，额外触发重试的 HTTP 状态码。 |
-| `opencodego.modelPreset` | `precise` | 当前温度预设 ID。设为 `custom` 时使用手动配置的 `temperature` / `top_p`。 |
+| `opencodego.modelPreset` | `default` | 当前温度预设 ID。`default` 不发送 temperature/top_p；设为 `custom` 时使用手动配置的 `temperature` / `top_p`。 |
 | `opencodego.temperature` | `null` | `modelPreset` 为 `custom` 时使用的温度（0.0 - 2.0）。 |
 | `opencodego.top_p` | `null` | `modelPreset` 为 `custom` 时使用的 top_p（0.0 - 1.0）。 |
-| `opencodego.modelPresets` | 内置预设 | 温度预设定义（`id`、`label`、`temperature`，可选 `top_p`）。 |
+| `opencodego.modelPresets` | 内置预设 | 温度预设定义（`id`、`label`，可选 `temperature` / `top_p`；省略温度则不发送该参数）。 |
 | `opencodego.enableAutoModelDiscovery` | `true` | 按 API 实际可用的模型过滤模型选择器。 |
 | `opencodego.showDeprecatedModels` | `false` | 显示 models.dev 目录中标记为已弃用的模型。 |
 | `opencodego.modelsDevUpdateInterval` | `60000` | 模型更新检查的缓存 TTL（毫秒），最小 30000。 |
