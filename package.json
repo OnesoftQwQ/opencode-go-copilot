@@ -24,7 +24,7 @@
 	"bugs": {
 		"url": "https://github.com/OnesoftQwQ/opencode-go-copilot/issues"
 	},
-	"version": "1.14.0",
+	"version": "1.14.1",
 	"engines": {
 		"vscode": "^1.116.0"
 	},
@@ -442,7 +442,7 @@
 		"test:store-data-uri": "npm run compile && node scripts/test-store-data-uri.mjs",
 		"test:request-usage-log": "npm run compile && node scripts/test-request-usage-log.mjs",
 		"test:model-context-window": "npm run compile && node scripts/test-model-context-window.mjs",
-    "test:temperature-preset": "npm run compile && node scripts/test-temperature-preset.mjs",
+		"test:temperature-preset": "npm run compile && node scripts/test-temperature-preset.mjs",
 		"lint": "eslint",
 		"watch": "tsc -watch -p ./",
 		"build": "npx @vscode/vsce package -o extension.vsix",
