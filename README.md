@@ -1,10 +1,19 @@
 <div align="center">
 
-![logo](/assets/logo.png)
+![OpenCode Go Provider for Copilot](/assets/banner.png)
 
-# OpenCode Go Provider for Copilot
+Integrate [OpenCode Go](https://opencode.ai/go) into GitHub Copilot Chat as a VS Code extension. 
+
+将 [OpenCode Go](https://opencode.ai/go) 提供的模型接入 VS Code 的集成 Agent 的插件。
+
+[![VS Marketplace Version](https://vsmarketplacebadges.dev/version-short/OnesoftQwQ.opencode-go-copilot-provider.svg)](https://marketplace.visualstudio.com/items?itemName=OnesoftQwQ.opencode-go-copilot-provider)
+[![VS Marketplace Installs](https://vsmarketplacebadges.dev/installs-short/OnesoftQwQ.opencode-go-copilot-provider.svg)](https://marketplace.visualstudio.com/items?itemName=OnesoftQwQ.opencode-go-copilot-provider)
+[![VS Marketplace Rating](https://vsmarketplacebadges.dev/rating-short/OnesoftQwQ.opencode-go-copilot-provider.svg)](https://marketplace.visualstudio.com/items?itemName=OnesoftQwQ.opencode-go-copilot-provider)
+[![VS Marketplace Downloads](https://vsmarketplacebadges.dev/downloads-short/OnesoftQwQ.opencode-go-copilot-provider.svg)](https://marketplace.visualstudio.com/items?itemName=OnesoftQwQ.opencode-go-copilot-provider)
 
 [English](#english) | [中文](#中文)
+
+![Screenshot](/assets/screenshots/language_models.png)
 
 </div>
 
