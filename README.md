@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="/assets/banner.png" alt="OpenCode Go Provider for Copilot" width="830">
+<img src="/assets/banner.png" alt="OpenCode Go Provider for Copilot" width="550">
 
 Integrate [OpenCode Go](https://opencode.ai/go) into GitHub Copilot Chat as a VS Code extension. 
 
