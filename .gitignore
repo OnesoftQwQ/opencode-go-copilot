@@ -21,3 +21,6 @@ Thumbs.db
 # Temp files
 *.tmp
 temp/
+
+.pi-subagents/
+*.vsix
