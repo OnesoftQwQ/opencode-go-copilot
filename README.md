@@ -2,9 +2,9 @@
 
 <img src="/assets/banner.png" alt="OpenCode Go Provider for Copilot" width="550">
 
-Integrate [OpenCode Go](https://opencode.ai/go) into GitHub Copilot Chat as a VS Code extension. 
+An extension that brings the models provided by [OpenCode Go](https://opencode.ai/go) into VS Code's integrated agent (e.g. Copilot Chat).
 
-将 [OpenCode Go](https://opencode.ai/go) 提供的模型接入 VS Code 的集成 Agent 的插件。
+将 [OpenCode Go](https://opencode.ai/go) 提供的模型接入 VS Code 集成 Agent（例如 Copilot Chat）的扩展。
 
 [![VS Marketplace Version](https://vsmarketplacebadges.dev/version-short/OnesoftQwQ.opencode-go-copilot-provider.svg)](https://marketplace.visualstudio.com/items?itemName=OnesoftQwQ.opencode-go-copilot-provider)
 [![VS Marketplace Installs](https://vsmarketplacebadges.dev/installs-short/OnesoftQwQ.opencode-go-copilot-provider.svg)](https://marketplace.visualstudio.com/items?itemName=OnesoftQwQ.opencode-go-copilot-provider)
@@ -22,7 +22,7 @@ Integrate [OpenCode Go](https://opencode.ai/go) into GitHub Copilot Chat as a VS
 > [!IMPORTANT]
 > **This is not affiliated with, officially maintained by, or endorsed by OpenCode or Anomaly.**
 
-Integrate [OpenCode Go](https://opencode.ai/go) into GitHub Copilot Chat as a VS Code extension.
+An extension that brings the models provided by [OpenCode Go](https://opencode.ai/go) into VS Code's integrated agent (e.g. Copilot Chat).
 
 The extension reads adapter metadata from models.dev and automatically routes each model through its declared OpenAI-compatible Chat Completions, OpenAI Responses, Anthropic Messages, or Google Gemini (generateContent) protocol. Gemini 4 Argon runs on the native Google protocol; its thinking level (low/medium/high) is selected with the same reasoning-effort picker as the other models.
 
@@ -175,11 +175,11 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 ## 中文
 
 > [!IMPORTANT]
-> **本插件与 OpenCode 官方或 Anomaly 无关，也未获得其官方维护或认可。**
+> **本扩展与 OpenCode 官方或 Anomaly 无关，也未获得其官方维护或认可。**
 
-将 [OpenCode Go](https://opencode.ai/go) 集成到 GitHub Copilot Chat 的 VS Code 插件。
+将 [OpenCode Go](https://opencode.ai/go) 提供的模型接入 VS Code 集成 Agent（例如 Copilot Chat）的扩展。
 
-插件会读取 models.dev 的适配器元数据，自动按模型声明选择 OpenAI 兼容 Chat Completions、OpenAI Responses、Anthropic Messages 或 Google Gemini（generateContent）请求格式。Gemini 4 Argon 走 Google 原生协议，思考档位（低/中/高）与其他模型共用同一个推理强度选择器。
+扩展会读取 models.dev 的适配器元数据，自动按模型声明选择 OpenAI 兼容 Chat Completions、OpenAI Responses、Anthropic Messages 或 Google Gemini（generateContent）请求格式。Gemini 4 Argon 走 Google 原生协议，思考档位（低/中/高）与其他模型共用同一个推理强度选择器。
 
 ### 使用
 
@@ -228,13 +228,13 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 
 ### 扩展视觉理解
 
-本插件为**不支持视觉理解**的**纯文本模型**添加了**扩展视觉理解**功能，当你向这些模型发送带有图片的信息时，他们可以调用支持视觉理解的模型为图片输出描述，然后再回答。
+本扩展为**不支持视觉理解**的**纯文本模型**添加了**扩展视觉理解**功能，当你向这些模型发送带有图片的信息时，他们可以调用支持视觉理解的模型为图片输出描述，然后再回答。
 
 通过配置文件可更改默认使用的模型以及是否在描述图片时启用思考。默认值 `qwen-plus-latest` 会自动选择 models.dev 目录中最新的 `qwen*-plus` 模型。
 
 ### 模型目录与自动发现
 
-模型列表由 [models.dev](https://models.dev) 目录驱动，协议、上下文长度、视觉能力、思考档位与端点等元数据均自动从适配器信息解析，新模型无需更新插件即可出现。
+模型列表由 [models.dev](https://models.dev) 目录驱动，协议、上下文长度、视觉能力、思考档位与端点等元数据均自动从适配器信息解析，新模型无需更新扩展即可出现。
 
 - `opencodego.enableAutoModelDiscovery`（默认开启）会按 API 实际可用的模型过滤选择器；关闭后显示目录中的全部模型。
 - `opencodego.showDeprecatedModels`（默认关闭）显示目录中标记为已弃用的模型。
@@ -253,7 +253,7 @@ MIT License. This project references code from [oai-compatible-copilot](https://
 |------|------|
 | `OpenCodeGo: 设置 OpenCode Go API 密钥` | 设置或清除 API 密钥（保存在 VS Code SecretStorage 中）。 |
 | `OpenCodeGo: 获取 OpenCode Go API 密钥` | 打开 opencode.ai 授权页面获取 API 密钥。 |
-| `OpenCodeGo: 打开 OpenCode Go 设置` | 打开插件设置页面。 |
+| `OpenCodeGo: 打开 OpenCode Go 设置` | 打开扩展设置页面。 |
 | `OpenCodeGo: 查询 OpenCode Go 用量` | 刷新并显示 OpenCode Go 套餐用量。 |
 | `OpenCodeGo: 更新 OpenCode Go 模型列表 (强制)` | 强制刷新模型列表。 |
 | `OpenCodeGo: 设置模型温度预设` | 切换模型温度预设。 |
