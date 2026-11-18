@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="/assets/banner.png" alt="OpenCode Go Provider for Copilot" width="550">
+<img src="/assets/banner-transparent.png" alt="OpenCode Go Provider for Copilot" width="550">
 
 An extension that brings the models provided by [OpenCode Go](https://opencode.ai/go) into VS Code's integrated agent (e.g. Copilot Chat).
 
