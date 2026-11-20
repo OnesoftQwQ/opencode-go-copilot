@@ -92,6 +92,15 @@ export const MODEL_OVERRIDES: Record<string, ModelMetaOverride> = {
     "glm-5.3": { thinkingMode: "always", supportsThinkingParam: false },
     "glm-5.3-flash": { thinkingMode: "always", supportsThinkingParam: false },
 
+    // ── Beam Free (OpenCode Go) ── its inference route rejects the Chat
+    // Completions `thinking` field with 400 `unsupported_parameter`, while it
+    // accepts `reasoning_effort` (low/medium/high/xhigh/max). Omit the field and
+    // keep controlling thinking strength through the effort picker. Verified on
+    // the live endpoint 2026-11-20: field present → 400, effort only → 200.
+    // `always` hides the off switch the route cannot honour; other reasoning
+    // models on the same route accept the field and keep it.
+    "beam-free": { thinkingMode: "always", supportsThinkingParam: false },
+
     // ── OpenAI GPT Luna ── the upstream catalog advertises temperature
     // support, but these models are served over the Responses protocol and
     // reject the parameter there with 400 "Unsupported parameter:
