@@ -66,6 +66,40 @@ try {
         .configurationSchema.properties.reasoningEffort.enum;
     assert.equal(glm52Efforts.includes("disabled"), true);
 
+    // Beam Free on OpenCode Go rejects the Chat Completions `thinking` field
+    // with 400 `unsupported_parameter`, while `reasoning_effort` works. The
+    // field must be omitted but the effort levels must stay selectable.
+    const beamConfig = getCatalogModelConfig("beam-free");
+    assert.equal(beamConfig.supportsThinkingParam, false, "beam-free");
+    assert.equal(beamConfig.thinkingMode, "always", "beam-free");
+    const beamEfforts = buildCatalogModelInfo("opencode-go", "beam-free")
+        .configurationSchema.properties.reasoningEffort.enum;
+    assert.equal(beamEfforts.includes("disabled"), false, "beam-free");
+    assert.ok(beamEfforts.length > 0, "beam-free");
+    const beamBody = new OpenaiApi("beam-free").prepareRequestBody(
+        { model: "beam-free", messages: [], stream: true },
+        {
+            id: "beam-free",
+            enable_thinking: true,
+            reasoning_effort: "high",
+            supportsThinkingParam: false,
+        }
+    );
+    assert.equal("thinking" in beamBody, false);
+    assert.equal(beamBody.reasoning_effort, "high");
+
+    // The resolved catalog config drives the same omission in production.
+    const beamResolvedBody = new OpenaiApi("beam-free").prepareRequestBody(
+        { model: "beam-free", messages: [], stream: true },
+        { ...beamConfig, enable_thinking: true, reasoning_effort: "high" }
+    );
+    assert.equal("thinking" in beamResolvedBody, false);
+    assert.equal(beamResolvedBody.reasoning_effort, "high");
+
+    // Other OpenCode Go reasoning routes accept `thinking`; leave them alone.
+    const deepseekConfig = getCatalogModelConfig("deepseek-v4.1-flash");
+    assert.notEqual(deepseekConfig.supportsThinkingParam, false);
+
     // Chat Completions: omit `thinking` when the route rejects it, but still
     // forward the effort that controls the always-on thinking strength.
     const openaiApi = new OpenaiApi("glm-5.3-flash");

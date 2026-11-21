@@ -66,7 +66,7 @@ models.dev 目录通过 `reasoning_options` 字段提供每个模型的思考能
 | `reasoning=true` 且 `reasoning_options=[]` | `always`（思考常开，无开关） | glm-5/5.1、kimi-k2.x、mimo 系列 |
 | `{"type":"budget_tokens","max":N}` | `thinking_budget`（OpenAI 模式请求体 `budget_tokens`） | qwen3.5/3.6 (81920)、qwen3.7/3.8 (262144) |
 
-> **`thinking` 字段能力（`supportsThinkingParam`）：** 目录无法表达「请求体是否接受 `thinking` 字段」。`glm-5.3` / `glm-5.3-flash` 经 `MODEL_OVERRIDES` 标记为 `thinkingMode: "always"` + `supportsThinkingParam: false`：思考强制开启（模型选择器不再提供「禁用思考」档），请求体不发送 `thinking` 字段，思考强度仅通过 `reasoning_effort`（low/high/max）控制——其上游端点会以 `json: unknown field "thinking"` 拒绝该字段（issue #129）。
+> **`thinking` 字段能力（`supportsThinkingParam`）：** 目录无法表达「请求体是否接受 `thinking` 字段」。`glm-5.3` / `glm-5.3-flash` 经 `MODEL_OVERRIDES` 标记为 `thinkingMode: "always"` + `supportsThinkingParam: false`：思考强制开启（模型选择器不再提供「禁用思考」档），请求体不发送 `thinking` 字段，思考强度仅通过 `reasoning_effort`（low/high/max）控制——其上游端点会以 `json: unknown field "thinking"` 拒绝该字段（issue #129）。`beam-free` 同样经 `MODEL_OVERRIDES` 标记为 `thinkingMode: "always"` + `supportsThinkingParam: false`：其上游端点以 `unsupported_parameter` 拒绝 `thinking`，但接受 `reasoning_effort`（low/medium/high/xhigh/max），因此思考常开、请求体不发送该字段。
 
 > **自适应思考（Claude 5.x）：** 目录同样无法表达「模型仅支持自适应思考」。`claude-haiku-5-5` 经 `MODEL_OVERRIDES` 标记为 `thinkingMode: "adaptive"` + `apiMode: "anthropic"`：Anthropic 协议请求体发送 `thinking: { type: "adaptive" }`，思考强度改由顶层 `output_config.effort` 下发；旧版 `thinking: { type: "enabled", budget_tokens: N }` 会被上游以 400 `"thinking.type.enabled" is not supported for this model` 拒绝（issue #137）。
 
