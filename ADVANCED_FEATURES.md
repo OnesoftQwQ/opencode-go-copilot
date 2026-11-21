@@ -49,7 +49,7 @@ You can also configure `opencodego.temperature` and `opencodego.top_p` directly 
 
 This extension adds **extended vision understanding** capability to **text-only models** that do not natively support vision. When you send a message with an image to these models, they can call a vision-capable model to describe the image, and then answer based on that description.
 
-You can configure the default vision model and whether to enable thinking when describing images. The default value `qwen-plus-latest` automatically selects the newest `qwen*-plus` model from the models.dev catalog.
+You can configure the vision model and whether to enable thinking when describing images. The default vision model is `deepseek-v4.1-flash`.
 
 ### Model Catalog & Auto Discovery
 
@@ -107,7 +107,7 @@ Advanced users can route inference requests (chat and Git commit message generat
 
 本扩展为**不支持视觉理解**的**纯文本模型**添加了**扩展视觉理解**功能，当你向这些模型发送带有图片的信息时，他们可以调用支持视觉理解的模型为图片输出描述，然后再回答。
 
-通过配置文件可更改默认使用的模型以及是否在描述图片时启用思考。默认值 `qwen-plus-latest` 会自动选择 models.dev 目录中最新的 `qwen*-plus` 模型。
+通过配置文件可更改视觉模型以及是否在描述图片时启用思考。默认视觉模型为 `deepseek-v4.1-flash`。
 
 ### 模型目录与自动发现
 

@@ -223,8 +223,8 @@ async function performCommitMsgGeneration(secrets: vscode.SecretStorage, gitDiff
         prompts.push(truncatedDiff);
         const prompt = prompts.join("\n\n");
 
-        // Use model from config or default to deepseek-v4-flash
-        const commitModelId = config.get<string>("opencodego.commitModel", "deepseek-v4-flash");
+        // Use model from config or default to deepseek-v4.1-flash
+        const commitModelId = config.get<string>("opencodego.commitModel", "deepseek-v4.1-flash");
         // Fetch full model config (apiMode, max_completion_tokens, extra, etc.)
         // Shallow copy to avoid mutating the shared resolved config.
         const selectedModel: OpenCodeGoModelItem = {

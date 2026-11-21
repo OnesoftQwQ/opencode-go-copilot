@@ -202,7 +202,7 @@
 				},
 				"opencodego.commitModel": {
 					"type": "string",
-					"default": "deepseek-v4-flash",
+					"default": "deepseek-v4.1-flash",
 					"description": "%config.commitModel.desc%"
 				},
 				"opencodego.commitMessagePrompt": {
@@ -386,7 +386,7 @@
 				},
 				"opencodego.visionProxyModel": {
 					"type": "string",
-					"default": "qwen-plus-latest",
+					"default": "deepseek-v4.1-flash",
 					"description": "%config.visionProxyModel.desc%"
 				},
 				"opencodego.visionProxyThinking": {

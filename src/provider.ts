@@ -26,7 +26,7 @@ import { createRetryConfig, executeWithRetry, convertToolsToOpenAI, getInference
 import { getCatalogProviderBaseUrl } from "./modelsDev";
 
 import { prepareLanguageModelChatInformation } from "./provideModel";
-import { getCatalogModelConfig, resolveVisionProxyModelId } from "./catalogModels";
+import { getCatalogModelConfig } from "./catalogModels";
 import { l10nFormat } from "./localize";
 import { countMessageTokens, textTokenLength } from "./provideToken";
 import { updateContextStatusBar, recordUsage, updateCumulativeTooltip, updateStatusBarWithApiPrompt } from "./statusBar";
@@ -787,9 +787,7 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
         }
 
         const config = vscode.workspace.getConfiguration();
-        const visionModelId = await resolveVisionProxyModelId(
-            config.get<string>("opencodego.visionProxyModel", "qwen-plus-latest")
-        );
+        const visionModelId = config.get<string>("opencodego.visionProxyModel", "deepseek-v4.1-flash");
         const maxRounds = config.get<number>("opencodego.visionMaxRounds", 5);
         const rotateSession = (): void => {
             const previousSessionId = params.requestHeaders["x-opencode-session"];

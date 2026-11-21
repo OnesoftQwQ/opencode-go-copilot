@@ -43,7 +43,7 @@ Available in `settings.json`:
 | `opencodego.recentCommitsCount` | `10` | Number of recent commits used as style reference. Set to 0 to disable. |
 | `opencodego.commitIncludeCommitDiff` | `false` | Include the actual diffs of recent commits in the style reference. |
 | `opencodego.commitAttachContextFiles` | `true` | Attach AGENTS.md and README.md from the repository root as extra context. |
-| `opencodego.visionProxyModel` | `qwen-plus-latest` | Vision model used by the `ask_image` tool. The special value `qwen-plus-latest` auto-selects the newest `qwen*-plus` model. |
+| `opencodego.visionProxyModel` | `deepseek-v4.1-flash` | Vision model used by the `ask_image` tool. |
 | `opencodego.visionProxyThinking` | `false` | Enable thinking/reasoning in the vision proxy model. |
 | `opencodego.visionMaxRounds` | `5` | Maximum number of vision proxy follow-up rounds per request. |
 | `opencodego.readFileLines` | `0` | Automatically adjust `read_file` tool calls to read this many lines. 0 disables. |
@@ -92,7 +92,7 @@ Available in `settings.json`:
 | `opencodego.recentCommitsCount` | `10` | 生成提交消息时参考的近期提交数量。设为 0 可禁用。 |
 | `opencodego.commitIncludeCommitDiff` | `false` | 在风格参考中包含历史提交的实际代码变更（diff）。 |
 | `opencodego.commitAttachContextFiles` | `true` | 将仓库根目录的 AGENTS.md 和 README.md 作为额外上下文附加。 |
-| `opencodego.visionProxyModel` | `qwen-plus-latest` | `ask_image` 工具使用的视觉模型。特殊值 `qwen-plus-latest` 会自动选择最新的 `qwen*-plus` 模型。 |
+| `opencodego.visionProxyModel` | `deepseek-v4.1-flash` | `ask_image` 工具使用的视觉模型。 |
 | `opencodego.visionProxyThinking` | `false` | 在视觉代理模型回答图片查询时启用思考/推理。 |
 | `opencodego.visionMaxRounds` | `5` | 每次请求的最大视觉代理追问轮数。 |
 | `opencodego.readFileLines` | `0` | 自动将 `read_file` 工具调用调整为读取指定行数。设为 0 表示不调整。 |
