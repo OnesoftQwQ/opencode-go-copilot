@@ -164,15 +164,26 @@ type 取值：`feat` | `fix` | `refactor` | `docs` | `chore` | `improve` 等。
 
 - **<具体功能/改动点标题>**：<详细描述>
 - <简单变更点>
+
+### <English category title>
+
+- **<change title>**: <description>
+- <simple change>
+
+### <next English category title>
+
+- **<change title>**: <description>
+- <simple change>
 ```
 
 ### 撰写规范
 
-- 以 `###` 三级标题组织 major change areas，标题用中文，概括该类别下的所有变更
+- 更新日志为中英双语：**先完整写中文部分，空一行，再接着写英文部分**。两部分之间不加分隔线（`---`），也不额外加「中文」「English」之类总标题
+- 中文与英文部分使用相同的 `###` 三级标题结构，分类与条目一一对应
 - 每个 change area 下列出具体变更点，用 `-` 项目符号
-- 需要强调的变更点使用 `**<标题>**：<描述>` 格式，无需要强调的简单变更直接用一句话
+- 需要强调的变更点使用 `**<标题>**：<描述>`（中文）/ `**<title>**: <description>`（英文）格式，无需要强调的简单变更直接用一句话
 - 描述应说明改了什么、为什么改（如有必要）、对用户的影响，聚焦"改了什么"而非罗列 commit 标题
-- 用中文撰写，风格专业、精炼
+- 中英文都保持风格专业、精炼
 - 不包含 `Files Changed` 表格或技术实现细节
 - **按功能类别而非按 commit 时间组织**：从整体上审视 PR，将多个 commit 中属于同一功能领域的变更合并归类，避免逐条罗列 commit 标题
 
@@ -188,4 +199,14 @@ type 取值：`feat` | `fix` | `refactor` | `docs` | `chore` | `improve` 等。
 ### Diff 生成优化
 
 - **减少上下文行数**：将 diff 上下文从 3 行改为 1 行（`-U1`），避免大量未变更代码混入 prompt 中干扰模型。
+
+### Commit Message Generation Enhancements
+
+- **Automatic language detection**: `opencodego.commitLanguage` gains an `auto` mode (default). The model infers the language style from the last 10 commits instead of requiring an explicit target language.
+- **Historical diff reference**: new `opencodego.commitIncludeCommitDiff` setting (off by default). When enabled, the model sees the actual diffs of recent commits as a style reference.
+- **Project context injection**: new `opencodego.commitAttachContextFiles` setting (on by default). AGENTS.md and README.md are attached to the prompt when generating commit messages.
+
+### Diff Generation Optimization
+
+- **Fewer context lines**: diff context is reduced from 3 to 1 line (`-U1`), keeping unrelated code out of the prompt.
 ```
