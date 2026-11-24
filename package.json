@@ -427,6 +427,11 @@
 		}
 	},
 	"main": "./out/extension.js",
+	"capabilities": {
+		"agentsWindow": {
+			"supported": true
+		}
+	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
