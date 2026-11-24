@@ -141,6 +141,10 @@ activate(context)
   └── 注册 dispose 清理
 ```
 
+> **Agents 窗口的激活前置条件**：VS Code 的 Agents 窗口（sessions window）只运行满足下列任一条件的扩展 —— ① 被 `product.json` 的 `sessionsWindowAllowedExtensions` 收录；② 用户在 `extensions.supportAgentsWindow` 中为扩展 ID 显式开启；③ 扩展在 `package.json` 中声明 `capabilities.agentsWindow.supported`。本扩展采用 ③（`package.json` 的 `capabilities.agentsWindow.supported: true`），否则 `activate()` 在 Agents 窗口内永远不会被调用，`opencodego` 的 `contributes.languageModelChatProviders` 注册也不会发生 —— 此时模型仅仅因为另一个编辑器窗口顺带运行了本扩展、经由 Agent Host 的 BYOK 桥接才出现在 Agents 窗口，一旦没有这样的窗口就会静默消失且无法重新选中（#161）。
+>
+> `capabilities.untrustedWorkspaces` 有意保持未声明：VS Code 对声明了 `main` 却未声明该字段的扩展默认按「受限模式不支持」处理，因此受限模式下的现有行为不变；若要放开，需同时用 `restrictedConfigurations` 限制 `opencodego.commitAttachContextFiles` 等会把工作区文件内容发送到远端 API 的设置。
+
 ### 2.3 聊天请求处理流程
 
 ```
