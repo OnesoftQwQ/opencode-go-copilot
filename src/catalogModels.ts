@@ -1,11 +1,12 @@
 /**
  * Unified model resolution layer.
  *
- * Every model flows through the same two-layer merge chain:
+ * Every model flows through the same resolution chain:
  *
  *   1. resolveFromCatalog() — models.dev catalog
  *      (provider entry → global entry → conservative defaults, per field)
  *   2. applyOverride()      — MODEL_OVERRIDES[modelId] wins per field when present
+ *   3. resolveModelMeta()   — keep the output reservation from consuming the window
  */
 
 import type { LanguageModelChatInformation } from "vscode";
@@ -45,6 +46,7 @@ const PROVIDER_LABELS: Record<ProviderId, { family: string; detail: string }> = 
 
 const DEFAULT_CONTEXT_LENGTH = 128000;
 const DEFAULT_MAX_TOKENS = 4096;
+const FULL_WINDOW_OUTPUT_CAP = 65_536;
 
 /**
  * Resolved model metadata. Every field that the catalog can supply has a
@@ -137,10 +139,17 @@ function applyOverride(meta: ModelMeta, override?: ModelMetaOverride): ModelMeta
 }
 
 /**
- * Resolve the final metadata for a model through the merge chain.
+ * Resolve the final metadata, leaving room for input when the output limit
+ * would otherwise consume the whole context window.
  */
 export function resolveModelMeta(providerId: ProviderId, modelId: string): ModelMeta {
-    return applyOverride(resolveFromCatalog(providerId, modelId), MODEL_OVERRIDES[modelId]);
+    const meta = applyOverride(resolveFromCatalog(providerId, modelId), MODEL_OVERRIDES[modelId]);
+    if (meta.maxOutputTokens >= meta.contextLength) {
+        // Copilot reserves the advertised maximum before sending a request (#163).
+        // Use the same cap for inference and reserve at least half of smaller windows for input.
+        meta.maxOutputTokens = Math.min(FULL_WINDOW_OUTPUT_CAP, Math.floor(meta.contextLength / 2));
+    }
+    return meta;
 }
 
 /**

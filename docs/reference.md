@@ -195,15 +195,15 @@ src/
 
 #### `resolveModelMeta(providerId, modelId): ModelMeta`
 
-统一合并链：`resolveFromCatalog()`（provider 条目 → 全局条目 → 保守默认值，逐字段兜底）后 `applyOverride()`（`MODEL_OVERRIDES[modelId]` 逐字段覆盖，写了的覆盖、没写的沿用）。
+统一合并链：`resolveFromCatalog()`（provider 条目 → 全局条目 → 保守默认值，逐字段兜底）后 `applyOverride()`（`MODEL_OVERRIDES[modelId]` 逐字段覆盖，写了的覆盖、没写的沿用）。若合并后的输出上限不小于上下文窗口，将有效输出上限降为 `min(65_536, floor(contextLength / 2))`，供模型声明和请求配置共用（#163）。
 
 #### `buildCatalogModelInfo(providerId, modelId): LanguageModelChatInformation`
 
-构建模型选择器条目。同时声明三个窗口相关字段：`maxInputTokens`（目录 `limit.context`）、`maxOutputTokens`（目录 `limit.output`）与 `maxContextWindowTokens`（同样取 `limit.context`，表示「输入 + 输出」的总窗口）。VS Code 1.139 起模型卡片的「Max context」优先使用 `maxContextWindowTokens`，缺失时才退回 `maxInputTokens + maxOutputTokens`；不声明该字段会把 1M 窗口模型（1M 输入 + 384K 输出）显示成 1.3M（issue #149）。旧版 VS Code 忽略该字段，行为不变。模型名为目录显示名（deprecated 模型额外前缀 `[Depr]`），tooltip 使用服务商 detail 文本。推理强度枚举由 `buildReasoningEnum()` 生成：`disabled` 档在前、`none`/`disabled` effort 值归一为 `禁用思考` 档（已由 `resolveFromCatalog` 过滤，避免重复档）；`defaultReasoningEffort` 不在枚举内时回退到最高档（如 adaptive 模型的 `enabled` → `adaptive`）。当模型为 Responses 原生协议且未声明关闭档位（`supportsDisablingReasoning=false`）时不注入 `disabled` 档；当请求体不支持 `thinking` 字段（`supportsThinkingParam=false`，如 glm-5.3/glm-5.3-flash）时同样不注入 `disabled` 档，避免用户选择无效的禁用项。
+构建模型选择器条目。同时声明三个窗口相关字段：`maxInputTokens`（解析后的上下文长度）、`maxOutputTokens`（`resolveModelMeta()` 得出的有效输出上限）与 `maxContextWindowTokens`（同样取解析后的上下文长度，表示「输入 + 输出」的总窗口）。VS Code 1.139 起模型卡片的「Max context」优先使用 `maxContextWindowTokens`，缺失时才退回 `maxInputTokens + maxOutputTokens`；不声明该字段会把 1M 窗口模型（1M 输入 + 384K 输出）显示成 1.3M（issue #149）。旧版 VS Code 忽略该字段，行为不变。模型名为目录显示名（deprecated 模型额外前缀 `[Depr]`），tooltip 使用服务商 detail 文本。推理强度枚举由 `buildReasoningEnum()` 生成：`disabled` 档在前、`none`/`disabled` effort 值归一为 `禁用思考` 档（已由 `resolveFromCatalog` 过滤，避免重复档）；`defaultReasoningEffort` 不在枚举内时回退到最高档（如 adaptive 模型的 `enabled` → `adaptive`）。当模型为 Responses 原生协议且未声明关闭档位（`supportsDisablingReasoning=false`）时不注入 `disabled` 档；当请求体不支持 `thinking` 字段（`supportsThinkingParam=false`，如 glm-5.3/glm-5.3-flash）时同样不注入 `disabled` 档，避免用户选择无效的禁用项。
 
 #### `getCatalogModelConfig(modelId): OpenCodeGoModelItem`
 
-构建请求配置（provider.ts 与 Git 提交生成共用）。含 `baseUrl`（模型级 `provider.api` 优先，缺失时回退服务商 `api`；Google 模型因此拿到 `/inference/go/google/v1beta`）、`supportsThinkingParam`（false 时 OpenAI 请求体省略 `thinking` 字段）、`thinking_budget`（`budget_tokens` 的 max）、`reasoning_effort`（仅真实强度档，`enabled`/`adaptive` 不发送）、`extra`（仅覆盖表）。
+构建请求配置（provider.ts 与 Git 提交生成共用）。含 `max_completion_tokens`（与模型声明共用 `resolveModelMeta()` 得出的有效输出上限）、`baseUrl`（模型级 `provider.api` 优先，缺失时回退服务商 `api`；Google 模型因此拿到 `/inference/go/google/v1beta`）、`supportsThinkingParam`（false 时 OpenAI 请求体省略 `thinking` 字段）、`thinking_budget`（`budget_tokens` 的 max）、`reasoning_effort`（仅真实强度档，`enabled`/`adaptive` 不发送）、`extra`（仅覆盖表）。
 
 ### 2.4 `src/modelOverrides.ts`
 

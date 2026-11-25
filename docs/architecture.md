@@ -54,6 +54,8 @@
 > Go 服务商当前收录模型包括但不限于：`glm-5/5.1/5.2/5.3/5.3-flash`、`kimi-k3/k2.5/k2.6/k2.7-code`、`deepseek-v4-pro/flash`、`mimo-v2-pro/omni/v2.5-pro/v2.5`、`minimax-m3/m2.7/m2.5`、`qwen3.5/3.6/3.7-plus`、`qwen3.7-max`、`qwen3.8-max`、`gpt-5.6-luna`、`grok-4.5`、`claude-haiku-5-5`、`hy3`、`gemini-4-argon-contributor` 等。实际显示取决于目录收录与 API 可用性。
 > 兜底快照：`src/hardcodedModelList.ts` 内置 2026-10-18 的官方目录快照，含 opencode-go（32 个）的**完整模型元数据**（limit、cost、reasoning_options、attachment、modalities 等），仅作官方目录与镜像均不可达时的最后防线。发布构建（`.github/workflows/release.yml`）会先运行 `scripts/update-hardcoded-catalog.mjs` 自动刷新该快照（拉取官方目录 → 提取服务商 → 重写文件），失败时保留旧快照不阻断构建；数据有变化时随版本号变更在同一 commit 推送。
 
+> **Copilot 输出预留（#163）：** 当目录及覆盖项解析出的输出上限达到或超过整个上下文窗口（如 `kimi-k3.1-pro`）时，Copilot 会预留全部窗口，导致请求尚未发出就因没有输入空间而失败。扩展仅对这类配置将输出上限降到 65,536 与窗口一半（向下取整）中的较小值，模型声明和推理请求使用同一上限，实际上下文窗口不变。该值是扩展的兼容性限制，不代表上游模型的最大输出能力。
+
 #### 思考强度自动推导（`reasoning_options`）
 
 models.dev 目录通过 `reasoning_options` 字段提供每个模型的思考能力，映射规则：
