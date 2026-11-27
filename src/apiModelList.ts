@@ -13,8 +13,10 @@
 
 import { OFFICIAL_CONTROL_PLANE_BASE_URL } from "./endpoints";
 import { logger } from "./logger";
+import { createNetworkFetch } from "./network";
 
 const CACHE_TTL_MS = 60 * 1000; // 1 minute — short TTL dedupes concurrent startup activations
+const FETCH_TIMEOUT_MS = 10000;
 
 // ── Module-level cache ──
 let cachedModelIds: string[] | null = null;
@@ -29,9 +31,9 @@ let lastFetchSuccess = false;
 async function fetchApiModelList(apiKey: string): Promise<string[]> {
     const url = `${OFFICIAL_CONTROL_PLANE_BASE_URL.replace(/\/+$/, "")}/models`;
     try {
-        const response = await fetch(url, {
+        const response = await createNetworkFetch(FETCH_TIMEOUT_MS)(url, {
             headers: { Authorization: `Bearer ${apiKey}` },
-            signal: AbortSignal.timeout(10000),
+            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
         if (!response.ok) {
             throw new Error(`API model list error: [${response.status}] ${response.statusText}`);

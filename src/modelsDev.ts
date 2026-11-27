@@ -24,6 +24,7 @@
 import * as vscode from "vscode";
 import { HARDCODED_CATALOG } from "./hardcodedModelList";
 import { logger } from "./logger";
+import { createNetworkFetch } from "./network";
 import type { ApiMode } from "./types";
 
 const CATALOG_URL = "https://models.dev/catalog.json";
@@ -156,7 +157,7 @@ async function fetchJson(
     headers?: Record<string, string>
 ): Promise<{ data: CatalogData; bytes: number }> {
     try {
-        const response = await fetch(url, {
+        const response = await createNetworkFetch(timeoutMs)(url, {
             signal: AbortSignal.timeout(timeoutMs),
             headers,
         });

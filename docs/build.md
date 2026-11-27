@@ -44,6 +44,7 @@ npm run build
 | 依赖 | 版本 | 用途 |
 | --- | --- | --- |
 | `@microsoft/tiktokenizer` | ^1.0.10 | o200k_base 分词器 |
+| `undici` | ^6.29.1 | 出站 HTTP 传输（自定义 `bodyTimeout`、`connect` 建连调优、可选 `ProxyAgent` 代理）；随扩展发布，不依赖 VS Code 内部打包 |
 | `@eslint/js` | 9.39.4 | ESLint JavaScript 推荐规则 |
 | `@types/node` | ^22 | Node.js 类型定义 |
 | `@types/vscode` | ^1.116.0 | VS Code 类型定义 |
@@ -66,5 +67,6 @@ npm run build
 | `scripts/test-anthropic-thinking-signature.mjs` | Anthropic 签名 thinking 块 DataPart 编解码与 `convertMessages()` 回放闭环：带签名块重建在最前、无签名 thinking 文本不发送、`includeReasoningInRequest=false` 丢弃签名块（issue #137 后续） |
 | `scripts/test-model-context-window.mjs` | 模型选择器上方上下文窗口声明回归测试：`maxContextWindowTokens` 必须等于目录 `limit.context`、且不等于 `maxInputTokens + maxOutputTokens`（issue #149） |
 | `scripts/test-provider-model-contract.mjs` | 模型信息交给 VS Code provider 之前的契约回归测试：id、可选性、能力（工具调用/图片输入）与 token 上限字段齐备 |
+| `scripts/test-network.mjs` | 出站传输回归测试：代理 URL 归一化、`noProxy` 与回环绕过规则、建连调优夹取（#165）、直连/代理 dispatcher 选择与配置变更重建（#160） |
 | `scripts/update-hardcoded-catalog.mjs` | 刷新硬编码目录快照（发布构建自动执行，失败保留旧快照不阻断） |
 | `scripts/check-new-models.mjs` | 检查 models.dev 目录中的新模型 |

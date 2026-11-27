@@ -48,6 +48,10 @@ Available in `settings.json`:
 | `opencodego.visionMaxRounds` | `5` | Maximum number of vision proxy follow-up rounds per request. |
 | `opencodego.readFileLines` | `0` | Automatically adjust `read_file` tool calls to read this many lines. 0 disables. |
 | `opencodego.inferenceBaseUrl` | `""` | Advanced: route inference requests through a self-hosted proxy/gateway. Prefer the `OpenCodeGo: Set Proxy Base URL` command. Machine scope; usage and model list requests always use the official endpoint. |
+| `opencodego.proxy` | `""` | HTTP(S) proxy for all outbound requests (chat, usage, model list, catalog). Example: `http://127.0.0.1:7897`. Empty means direct. Loopback targets always bypass it. Machine scope; SOCKS is not supported. |
+| `opencodego.proxyNoProxy` | `[]` | Hosts that bypass `opencodego.proxy` (curl style: `example.com`, `.example.com`, `*.example.com`, `*`). Loopback always bypasses. |
+| `opencodego.connect.attemptTimeoutMs` | `3000` | Per-address TCP handshake window (ms). Node's default of 250 aborts viable IPv4 handshakes on slow links and surfaces as `Connection error` / `AggregateError`. Set back to 250 to restore the old behavior. |
+| `opencodego.connect.autoSelectFamily` | `true` | Keep Happy Eyeballs address selection. Turn off only if raising `attemptTimeoutMs` does not help. |
 
 > **Note**: Models with switchable thinking (e.g., DeepSeek, Qwen) provide reasoning effort levels such as `Disabled`/`High`/`Maximum`.
 
@@ -97,5 +101,9 @@ Available in `settings.json`:
 | `opencodego.visionMaxRounds` | `5` | 每次请求的最大视觉代理追问轮数。 |
 | `opencodego.readFileLines` | `0` | 自动将 `read_file` 工具调用调整为读取指定行数。设为 0 表示不调整。 |
 | `opencodego.inferenceBaseUrl` | `""` | 高级设置：将推理请求通过自建代理/网关转发。建议使用 `OpenCodeGo: 设置代理 Base URL` 命令设置。machine 作用域；用量与模型列表请求始终走官方地址。 |
+| `opencodego.proxy` | `""` | 所有出站请求（聊天、用量、模型列表、目录拉取）使用的 HTTP(S) 代理，例如 `http://127.0.0.1:7897`。留空表示直连。回环地址始终绕过代理。machine 作用域；不支持 SOCKS。 |
+| `opencodego.proxyNoProxy` | `[]` | 不经过代理的主机列表（curl 风格：`example.com`、`.example.com`、`*.example.com`、`*`）。回环地址始终绕过。 |
+| `opencodego.connect.attemptTimeoutMs` | `3000` | 每个地址的 TCP 握手窗口（毫秒）。Node 默认 250 会在慢链路上掐断本可连通的 IPv4 握手，表现为 `Connection error` / `AggregateError`；设回 250 即恢复旧行为。 |
+| `opencodego.connect.autoSelectFamily` | `true` | 保留 Happy Eyeballs 地址选择。仅在调大 `attemptTimeoutMs` 无效时关闭。 |
 
 > **注**：支持切换思考模式的模型（如 DeepSeek、Qwen）提供`禁用思考`/`高`/`极高`等推理强度选项。

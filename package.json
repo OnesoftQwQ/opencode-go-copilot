@@ -320,6 +320,35 @@
 					"scope": "machine",
 					"markdownDescription": "%config.inferenceBaseUrl.desc%"
 				},
+				"opencodego.proxy": {
+					"type": "string",
+					"default": "",
+					"scope": "machine",
+					"markdownDescription": "%config.proxy.desc%"
+				},
+				"opencodego.proxyNoProxy": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [],
+					"scope": "machine",
+					"markdownDescription": "%config.proxyNoProxy.desc%"
+				},
+				"opencodego.connect.attemptTimeoutMs": {
+					"type": "number",
+					"default": 3000,
+					"minimum": 250,
+					"maximum": 60000,
+					"scope": "machine",
+					"markdownDescription": "%config.connect.attemptTimeoutMs.desc%"
+				},
+				"opencodego.connect.autoSelectFamily": {
+					"type": "boolean",
+					"default": true,
+					"scope": "machine",
+					"markdownDescription": "%config.connect.autoSelectFamily.desc%"
+				},
 				"opencodego.modelPresets": {
 					"type": "array",
 					"default": [
@@ -435,7 +464,7 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
-		"test": "npm run compile && node scripts/test-api-mode.mjs && node scripts/test-thinking-param.mjs && node scripts/test-anthropic-thinking-signature.mjs && node scripts/test-responses-api.mjs && node scripts/test-google-api.mjs && node scripts/test-vision-history.mjs && node scripts/test-anthropic-tool-result-merge.mjs && node scripts/test-base-url.mjs && node scripts/test-control-plane-base.mjs && node scripts/test-store-data-uri.mjs && node scripts/test-request-usage-log.mjs && node scripts/test-model-context-window.mjs && node scripts/test-provider-model-contract.mjs && node scripts/test-temperature-preset.mjs",
+		"test": "npm run compile && node scripts/test-api-mode.mjs && node scripts/test-thinking-param.mjs && node scripts/test-anthropic-thinking-signature.mjs && node scripts/test-responses-api.mjs && node scripts/test-google-api.mjs && node scripts/test-vision-history.mjs && node scripts/test-anthropic-tool-result-merge.mjs && node scripts/test-base-url.mjs && node scripts/test-control-plane-base.mjs && node scripts/test-store-data-uri.mjs && node scripts/test-request-usage-log.mjs && node scripts/test-model-context-window.mjs && node scripts/test-provider-model-contract.mjs && node scripts/test-temperature-preset.mjs && node scripts/test-network.mjs",
 		"test:api-mode": "npm run compile && node scripts/test-api-mode.mjs",
 		"test:thinking-param": "npm run compile && node scripts/test-thinking-param.mjs",
 		"test:anthropic-thinking-signature": "npm run compile && node scripts/test-anthropic-thinking-signature.mjs",
@@ -448,13 +477,15 @@
 		"test:request-usage-log": "npm run compile && node scripts/test-request-usage-log.mjs",
 		"test:model-context-window": "npm run compile && node scripts/test-model-context-window.mjs",
 		"test:temperature-preset": "npm run compile && node scripts/test-temperature-preset.mjs",
+		"test:network": "npm run compile && node scripts/test-network.mjs",
 		"lint": "eslint",
 		"watch": "tsc -watch -p ./",
 		"build": "npx @vscode/vsce package -o extension.vsix",
 		"postinstall": "node scripts/copy-tokenizer.js"
 	},
 	"dependencies": {
-		"@microsoft/tiktokenizer": "^1.0.10"
+		"@microsoft/tiktokenizer": "^1.0.10",
+		"undici": "^6.29.1"
 	},
 	"devDependencies": {
 		"@eslint/js": "9.39.4",

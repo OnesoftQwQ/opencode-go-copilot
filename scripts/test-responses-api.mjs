@@ -63,6 +63,16 @@ const vscodeShim = {
 
 Module._load = function (request, parent, isMain) {
     if (request === "vscode") return vscodeShim;
+    // The extension builds its dispatcher on the bundled undici; route those
+    // requests through the global fetch stub installed by this script so the
+    // checks stay offline.
+    if (request === "undici") {
+        return {
+            Agent: class {},
+            ProxyAgent: class {},
+            fetch: (url, init) => globalThis.fetch(url, init),
+        };
+    }
     return originalLoad.call(this, request, parent, isMain);
 };
 

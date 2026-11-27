@@ -10,8 +10,7 @@ import {
     Progress,
 } from "vscode";
 
-import * as path from "path";
-
+import { createNetworkFetch } from "./network";
 import type { ApiMode, ModelPreset, OpenCodeGoModelItem } from "./types";
 import { DEFAULT_PRESET_ID, applyTemperaturePreset } from "./temperaturePreset";
 
@@ -109,21 +108,12 @@ export class OpenCodeGoChatModelProvider implements LanguageModelChatProvider {
     ) { }
 
     /**
-     * Create an undici fetch function with custom bodyTimeout to prevent premature
-     * connection termination during long streaming responses.
-     * Falls back to global fetch if undici is unavailable.
+     * Create the fetch implementation for chat requests: proxy-aware and
+     * tuned connect window, with a bodyTimeout raised above the undici default
+     * so long streaming responses are not cut off (#160, #165).
      */
     private _createFetchWithTimeout(requestTimeoutMs: number): typeof fetch {
-        try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const undici = require(path.join(vscode.env.appRoot, 'node_modules', 'undici'));
-            const agent = new undici.Agent({ bodyTimeout: requestTimeoutMs });
-            return (url: RequestInfo | URL, init?: RequestInit) => {
-                return undici.fetch(url, { ...init, dispatcher: agent });
-            };
-        } catch {
-            return fetch;
-        }
+        return createNetworkFetch(requestTimeoutMs);
     }
 
     /**

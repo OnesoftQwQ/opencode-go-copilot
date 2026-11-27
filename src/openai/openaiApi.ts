@@ -34,6 +34,7 @@ import {
 
 import { CommonApi, StreamUsage } from "../commonApi";
 import { logger } from "../logger";
+import { createConfiguredNetworkFetch } from "../network";
 import type { StoredImage } from "../vision/types";
 import { ASK_IMAGE_TOOL_NAME, ASK_IMAGE_TOOL_DEF, ASK_WITH_MULTI_IMAGE_TOOL_NAME, ASK_WITH_MULTI_IMAGE_TOOL_DEF } from "../vision/types";
 import { parseVisionToolHistoryPart } from "../vision/historyPart";
@@ -702,7 +703,7 @@ export class OpenaiApi extends CommonApi<OpenAIChatMessage, Record<string, unkno
 
         const url = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
 
-        const response = await fetch(url, {
+        const response = await createConfiguredNetworkFetch()(url, {
             method: "POST",
             headers,
             body: JSON.stringify(requestBody),
