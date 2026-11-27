@@ -92,6 +92,10 @@
 - `modelsDev.fetch.*` — 目录拉取明细：`fetch.official`/`fetch.mirror`（成功，含 durationMs/bytes）、`fetch.officialFailed`/`fetch.mirrorFailed`/`fetch.timeout`/`fetch.hardcoded`（失败或回退原因）
 - `modelsDev.load` — 目录加载汇总（source/durationMs/providers/goModels；官方源为 info，镜像/硬编码/失败为 warn）
 - `goUsage.fetch.ok` — 用量拉取成功（info，含 url/durationMs/rolling/weekly/monthly/useBalance）
+- `network.init` / `network.config.changed` — 出站传输初始化与配置变更（info，含 undici 版本、proxy 是否配置、connect 调优）
+- `network.proxy.enabled` — 首次创建代理 dispatcher（info，含 proxy）
+- `network.dispatcher.direct` / `network.dispatcher.disposed` / `network.proxy.bypass` — dispatcher 创建/销毁与代理绕过（debug）
+- `network.proxy.invalid` / `network.proxy.createFailed` / `network.proxy.unsupported` / `network.undici.unavailable` / `network.fallback.hostDefault` / `network.fallback.failed` — 代理与 undici 不可用时的回退明细（warn）
 - `goUsage.fetch.timeout` — 用量拉取超时（warn）
 - `goUsage.fetch.unauthorized` — 用量拉取 401，无有效 Go 套餐（warn）
 - `goUsage.fetch.failed` — 用量拉取其他失败（warn，含 status/error）

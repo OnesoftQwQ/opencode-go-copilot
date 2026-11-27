@@ -10,6 +10,7 @@ import {
 import type { OpenCodeGoModelItem } from "../types";
 import { CommonApi, StreamUsage } from "../commonApi";
 import { logger } from "../logger";
+import { createConfiguredNetworkFetch } from "../network";
 import type { StoredImage } from "../vision/types";
 import {
     ASK_IMAGE_TOOL_DEF,
@@ -607,7 +608,7 @@ export class GoogleApi extends CommonApi<GoogleContent, GoogleRequestBody> {
         const modelPath = encodeURIComponent(model.id);
         const url = `${baseUrl.replace(/\/+$/, "")}/models/${modelPath}:streamGenerateContent?alt=sse`;
 
-        const response = await fetch(url, {
+        const response = await createConfiguredNetworkFetch()(url, {
             method: "POST",
             headers,
             body: JSON.stringify(requestBody),

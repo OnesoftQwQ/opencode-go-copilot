@@ -23,6 +23,7 @@ import {
     storeDataUriImages,
 } from "../utils";
 import { logger } from "../logger";
+import { createConfiguredNetworkFetch } from "../network";
 import type { StoredImage } from "../vision/types";
 import { ASK_IMAGE_TOOL_DEF, ASK_WITH_MULTI_IMAGE_TOOL_DEF } from "../vision/types";
 import { parseVisionToolHistoryPart } from "../vision/historyPart";
@@ -486,7 +487,7 @@ export class ResponsesApi extends CommonApi<ResponsesInputItem, ResponsesRequest
 
         const headers = CommonApi.prepareHeaders(apiKey, "openai-responses", model.headers);
         const url = `${baseUrl.replace(/\/+$/, "")}/responses`;
-        const response = await fetch(url, {
+        const response = await createConfiguredNetworkFetch()(url, {
             method: "POST",
             headers,
             body: JSON.stringify(requestBody),

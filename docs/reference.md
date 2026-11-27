@@ -19,6 +19,7 @@ src/
 ├── catalogModels.ts                      # 统一模型解析/构建层 (OpenCode Go)
 ├── hardcodedModelList.ts                 # 硬编码兜底目录快照（官方目录与镜像均不可达时的最后防线）
 ├── modelsDev.ts                          # models.dev 目录拉取与查询
+├── network.ts                            # 出站 HTTP 传输：共享 dispatcher（代理 + 建连调优）
 ├── provideModel.ts                       # 模型信息提供函数（目录驱动）
 ├── provider.ts                           # Chat 模型提供商 (核心主文件)
 ├── sessionRouting.ts                     # x-opencode-session 会话 ID 登记/轮换
@@ -71,6 +72,7 @@ src/
 | `apiModelList.ts` | ~90 | API 模型列表获取：固定访问官方控制面 `https://opencode.ai/zen/go/v1/models` 拉取可用模型 ID，1 分钟缓存，静默降级；不再复用目录的推理 base（#144） |
 | `goUsage.ts` | ~240 | Go 套餐用量拉取：固定访问官方控制面 `GET https://opencode.ai/zen/go/v1/usage` 拉取 5h/周/月窗口用量与 `useBalance`，5 分钟 TTL 缓存、失败保留旧值，宽容解析字段名（percent/usagePercent、resetsAt/resetInSec），格式化重置倒计时/摘要；不再复用目录的推理 base（#144） |
 | `modelsDev.ts` | ~440 | models.dev 目录拉取与查询：三级回退链（官方 → 镜像 → 硬编码列表），从 `catalog.json` 下载并索引全局模型与服务商，支持短 ID 匹配、provider 查询、`reasoning_options`/思考模式/视觉/预算推断，1 分钟缓存 |
+| `network.ts` | ~450 | 出站 HTTP 传输：所有请求共用 `createNetworkFetch()`，统一注入 `connect` 建连调优（#165）与可选 `opencodego.proxy` 代理（#160）；自带 undici 依赖，不再依赖 VS Code 内部打包 |
 | `commonApi.ts` | ~477 | `CommonApi<TMessage,TRequestBody>` 抽象基类（图片存储、工具调用拦截、User-Agent 配置读取） |
 | `endpoints.ts` | ~20 | 官方控制面端点常量 `OFFICIAL_CONTROL_PLANE_BASE_URL`；用量与模型列表请求固定使用该地址，不跟随目录推理 base 或推理代理覆盖 |
 | `provideModel.ts` | ~120 | 模型信息提供函数：以 catalog 的 `opencode-go` provider 全量构建列表（可选按 API 列表过滤）；1 分钟间隔缓存与并发去重 |
@@ -140,7 +142,7 @@ src/
 
 #### `private _createFetchWithTimeout(requestTimeoutMs: number): typeof fetch`
 
-创建 undici fetch 实例，设置自定义 `bodyTimeout` 防止流式响应中 TCP 空闲连接被提前关闭。回退到全局 `fetch`。
+委托 `createNetworkFetch()`（`src/network.ts`）创建 fetch：统一带上代理配置与建连调优，并把 `bodyTimeout` 设为本次请求超时，防止流式响应中的空闲连接被提前关闭（#160、#165）。
 
 #### `private async _sendWithSessionFallback(send, rotateSession): Promise<Response>`
 
@@ -414,7 +416,7 @@ API 实现的抽象基类。
 
 #### `getApiModelIds(apiKey): Promise<Set<string>>`
 
-从固定控制面 `https://opencode.ai/zen/go/v1/models` 拉取可用模型 ID 列表并返回 Set（不再使用目录的推理 base，修复 #144）。使用内存缓存（1 分钟 TTL），API 不可用时返回空 Set 或上次缓存。内部 `fetchApiModelList()` 使用 10 秒 `AbortSignal.timeout(10000)`，超时后记录警告并抛出普通 `Error`（非 AbortError）以保留调用方缓存。导出 `isApiFetchSuccessful()` 检查上次请求是否成功。
+从固定控制面 `https://opencode.ai/zen/go/v1/models` 拉取可用模型 ID 列表并返回 Set（不再使用目录的推理 base，修复 #144）。使用内存缓存（1 分钟 TTL），API 不可用时返回空 Set 或上次缓存。内部 `fetchApiModelList()` 经 `createNetworkFetch()` 发送请求，使用 10 秒 `AbortSignal.timeout(10000)`，超时后记录警告并抛出普通 `Error`（非 AbortError）以保留调用方缓存。导出 `isApiFetchSuccessful()` 检查上次请求是否成功。
 
 #### `isApiFetchSuccessful(): boolean`
 
@@ -442,7 +444,7 @@ API 实现的抽象基类。
 
 #### `fetchJson(url, timeoutMs, headers?): Promise<{ data: CatalogData; bytes: number }>`
 
-带超时的 JSON 拉取：`AbortSignal.timeout` 超时后记录 `modelsDev.fetch.timeout` 警告并抛出普通 `Error`（非 AbortError）以保留调用方缓存。返回解析后的目录及原始字节数（供日志统计）。
+带超时的 JSON 拉取（经 `createNetworkFetch()`，与其他出站请求共用代理与建连调优）：`AbortSignal.timeout` 超时后记录 `modelsDev.fetch.timeout` 警告并抛出普通 `Error`（非 AbortError）以保留调用方缓存。返回解析后的目录及原始字节数（供日志统计）。
 
 #### `logLoadSummary(source, start, data)`
 
@@ -1299,3 +1301,53 @@ Git 提交消息生成用的文本流：构造 contents + systemInstruction，PO
 #### `buildGoogleThinkingConfig(um?): GoogleThinkingConfig | undefined`
 
 把思考设置映射到 Gemini：`low/medium/high` → `thinkingLevel` + `includeThoughts: true`；`minimal` 原样；`xhigh/max` → `high`；未指定/enabled/adaptive → 仅 `includeThoughts: true`（使用模型默认档）；`enable_thinking=false` → 仅关闭思考摘要（Gemini 4 无法真正关闭思考）。由 `scripts/test-google-api.mjs` 覆盖。
+
+---
+
+### 2.32 `src/network.ts`
+
+出站 HTTP 传输层。所有请求（推理流、图片代理轮次、Git 提交生成、用量、模型列表、models.dev 目录）都经此创建 fetch，统一带上代理配置与建连调优，避免各处重复构造 `undici.Agent`。
+
+#### `const NETWORK_CONFIG_KEYS`
+
+影响传输的设置键：`opencodego.proxy`、`opencodego.proxyNoProxy`、`opencodego.connect.attemptTimeoutMs`、`opencodego.connect.autoSelectFamily`。任一变化都会销毁缓存的 dispatcher。
+
+#### `interface ConfigReader`
+
+最小配置读取接口 `get<T>(key, defaultValue)`，使解析函数可脱离 VS Code 单测。
+
+#### `interface ConnectTuning` / `interface NetworkSettings`
+
+`ConnectTuning` 为 `{ autoSelectFamily, autoSelectFamilyAttemptTimeout }`；`NetworkSettings` 为 `{ proxyUrl?, noProxy, connect }` 快照。
+
+#### `normalizeProxyUrl(raw): string | undefined`
+
+规范化 `opencodego.proxy`：空串返回 undefined；裸 `host:port` 自动补 `http://`；仅接受 http/https（undici `ProxyAgent` 不支持 SOCKS），非法值返回 undefined 并记录 `network.proxy.invalid`。
+
+#### `readNoProxy(config): string[]`
+
+读取 `opencodego.proxyNoProxy`，支持字符串数组与逗号分隔字符串，统一小写去空。
+
+#### `resolveConnectTuning(config): ConnectTuning`
+
+读取建连调优（#165）：`attemptTimeoutMs` 默认 3000，夹在 250–60000 之间（Node 默认 250 是跨境慢链路 `AggregateError` 的根因）；`autoSelectFamily` 默认 true。
+
+#### `shouldBypassProxy(targetUrl, noProxy): boolean`
+
+判断某 URL 是否必须绕过代理。回环地址（`localhost`、`*.localhost`、`127.0.0.0/8`、`::1`、`0.0.0.0`）**始终**绕过，避免 `opencodego.inferenceBaseUrl` 指向本地网关时自环；其余按 curl 风格匹配 `noProxy` 条目（`*`、精确主机、`example.com` 含子域、`.example.com`、`*.example.com`、完整 URL、`host:port`）。
+
+#### `createNetworkFetch(bodyTimeoutMs): typeof fetch`
+
+创建 fetch：优先使用随扩展发布的 undici（`dependencies`），按需选择直连 `Agent` 或 `ProxyAgent` 作为 dispatcher，两者都带 `bodyTimeout` 与 `connect` 调优；dispatcher 按（代理 URL、bodyTimeout、connect 选项）缓存复用。代理不可解析或创建失败时回退直连，不中断请求。undici 完全不可用时退回全局 `fetch`，并调用一次 `net.setDefaultAutoSelectFamilyAttemptTimeout()` 兜底（进程级副作用，仅作为最后手段）。
+
+#### `createConfiguredNetworkFetch(): typeof fetch`
+
+以 `opencodego.requestTimeout`（默认 600000）为 bodyTimeout 的 `createNetworkFetch()`，供 Git 提交生成这类非流式一次性请求使用。
+
+#### `initNetwork(context): void`
+
+激活时调用：记录 `network.init`（undici 版本、代理是否配置、建连调优），订阅配置变更——传输相关设置变化时 `destroy()` 全部缓存 dispatcher 并记录 `network.config.changed`；随扩展停用再清理一次。
+
+#### 日志标签
+
+`network.init`（info）、`network.config.changed`（info）、`network.proxy.enabled`（info，首次创建代理 dispatcher）、`network.dispatcher.direct`（debug）、`network.proxy.bypass`（debug）、`network.dispatcher.disposed`（debug）、`network.proxy.invalid` / `network.proxy.createFailed` / `network.proxy.unsupported` / `network.undici.unavailable` / `network.fallback.hostDefault` / `network.fallback.failed`（warn）。由 `scripts/test-network.mjs` 覆盖（代理归一化、bypass 规则、建连调优、dispatcher 选择与配置变更重建）。

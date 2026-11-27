@@ -41,6 +41,10 @@
 	"config.modelsDevMirrorUrl.desc": "models.dev 目录的镜像地址，用于官方目录不可达时（如中国大陆网络环境）回退。官方 models.dev 获取失败时，扩展会改从该地址获取目录。可填写完整的目录 URL，或以 \"/\" 结尾的基础地址。留空则禁用镜像回退。",
 	"config.modelsDevMirrorToken.desc": "获取镜像目录时以 `x-mirror-token` 请求头发送的可选访问令牌。镜像不要求令牌时留空即可。",
 	"config.inferenceBaseUrl.desc": "**高级设置。** 将推理请求（聊天与 Git 提交消息生成）的 Base URL 覆盖为自建代理/网关地址，用于可观测性、多 Key 路由、压缩等场景。代理必须与 OpenCode 官方端点完全兼容：协议（OpenAI Chat Completions、OpenAI Responses、Anthropic Messages）、路径、请求/响应格式、模型 ID 以及请求头（含 `Authorization` 与 `x-opencode-session`）均须完全一致。用量查询与模型列表请求始终访问官方地址。建议使用「设置代理 Base URL」命令进行设置，该命令会在设置前显示兼容性提示。留空则使用官方端点。",
+	"config.proxy.desc": "**高级设置。** 本扩展所有出站请求（聊天、用量、模型列表与目录拉取）使用的 HTTP(S) 代理，例如 `http://127.0.0.1:7897`。留空（默认）表示直连，Remote-SSH 场景行为不变。回环地址始终绕过代理，因此把 `opencodego.inferenceBaseUrl` 指向本地网关不会形成自我循环。不支持 SOCKS 代理。",
+	"config.proxyNoProxy.desc": "不经过 `opencodego.proxy` 的主机列表，采用 curl 风格：`example.com`（含子域）、`.example.com`、`*.example.com`，或 `*` 表示全部。回环地址无论如何都会绕过代理。",
+	"config.connect.attemptTimeoutMs.desc": "每个解析出的地址完成 TCP 握手的可用时间（毫秒），超时后尝试下一个候选地址。Node 默认 250，跨境慢链路上会掐断本可连通的 IPv4 握手，表现为 `Connection error` / `AggregateError`。若你的网络首个候选是黑洞，可调回 250。",
+	"config.connect.autoSelectFamily.desc": "保留 Node 的 Happy Eyeballs 地址选择（按顺序尝试 IPv4 与 IPv6 候选）。仅在调大 `opencodego.connect.attemptTimeoutMs` 无效时关闭；关闭后请求需等首个候选的完整连接超时。",
 	"config.modelPresets.desc": "模型预设列表，可通过命令面板快速选择。每个预设可定义温度（temperature）和 top_p；省略温度则不发送该参数、沿用上游默认值。你可以修改各预设的字段来自定义。",
 
 	"config.modelPreset.id.desc": "预设标识符（必须与 modelPreset 设置中的值一致）。",

@@ -100,7 +100,7 @@ models.dev 目录通过 `reasoning_options` 字段提供每个模型的思考能
 │  │      ├─ apiMode="openai-responses" → ResponsesApi             │  │
 │  │      ├─ apiMode="anthropic"        → AnthropicApi              │  │
 │  │      └─ apiMode="google"           → GoogleApi                 │  │
-│  │   6. 发送 HTTP 请求 (fetch with undici + 超时控制)             │  │
+│  │   6. 发送 HTTP 请求 (network.ts: 代理 + 建连调优 + 超时)      │  │
 │  │   7. 流式解析响应 → Progress<LanguageModelResponsePart2>      │  │
 │  │      ├─ LanguageModelTextPart     (文本)                      │  │
 │  │      ├─ LanguageModelThinkingPart (推理过程)                  │  │
@@ -189,7 +189,8 @@ provideLanguageModelChatResponse(model, messages, options, progress, token)
   ├── 8. 创建请求超时 AbortController
   │      └── 连接 VS Code 取消令牌 → abort()
   │
-  ├── 9. 创建 undici fetch (自定义 bodyTimeout)
+  ├── 9. 创建 fetch → createNetworkFetch(requestTimeoutMs)
+  │      └── 统一 dispatcher：connect 调优（#165）+ 可选代理（#160）
   │
   ├── 9a. 构建请求头 → CommonApi.prepareHeaders()
   │      └── 始终注入 x-opencode-session（OpenCode Go 自 2026-09-05 起强制要求，
@@ -451,3 +452,29 @@ generateCommitMsg(secrets, scm?)
 - **思考常开**：Gemini 4 Argon 只支持 low/medium/high（默认 medium），`thinkingMode: "always"` 让选择器不提供「禁用思考」；`buildGoogleThinkingConfig()` 把 `max/xhigh` 归一到 high，`disabled` 仅关闭思考摘要。
 - **签名回放**：Gemini 3+ 要求回放 `functionCall` 时带 `thoughtSignature`；VS Code 的 `LanguageModelToolCallPart` 不携带签名，因此统一注入官方哨兵，真实接口已验证多轮工具调用不会 400。
 - **用量只报一次**：Gemini 的 `usageMetadata` 在流中累计更新，适配器在流结束时用最后一个快照上报，避免状态栏累计值翻倍。
+
+### 2.9 出站 HTTP 传输：代理与建连调优（#160 / #165）
+
+所有出站请求都由 `src/network.ts` 的 `createNetworkFetch(bodyTimeoutMs)` 提供，不再各自构造 `undici.Agent`：
+
+```
+调用方                                  传输层
+  provider.ts     推理流（4 种 apiMode）
+  provider.ts     图片代理每一轮           createNetworkFetch(bodyTimeout)
+  *Api.createMessage  Git 提交生成   ──▶    ├── 解析设置：opencodego.proxy / proxyNoProxy /
+  goUsage.ts      用量拉取                    │            connect.attemptTimeoutMs / autoSelectFamily
+  apiModelList.ts /models 列表              ├── dispatcher 选择：
+  modelsDev.ts    catalog.json               │     ├── 未配置代理 → 直连 Agent
+                                             │     ├── 回环 / noProxy 命中 → 直连 Agent
+                                             │     └── 否则 → ProxyAgent（创建失败则直连）
+                                             └── 两种 Agent 均带 bodyTimeout + connect 调优
+```
+
+设计要点：
+
+- **自带 undici**：undici 声明为扩展 `dependencies`，不再探测 `vscode.env.appRoot/node_modules/undici`。VS Code 1.147 的 `resources/app/node_modules` 已不含 undici，旧逻辑会静默退回全局 `fetch`，那里既无法设置 `connect` 也无法注入 `ProxyAgent`，等于两个问题都修不到。
+- **建连窗口放宽（#165）**：Node 默认 `autoSelectFamilyAttemptTimeout` 为 250ms，每个候选地址只有 250ms 建连窗口；跨境链路上 IPv4 握手常超过该值，可连通地址不在候选末尾时整体失败（`AggregateError` / `fetch failed`）。默认放宽到 3000ms，且可通过设置回退。
+- **可选代理（#160）**：`opencodego.proxy` 默认留空即直连，因此 #98 里 Remote-SSH + 本地 `http.proxy` 的踩坑场景行为不变；配置后所有出站请求（含目录与用量）统一走代理。
+- **回环始终直连**：`opencodego.inferenceBaseUrl` 指向本地网关时，若再套代理会自我循环或失败，因此 loopback 无条件绕过代理。
+- **dispatcher 缓存**：按（代理 URL、bodyTimeout、connect 选项）缓存复用，避免每次请求新建连接池；传输相关设置变化或扩展停用时 `destroy()` 释放。
+- **最后手段**：undici 彻底不可用时退回全局 `fetch`，并在进程级调用 `net.setDefaultAutoSelectFamilyAttemptTimeout()`。该调用会影响宿主内其它扩展，故仅作为兜底路径。

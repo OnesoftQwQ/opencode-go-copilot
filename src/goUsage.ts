@@ -17,10 +17,9 @@
  * that small upstream changes degrade gracefully instead of breaking.
  */
 
-import * as path from "path";
-import * as vscode from "vscode";
 import { OFFICIAL_CONTROL_PLANE_BASE_URL } from "./endpoints";
 import { logger } from "./logger";
+import { createNetworkFetch } from "./network";
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes — endpoint does a multi-table join, keep polling gentle
 const FETCH_TIMEOUT_MS = 10000;
@@ -90,22 +89,15 @@ function parseWindow(raw: unknown): GoUsageWindow | undefined {
 /**
  * Create the fetch implementation for usage requests.
  *
- * VS Code patches the extension host's global fetch to honor the local
- * `http.proxy` setting; in Remote-SSH sessions with a local proxy every
- * usage poll then fails ("fetch failed", status bar stuck at "Go --")
- * while chat requests keep working because provider.ts uses VS Code's
- * bundled undici instead - do the same here (#98). Falls back to the
- * global fetch when undici is unavailable.
+ * Requests go through the shared transport (./network), which honors the
+ * `opencodego.proxy` setting and the tuned connect window while bypassing
+ * VS Code's patched global fetch. That patched fetch honors the local
+ * `http.proxy` setting; in Remote-SSH sessions with a local proxy every usage
+ * poll then failed ("fetch failed", status bar stuck at "Go --") while chat
+ * requests kept working - the same fix as in provider.ts (#98, #160, #165).
  */
 function createUsageFetch(): typeof fetch {
-    try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const undici = require(path.join(vscode.env.appRoot, "node_modules", "undici"));
-        const agent = new undici.Agent({ bodyTimeout: FETCH_TIMEOUT_MS });
-        return (url: RequestInfo | URL, init?: RequestInit) => undici.fetch(url, { ...init, dispatcher: agent });
-    } catch {
-        return fetch;
-    }
+    return createNetworkFetch(FETCH_TIMEOUT_MS);
 }
 
 /**
